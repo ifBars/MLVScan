@@ -30,7 +30,7 @@ namespace MLVScan.Services
                     description: "Whether to disable suspicious mods");
 
                 _minSeverityForDisable = _category.CreateEntry("MinSeverityForDisable", "Medium",
-                    description: "Minimum severity level to trigger disabling (Warning, Medium, High, Critical)");
+                    description: "Minimum severity level to trigger disabling (Low, Medium, High, Critical)");
 
                 _scanDirectories = _category.CreateEntry("ScanDirectories", new[] { "Mods", "Plugins" },
                     description: "Directories to scan for mods");
