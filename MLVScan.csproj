@@ -499,7 +499,6 @@
 		<Compile Include="Models\DllImportRule.cs" />
 		<Compile Include="Models\IScanRule.cs" />
 		<Compile Include="Models\LoadFromStreamRule.cs" />
-		<Compile Include="Models\MemoryStreamRule.cs" />
 		<Compile Include="Models\ProcessStartRule.cs" />
 		<Compile Include="Models\RegistryRule.cs" />
 		<Compile Include="Models\ScanConfig.cs" />

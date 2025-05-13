@@ -35,7 +35,6 @@ namespace MLVScan.Services
             var rules = new List<IScanRule>
             {
                 new Base64Rule(),
-                new MemoryStreamRule(),
                 new ProcessStartRule(),
                 new Shell32Rule(),
                 new LoadFromStreamRule(),

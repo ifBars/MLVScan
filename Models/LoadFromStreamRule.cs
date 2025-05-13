@@ -12,13 +12,6 @@ namespace MLVScan.Models
             var typeName = method.DeclaringType.FullName;
             var methodName = method.Name;
 
-            if (methodName == "LoadFromStream")
-                return true;
-
-            if (methodName.Contains("LoadFrom") &&
-               (methodName.Contains("Stream") || methodName.Contains("Bytes") || methodName.Contains("Memory")))
-                return true;
-
             return (typeName.Contains("Assembly") || typeName.Contains("AssemblyLoadContext")) &&
                    (methodName == "Load" || methodName.Contains("LoadFrom"));
         }

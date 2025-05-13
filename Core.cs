@@ -20,6 +20,7 @@ namespace MLVScan
         private static readonly string[] DefaultWhitelistedMods =
         [
             "MLVScan.dll",
+            "CustomTV.dll",
             "CustomTV_Mono.dll",
             "CustomTV_IL2CPP.dll",
         ];
@@ -267,7 +268,7 @@ namespace MLVScan
 
         private void DisplaySecurityNotice(string modName)
         {
-            LoggerInstance.Warning("⚠️ IMPORTANT SECURITY NOTICE ⚠️");
+            LoggerInstance.Warning("IMPORTANT SECURITY NOTICE");
             LoggerInstance.Msg($"MLVScan has detected and disabled {modName} before it was loaded.");
             LoggerInstance.Msg("If this is your first time running the game with this mod, your PC is likely safe.");
             LoggerInstance.Msg("However, if you've previously run the game with this mod, your system may be infected.");
@@ -284,7 +285,7 @@ namespace MLVScan
         private static void WriteSecurityNoticeToReport(StreamWriter writer)
         {
             writer.WriteLine("\n\n============== SECURITY NOTICE ==============\n");
-            writer.WriteLine("⚠️ IMPORTANT: READ THIS SECURITY INFORMATION ⚠️\n");
+            writer.WriteLine("IMPORTANT: READ THIS SECURITY INFORMATION\n");
             writer.WriteLine("MLVScan has detected and disabled this mod before it was loaded.");
             writer.WriteLine("This mod contains code patterns commonly associated with malware.\n");
             writer.WriteLine("YOUR SYSTEM SECURITY STATUS:");
