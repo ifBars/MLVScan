@@ -67,7 +67,6 @@ Review the details carefully before deciding to whitelist a mod.
 ## Roadmap / Feature Ideas
 
 - **Hash-based Whitelist**: Verify mod authenticity using cryptographic hashes instead of filenames
-- **Online Verification API**: Validate mods against a community database of known-safe mods
 - **Smart Pattern Analysis**: Reduce false positives through contextual analysis
 - **Behavior Monitoring**: Runtime detection of suspicious behavior
 - **GUI Interface**: User-friendly interface for managing security settings
