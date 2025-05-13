@@ -2,12 +2,14 @@
 
 MLVScan is a security-focused MelonLoader plugin designed to detect and disable potentially malicious mods before they can harm your system. It scans for suspicious patterns commonly found in malware and prevents them from executing.
 
+MLVScan was created in response to the recent uprising of malware mods being uploaded to sites like NexusMods. MLVScan aims to stop these malware mods from running before they can harm the system.
+
 ![MLVScan Example](https://raw.githubusercontent.com/ifBars/MLVScan/refs/heads/master/example.png)
 
 ## Features
 
 - **Pre-load Scanning**: Catches malicious code before it can execute
-- **Multiple Detection Rules**: Identifies various malicious patterns
+- **Modular Detection Rules**: Identifies various malicious patterns
 - **Severity Classification**: Categorizes threats by risk level (Critical, High, Medium, Low)
 - **Automatic Disabling**: Prevents suspicious mods from loading
 - **Detailed Reports**: Generates comprehensive scan reports with specific findings
@@ -81,6 +83,16 @@ Contributions are welcome! If you'd like to improve MLVScan:
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+Adding a new detection rule is a simple as:
+
+1. Creating your rule class in the `Models` folder
+2. Declaring it as a public class that inherits the IScanRule interface
+3. Declare your IsSuspicious(MethodReference) method
+4. Declare a Description and Severity for your rule
+5. Add your rule to ServiceFactory.CreateAssemblyScanner
+
+Reference the existing rule model classes for an example.
 
 ## License
 
