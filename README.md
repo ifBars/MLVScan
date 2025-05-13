@@ -2,7 +2,7 @@
 
 MLVScan is a security-focused MelonLoader plugin designed to detect and disable potentially malicious mods before they can harm your system. It scans for suspicious patterns commonly found in malware and prevents them from executing.
 
-![MLVScan Logo](icon.png)
+![MLVScan Example](example.png)
 
 ## Features
 
