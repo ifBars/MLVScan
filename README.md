@@ -57,10 +57,10 @@ WhitelistedMods = S1APILoader.dll, S1API.Mono.dll, S1API.Il2Cpp.dll, CustomTV_Mo
 
 When MLVScan detects a suspicious finding, it will generate a report with findings categorized by severity, and disable the mod if the severity is within the configured threshold:
 
-- **CRITICAL**: High-risk activities like executing external processes or loading assemblies
-- **HIGH**: Potentially dangerous behaviors like loading encrypted or obfuscated data
-- **MEDIUM**: Suspicious patterns that might be legitimate in some contexts
-- **LOW**: Minor suspicious patterns with little to no risk
+- **Critical**: High-risk activities like executing external processes or loading assemblies
+- **High**: Potentially dangerous behaviors like loading encrypted or obfuscated data
+- **Medium**: Suspicious patterns that might be legitimate in some contexts
+- **Low**: Minor suspicious patterns with little to no risk
 
 Review the details carefully before deciding to whitelist a mod.
 
