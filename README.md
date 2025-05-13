@@ -61,7 +61,7 @@ When MLVScan detects a suspicious finding, it will generate a report with findin
 
 Review the details carefully before deciding to whitelist a mod.
 
-## Roadmap / Planned Features
+## Roadmap / Feature Ideas
 
 - **Hash-based Whitelist**: Verify mod authenticity using cryptographic hashes instead of filenames
 - **Online Verification API**: Validate mods against a community database of known-safe mods
@@ -70,8 +70,6 @@ Review the details carefully before deciding to whitelist a mod.
 - **GUI Interface**: User-friendly interface for managing security settings
 - **Mod Publisher Verification**: Support for digitally signed mods from trusted developers
 - **Custom Rules Configuration**: Allow users to define custom detection rules
-- **Integration with Other Security Tools**: Work with system antiviruses for better protection
-- **Sandbox Testing**: Create a safe environment to test suspicious mods
 
 ## Contributing
 
