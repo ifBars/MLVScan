@@ -95,7 +95,7 @@ Reference the existing rule model classes for an example.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU GPL v3 License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
