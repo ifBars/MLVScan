@@ -19,7 +19,7 @@ MLVScan was created in response to the recent uprising of malware mods being upl
 ## Installation
 
 1. Download the latest release from the [Releases page](https://github.com/ifBars/MLVScan/releases)
-2. Place `MLVScan.dll` in your game's `MelonLoader/Plugins` folder
+2. Place `MLVScan.dll` in your game's `Plugins` folder
 3. Launch your game
 
 ## How It Works
