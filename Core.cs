@@ -2,7 +2,7 @@
 using MLVScan.Models;
 using MLVScan.Services;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.0.0", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.3.0", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 [assembly: MelonGame("TVGS", "Schedule I")]
@@ -20,12 +20,13 @@ namespace MLVScan
         private static readonly string[] DefaultWhitelistedMods =
         [
             "MLVScan.dll",
+            "MLVScan.MelonLoader.dll",
             "CustomTV.dll",
             "CustomTV_Mono.dll",
             "CustomTV_IL2CPP.dll",
         ];
 
-        public override void OnPreInitialization()
+        public override void OnEarlyInitializeMelon()
         {
             try
             {
@@ -271,12 +272,16 @@ namespace MLVScan
             LoggerInstance.Warning("IMPORTANT SECURITY NOTICE");
             LoggerInstance.Msg($"MLVScan has detected and disabled {modName} before it was loaded.");
             LoggerInstance.Msg("If this is your first time running the game with this mod, your PC is likely safe.");
-            LoggerInstance.Msg("However, if you've previously run the game with this mod, your system may be infected.");
+            LoggerInstance.Msg("However, if you've previously run the game with this mod, your system MAY be infected.");
+            LoggerInstance.Msg("Keep in mind that no detection system is perfect, and this mod may be falsely flagged.");
             LoggerInstance.Warning("Recommended security steps:");
-            LoggerInstance.Msg("1. Run a full system scan with a trusted antivirus like Malwarebytes");
+            LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
+            LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/rV2QSAnqhX");
+            LoggerInstance.Msg("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it's actually malicious");
+            LoggerInstance.Msg("2. Run a full system scan with a trusted antivirus like Malwarebytes");
             LoggerInstance.Msg("   Malwarebytes is recommended as a free and effective antivirus solution");
-            LoggerInstance.Msg("2. Use Microsoft Safety Scanner for a secondary scan");
-            LoggerInstance.Msg("3. Change important passwords");
+            LoggerInstance.Msg("3. Use Microsoft Safety Scanner for a secondary scan");
+            LoggerInstance.Msg("4. Change important passwords if antivirus shows a threat");
             LoggerInstance.Warning("Resources for malware removal:");
             LoggerInstance.Msg("- Malwarebytes: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
             LoggerInstance.Msg("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
@@ -294,24 +299,20 @@ namespace MLVScan
             writer.WriteLine("\n- If you have PREVIOUSLY PLAYED the game with this mod loaded:");
             writer.WriteLine("  Your system MAY BE INFECTED with malware. Take action immediately.\n");
             writer.WriteLine("RECOMMENDED SECURITY STEPS:");
-            writer.WriteLine("1. Run a full system scan with a reputable antivirus program");
+            writer.WriteLine("1. Check with the modding community first - no detection system is perfect");
+            writer.WriteLine("   Join the modding Discord at: https://discord.gg/rV2QSAnqhX");
+            writer.WriteLine("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it's actually malicious");
+            writer.WriteLine("\n2. Run a full system scan with a reputable antivirus program");
             writer.WriteLine("   Free option: Malwarebytes (https://www.malwarebytes.com/)");
             writer.WriteLine("   Malwarebytes is recommended as a free and effective antivirus solution");
-            writer.WriteLine("\n2. Run Microsoft Safety Scanner as a secondary check");
+            writer.WriteLine("\n3. Run Microsoft Safety Scanner as a secondary check");
             writer.WriteLine("   Download: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
-            writer.WriteLine("\n3. Update your operating system and all software");
-            writer.WriteLine("\n4. Change passwords for important accounts (from a clean device if possible)");
-            writer.WriteLine("\n5. Monitor your accounts for any suspicious activity");
+            writer.WriteLine("\n4. Update all your software from official sources");
+            writer.WriteLine("\n5. Change passwords for important accounts (from a clean device if possible)");
+            writer.WriteLine("\n6. Monitor your accounts for any suspicious activity");
             writer.WriteLine("\nDETAILED MALWARE REMOVAL GUIDES:");
             writer.WriteLine("- Malwarebytes Guide: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
             writer.WriteLine("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
-            writer.WriteLine("\nHOW TO REMOVE MALWARE:");
-            writer.WriteLine("1. Disconnect your computer from the internet to prevent further damage");
-            writer.WriteLine("2. Boot your computer in Safe Mode if possible");
-            writer.WriteLine("3. Install and run Malwarebytes or another trusted antivirus");
-            writer.WriteLine("4. Run a full system scan and quarantine/remove all threats");
-            writer.WriteLine("5. Run additional scans with Microsoft Safety Scanner");
-            writer.WriteLine("6. Change important passwords");
             writer.WriteLine("\n=============================================");
         }
     }

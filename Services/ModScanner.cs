@@ -25,6 +25,7 @@ namespace MLVScan.Services
                 return results;
             }
 
+            // Scan configured directories
             foreach (var scanDir in _config.ScanDirectories)
             {
                 var directoryPath = Path.Combine(MelonEnvironment.GameRootDirectory, scanDir);
@@ -35,33 +36,87 @@ namespace MLVScan.Services
                     continue;
                 }
 
-                var modFiles = Directory.GetFiles(directoryPath, "*.dll", SearchOption.AllDirectories);
-                _logger.Msg($"Found {modFiles.Length} potential mod files in {scanDir}");
+                ScanDirectory(directoryPath, results);
+            }
 
-                foreach (var modFile in modFiles)
+            // Scan Thunderstore Mod Manager directories
+            ScanThunderstoreModManager(results);
+
+            return results;
+        }
+
+        private void ScanDirectory(string directoryPath, Dictionary<string, List<ScanFinding>> results)
+        {
+            var modFiles = Directory.GetFiles(directoryPath, "*.dll", SearchOption.AllDirectories);
+            _logger.Msg($"Found {modFiles.Length} potential mod files in {directoryPath}");
+
+            foreach (var modFile in modFiles)
+            {
+                try
                 {
-                    try
+                    var modFileName = Path.GetFileName(modFile);
+                    if (_configManager.IsModWhitelisted(modFileName))
                     {
-                        var modFileName = Path.GetFileName(modFile);
-                        if (_configManager.IsModWhitelisted(modFileName))
-                        {
-                            _logger.Msg($"Skipping whitelisted mod: {modFileName}");
-                            continue;
-                        }
-
-                        var findings = _assemblyScanner.Scan(modFile).ToList();
-                        if (findings.Count < _config.SuspiciousThreshold) continue;
-                        results.Add(modFile, findings);
-                        _logger.Warning($"Found {findings.Count} suspicious patterns in {Path.GetFileName(modFile)}");
+                        _logger.Msg($"Skipping whitelisted mod: {modFileName}");
+                        continue;
                     }
-                    catch (Exception ex)
+
+                    var findings = _assemblyScanner.Scan(modFile).ToList();
+                    if (findings.Count < _config.SuspiciousThreshold) continue;
+                    results.Add(modFile, findings);
+                    _logger.Warning($"Found {findings.Count} suspicious patterns in {Path.GetFileName(modFile)}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Error scanning {Path.GetFileName(modFile)}: {ex.Message}");
+                }
+            }
+        }
+
+        private void ScanThunderstoreModManager(Dictionary<string, List<ScanFinding>> results)
+        {
+            try
+            {
+                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string thunderstoreBasePath = Path.Combine(appDataPath, "Thunderstore Mod Manager", "DataFolder");
+
+                if (!Directory.Exists(thunderstoreBasePath))
+                {
+                    return;
+                }
+
+                // Find game folders (like ScheduleI in the example)
+                foreach (var gameFolder in Directory.GetDirectories(thunderstoreBasePath))
+                {
+                    // Scan profiles
+                    string profilesPath = Path.Combine(gameFolder, "profiles");
+                    if (Directory.Exists(profilesPath))
                     {
-                        _logger.Error($"Error scanning {Path.GetFileName(modFile)}: {ex.Message}");
+                        foreach (var profileFolder in Directory.GetDirectories(profilesPath))
+                        {
+                            // Scan Mods directory
+                            string modsPath = Path.Combine(profileFolder, "Mods");
+                            if (Directory.Exists(modsPath))
+                            {
+                                _logger.Msg($"Scanning Thunderstore profile mods: {modsPath}");
+                                ScanDirectory(modsPath, results);
+                            }
+
+                            // Scan Plugins directory
+                            string pluginsPath = Path.Combine(profileFolder, "Plugins");
+                            if (Directory.Exists(pluginsPath))
+                            {
+                                _logger.Msg($"Scanning Thunderstore profile plugins: {pluginsPath}");
+                                ScanDirectory(pluginsPath, results);
+                            }
+                        }
                     }
                 }
             }
-
-            return results;
+            catch (Exception ex)
+            {
+                _logger.Error($"Error scanning Thunderstore Mod Manager directories: {ex.Message}");
+            }
         }
     }
 }

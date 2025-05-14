@@ -39,7 +39,7 @@ namespace MLVScan.Services
                     description: "How many suspicious findings required before disabling a mod");
 
                 _whitelistedMods = _category.CreateEntry("WhitelistedMods", Array.Empty<string>(),
-                    description: "List of mod filenames to skip when scanning (e.g., 'S1APILoader.dll')");
+                    description: "List of mod filenames to skip when scanning (e.g., 'MLVScan.dll')");
 
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
