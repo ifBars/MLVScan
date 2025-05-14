@@ -508,6 +508,7 @@
 		<Compile Include="Services\ConfigManager.cs" />
 		<Compile Include="Services\ModDisabler.cs" />
 		<Compile Include="Services\ModScanner.cs" />
+		<Compile Include="Services\PromptGeneratorService.cs" />
 		<Compile Include="Services\ServiceFactory.cs" />
 	</ItemGroup>
 

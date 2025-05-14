@@ -2,7 +2,7 @@
 using MLVScan.Models;
 using MLVScan.Services;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.3.0", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.4.0", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 [assembly: MelonGame("TVGS", "Schedule I")]
@@ -131,6 +131,9 @@ namespace MLVScan
         private void GenerateDetailedReports(List<string> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
+            
+            var promptGenerator = _serviceFactory.CreatePromptGeneratorService();
+            var promptDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Prompts");
 
             foreach (var modPath in disabledMods)
             {
@@ -196,6 +199,7 @@ namespace MLVScan
 
                     try
                     {
+                        // Generate report and prompt files
                         var reportDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
                         Directory.CreateDirectory(reportDirectory);
 
@@ -229,7 +233,22 @@ namespace MLVScan
                             WriteSecurityNoticeToReport(writer);
                         }
 
-                        LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
+                        // Generate LLM analysis prompt
+                        var promptSaved = promptGenerator.SavePromptToFile(
+                            modPath, 
+                            actualFindings, 
+                            promptDirectory);
+                            
+                        if (promptSaved)
+                        {
+                            LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
+                            LoggerInstance.Msg($"LLM analysis prompt saved to: {Path.Combine(promptDirectory, $"{modName}.prompt.md")}");
+                            LoggerInstance.Msg("You can copy the contents of the prompt file into ChatGPT to help determine if this is malware or a false positive, although don't trust ChatGPT to be 100% accurate.");
+                        }
+                        else
+                        {
+                            LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
+                        }
                     }
                     catch (Exception ex)
                     {
