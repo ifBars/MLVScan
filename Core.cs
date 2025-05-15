@@ -183,7 +183,16 @@ namespace MLVScan
                         var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
                         for (var i = 0; i < maxDetailsToShow; i++)
                         {
-                            LoggerInstance.Msg($"  * At: {categoryFindings[i].Location}");
+                            var finding = categoryFindings[i];
+                            LoggerInstance.Msg($"  * At: {finding.Location}");
+                            if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                            {
+                                LoggerInstance.Msg($"    Code Snippet (IL):");
+                                foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                {
+                                    LoggerInstance.Msg($"      {line}");
+                                }
+                            }
                         }
 
                         if (categoryFindings.Count > maxDetailsToShow)
@@ -223,10 +232,19 @@ namespace MLVScan
                                 writer.WriteLine($"\n== {group.Key} ==");
                                 writer.WriteLine($"Severity: {group.Value[0].Severity}");
                                 writer.WriteLine($"Instances: {group.Value.Count}");
-                                writer.WriteLine("\nLocations:");
+                                writer.WriteLine("\nLocations & Snippets:");
                                 foreach (var finding in group.Value)
                                 {
                                     writer.WriteLine($"- {finding.Location}");
+                                    if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                                    {
+                                        writer.WriteLine("  Code Snippet (IL):");
+                                        foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                        {
+                                            writer.WriteLine($"    {line}");
+                                        }
+                                        writer.WriteLine();
+                                    }
                                 }
                             }
 

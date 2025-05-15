@@ -94,7 +94,7 @@ namespace MLVScan.Services
                     "Low"));
             }
 
-            if (findings.Count == 1 && findings[0].Location == "Assembly scanning")
+            if (findings.Count == 1 && findings[0].Location == "Assembly scanning" && string.IsNullOrEmpty(findings[0].CodeSnippet))
             {
                 return new List<ScanFinding>();
             }
@@ -112,9 +112,20 @@ namespace MLVScan.Services
                     {
                         try
                         {
-                            if (method.CustomAttributes.All(attr => attr.AttributeType.Name != "DllImportAttribute"))
+                            var dllImportAttribute = method.CustomAttributes.FirstOrDefault(attr => attr.AttributeType.Name == "DllImportAttribute");
+                            if (dllImportAttribute == null)
                                 continue;
-                            findings.AddRange(from rule in _rules where rule.IsSuspicious(method) select new ScanFinding($"{method.DeclaringType.FullName}.{method.Name}", rule.Description, rule.Severity));
+
+                            if (_rules.Any(rule => rule.IsSuspicious(method)))
+                            {
+                                var rule = _rules.First(r => r.IsSuspicious(method)); // Assuming one rule matches or taking the first
+                                var snippet = $"[DllImport(\"{dllImportAttribute.ConstructorArguments.FirstOrDefault().Value}\")]\n{method.ReturnType.Name} {method.Name}({string.Join(", ", method.Parameters.Select(p => $"{p.ParameterType.Name} {p.Name}"))});";
+                                findings.Add(new ScanFinding(
+                                    $"{method.DeclaringType.FullName}.{method.Name}", 
+                                    rule.Description, 
+                                    rule.Severity,
+                                    snippet));
+                            }
                         }
                         catch (Exception)
                         {
@@ -159,14 +170,34 @@ namespace MLVScan.Services
                 if (!method.HasBody)
                     return;
 
-                // Check all method references used in this method
-                foreach (var instruction in method.Body.Instructions)
+                var instructions = method.Body.Instructions;
+                for (int i = 0; i < instructions.Count; i++)
                 {
+                    var instruction = instructions[i];
                     try
                     {
                         if (instruction.OpCode != OpCodes.Call && instruction.OpCode != OpCodes.Callvirt) continue;
                         if (instruction.Operand is not MethodReference calledMethod) continue;
-                        findings.AddRange(from rule in _rules where rule.IsSuspicious(calledMethod) select new ScanFinding($"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", rule.Description, rule.Severity));
+
+                        if (_rules.Any(rule => rule.IsSuspicious(calledMethod)))
+                        {
+                            var rule = _rules.First(r => r.IsSuspicious(calledMethod)); // Assuming one rule matches or taking the first
+                            var snippetBuilder = new System.Text.StringBuilder();
+                            int contextLines = 2; // Number of IL lines before and after
+
+                            for (int j = Math.Max(0, i - contextLines); j < Math.Min(instructions.Count, i + contextLines + 1); j++)
+                            {
+                                if (j == i) snippetBuilder.Append(">>> ");
+                                else snippetBuilder.Append("    ");
+                                snippetBuilder.AppendLine(instructions[j].ToString());
+                            }
+                            
+                            findings.Add(new ScanFinding(
+                                $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", 
+                                rule.Description, 
+                                rule.Severity,
+                                snippetBuilder.ToString().TrimEnd()));
+                        }
                     }
                     catch (Exception)
                     {

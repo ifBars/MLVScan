@@ -55,41 +55,63 @@ namespace MLVScan.Services
             }
             sb.AppendLine();
 
-            // Extract code blocks
-            var codeBlocks = ExtractCodeBlocks(modPath, findings);
-            
             // Detailed findings with code blocks
             sb.AppendLine("## Detailed Findings");
             var groupedFindings = findings
                 .GroupBy(f => f.Description)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
+            var (methodDecompilations, classStructures) = ExtractCodeBlocks(modPath, findings);
+
             foreach (var group in groupedFindings)
             {
                 sb.AppendLine($"### {group.Key}");
                 sb.AppendLine($"- **Severity**: {group.Value[0].Severity}");
                 sb.AppendLine($"- **Occurrences**: {group.Value.Count}");
-                sb.AppendLine("- **Locations**:");
+                sb.AppendLine("- **Locations & Snippets**:");
                 
-                // List locations and include code blocks when available
-                foreach (var finding in group.Value.Take(5))
+                foreach (var finding in group.Value.Take(5)) // Show details for up to 5 instances
                 {
-                    sb.AppendLine($"  - {finding.Location}");
+                    sb.AppendLine($"  - **Location**: {finding.Location}");
                     
-                    // Add code block if available
-                    if (codeBlocks.TryGetValue(finding.Location, out var codeBlock) && !string.IsNullOrWhiteSpace(codeBlock))
+                    if (!string.IsNullOrEmpty(finding.CodeSnippet))
                     {
-                        sb.AppendLine();
-                        sb.AppendLine("```csharp");
-                        sb.AppendLine(codeBlock);
-                        sb.AppendLine("```");
-                        sb.AppendLine();
+                        sb.AppendLine("    **IL Snippet (Exact location of suspicious call)**:");
+                        sb.AppendLine("    ```");
+                        foreach (var line in finding.CodeSnippet.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            sb.AppendLine($"    {line}");
+                        }
+                        sb.AppendLine("    ```");
                     }
+                    
+                    if (methodDecompilations.TryGetValue(finding.Location, out var csharpDecompiledMethod) && !string.IsNullOrWhiteSpace(csharpDecompiledMethod))
+                    {
+                        sb.AppendLine("    **Attempted C# Decompilation (Entire Method Context & Type Info)**:");
+                        sb.AppendLine("    ```csharp");
+                        foreach (var line in csharpDecompiledMethod.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            sb.AppendLine($"    {line}"); // Assuming csharpDecompiledMethod is already formatted with necessary newlines
+                        }
+                        sb.AppendLine("    ```");
+                    }
+
+                    if (classStructures.TryGetValue(finding.Location, out var classStructureString) && !string.IsNullOrWhiteSpace(classStructureString))
+                    {
+                        sb.AppendLine("    **Surrounding Class Structure (Member Signatures Only)**:");
+                        sb.AppendLine("    ```csharp");
+                         foreach (var line in classStructureString.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            sb.AppendLine($"    {line}");
+                        }
+                        sb.AppendLine("    ```");
+                    }
+                    sb.AppendLine(); 
                 }
                 
                 if (group.Value.Count > 5)
                 {
-                    sb.AppendLine($"  - *And {group.Value.Count - 5} more occurrences*");
+                    sb.AppendLine($"  - *And {group.Value.Count - 5} more occurrences (details omitted for brevity)*");
                 }
                 sb.AppendLine();
             }
@@ -116,19 +138,20 @@ namespace MLVScan.Services
             sb.AppendLine("- Alternative explanations for the suspicious patterns");
             sb.AppendLine("- Your confidence level in the assessment");
             sb.AppendLine();
-            sb.AppendLine("Important context: This is a mod for a game using MelonLoader (a mod loading framework). Legitimate mods generally don't need to use system-level APIs like process creation, registry access, etc.");
+            sb.AppendLine("Important context: This is a mod for a game using MelonLoader (a mod loading framework). Legitimate mods generally don't need to use system-level APIs like shell execution, registry access, etc.");
 
             return sb.ToString();
         }
 
-        private Dictionary<string, string> ExtractCodeBlocks(string modPath, List<ScanFinding> findings)
+        private Tuple<Dictionary<string, string>, Dictionary<string, string>> ExtractCodeBlocks(string modPath, List<ScanFinding> findings)
         {
-            var codeBlocks = new Dictionary<string, string>();
+            var methodCodeBlocks = new Dictionary<string, string>();
+            var classStructures = new Dictionary<string, string>();
             
             try
             {
                 if (!File.Exists(modPath))
-                    return codeBlocks;
+                    return Tuple.Create(methodCodeBlocks, classStructures);
 
                 var readerParameters = new ReaderParameters
                 {
@@ -139,7 +162,6 @@ namespace MLVScan.Services
 
                 using var assembly = AssemblyDefinition.ReadAssembly(modPath, readerParameters);
                 
-                // Find and capture all suspicious string literals that might be used in malicious code
                 var suspiciousStrings = new Dictionary<string, List<string>>();
                 foreach (var module in assembly.Modules)
                 {
@@ -149,143 +171,143 @@ namespace MLVScan.Services
                     }
                 }
                 
-                // Add the suspicious strings to the code blocks
                 if (suspiciousStrings.Any())
                 {
-                    var sb = new StringBuilder();
-                    sb.AppendLine("// Notable string literals found in the assembly:");
-                    sb.AppendLine();
+                    var sbStrings = new StringBuilder();
+                    sbStrings.AppendLine("// Notable string literals found in the assembly:");
+                    sbStrings.AppendLine();
                     
                     foreach (var category in suspiciousStrings.Keys.OrderBy(k => k))
                     {
-                        sb.AppendLine($"// Potential {category}:");
+                        sbStrings.AppendLine($"// Potential {category}:");
                         foreach (var str in suspiciousStrings[category].Take(10))
                         {
-                            sb.AppendLine($"//   \"{EscapeStringForCode(str)}\"");
+                            sbStrings.AppendLine($"//   \"{EscapeStringForCode(str)}\"");
                         }
                         
                         if (suspiciousStrings[category].Count > 10)
                         {
-                            sb.AppendLine($"//   ... and {suspiciousStrings[category].Count - 10} more");
+                            sbStrings.AppendLine($"//   ... and {suspiciousStrings[category].Count - 10} more");
                         }
-                        sb.AppendLine();
+                        sbStrings.AppendLine();
                     }
                     
-                    codeBlocks["SuspiciousStrings"] = sb.ToString();
+                    methodCodeBlocks["SuspiciousStrings"] = sbStrings.ToString();
                 }
                 
-                // Process each finding to extract relevant code
                 foreach (var finding in findings)
                 {
                     try
                     {
-                        // Parse location to extract type and method info
                         var location = finding.Location;
-                        
-                        // Skip findings without clear method references
                         if (location == "Assembly scanning" || !location.Contains("."))
                             continue;
                             
                         var methodOffset = string.Empty;
-                        if (location.Contains(":"))
+                        string typeNameFromFinding;
+                        string methodNameFromFinding;
+
+                        if (location.Contains(":")) // Format: Namespace.Type.Method:Offset
                         {
                             var parts = location.Split(':');
-                            location = parts[0];
+                            var fullMethodPath = parts[0];
                             methodOffset = parts[1];
+                            var lastDotIndex = fullMethodPath.LastIndexOf('.');
+                            if (lastDotIndex <= 0) continue;
+                            typeNameFromFinding = fullMethodPath.Substring(0, lastDotIndex);
+                            methodNameFromFinding = fullMethodPath.Substring(lastDotIndex + 1);
+                        }
+                        else // Format: Namespace.Type.Method (likely a DllImport)
+                        {
+                            var lastDotIndex = location.LastIndexOf('.');
+                            if (lastDotIndex <= 0) continue;
+                            typeNameFromFinding = location.Substring(0, lastDotIndex);
+                            methodNameFromFinding = location.Substring(lastDotIndex + 1);
                         }
                         
-                        var lastDotIndex = location.LastIndexOf('.');
-                        if (lastDotIndex <= 0) continue;
-                        
-                        var typeName = location.Substring(0, lastDotIndex);
-                        var methodName = location.Substring(lastDotIndex + 1);
-                        
-                        // Find the type and method
-                        var typeDefinition = FindType(assembly.MainModule, typeName);
+                        var typeDefinition = FindType(assembly.MainModule, typeNameFromFinding);
                         if (typeDefinition == null) continue;
                         
-                        var methodDefinition = typeDefinition.Methods.FirstOrDefault(m => m.Name == methodName);
-                        if (methodDefinition == null || !methodDefinition.HasBody) continue;
+                        // Generate and store class structure (once per type for efficiency, mapped by finding location)
+                        if (!classStructures.ContainsKey(finding.Location) || classStructures[finding.Location] == string.Empty) // Check to avoid recomputing for same type via different findings if keying by typeName
+                        {
+                             // We want to store it per finding location for easy lookup in GeneratePrompt
+                             classStructures[finding.Location] = GenerateClassStructure(typeDefinition, methodNameFromFinding);
+                        }
+
+                        var methodDefinition = typeDefinition.Methods.FirstOrDefault(m => m.Name == methodNameFromFinding);
+                        // For DllImports, methodDefinition might be what we need, or it might be better to rely on the IL snippet.
+                        // For regular method calls, methodDefinition is key.
+                        if (methodDefinition == null) // Could be a DllImport scenario where the finding.Location is the method itself
+                        {
+                            // If it's a DllImport, the IL snippet is primary. DecompileMethod might not be useful.
+                            // We still want class context if possible.
+                            if (!methodCodeBlocks.ContainsKey(finding.Location)) // Avoid overwriting if already processed (e.g. from SuspiciousStrings)
+                            {
+                                 methodCodeBlocks[finding.Location] = $"// DllImport or external method: {finding.Location}. Primary context is the IL snippet and class structure.";
+                            }
+                            continue; 
+                        }
                         
-                        // Extract the relevant code
-                        var codeBlock = DecompileMethod(methodDefinition);
+                        if (!methodDefinition.HasBody && !methodDefinition.IsAbstract) // Abstract methods are fine, but others need a body
+                        {
+                             if (!methodCodeBlocks.ContainsKey(finding.Location))
+                             {
+                                methodCodeBlocks[finding.Location] = $"// Method {methodNameFromFinding} has no body or is abstract.";
+                             }
+                             continue;
+                        }
+
+                        var codeBlock = DecompileMethod(methodDefinition); // This is the existing method decompilation
                         if (!string.IsNullOrEmpty(codeBlock))
                         {
-                            // Add additional context about this type
                             var contextBuilder = new StringBuilder();
-                            
-                            // Add class/type context
-                            contextBuilder.AppendLine($"// Context: This method is part of {typeDefinition.FullName}");
+                            contextBuilder.AppendLine($"// Context: Method is part of {typeDefinition.FullName}");
                             if (typeDefinition.HasCustomAttributes)
                             {
                                 contextBuilder.AppendLine("// Type attributes:");
-                                foreach (var attr in typeDefinition.CustomAttributes.Take(5))
-                                {
-                                    contextBuilder.AppendLine($"// - {attr.AttributeType.Name}");
-                                }
-                                
-                                if (typeDefinition.CustomAttributes.Count > 5)
-                                {
-                                    contextBuilder.AppendLine($"// - ...and {typeDefinition.CustomAttributes.Count - 5} more");
-                                }
+                                foreach (var attr in typeDefinition.CustomAttributes.Take(5)) { contextBuilder.AppendLine($"// - {attr.AttributeType.Name}"); }
+                                if (typeDefinition.CustomAttributes.Count > 5) { contextBuilder.AppendLine($"// - ...and {typeDefinition.CustomAttributes.Count - 5} more");}
                             }
-                            
-                            // If we have inheritance, show it
-                            if (typeDefinition.BaseType != null && typeDefinition.BaseType.FullName != "System.Object")
-                            {
-                                contextBuilder.AppendLine($"// Inherits from: {typeDefinition.BaseType.FullName}");
-                            }
-                            
-                            // Show related methods that might be relevant
+                            if (typeDefinition.BaseType != null && typeDefinition.BaseType.FullName != "System.Object") { contextBuilder.AppendLine($"// Inherits from: {typeDefinition.BaseType.FullName}");}
                             var relatedMethods = FindRelatedSuspiciousMethods(typeDefinition, methodDefinition);
                             if (relatedMethods.Any())
                             {
-                                contextBuilder.AppendLine("// Other suspicious methods in this class:");
-                                foreach (var relatedMethod in relatedMethods.Take(5))
-                                {
-                                    contextBuilder.AppendLine($"// - {relatedMethod.Name}");
-                                }
-                                
-                                if (relatedMethods.Count > 5)
-                                {
-                                    contextBuilder.AppendLine($"// - ...and {relatedMethods.Count - 5} more");
-                                }
+                                contextBuilder.AppendLine("// Other suspicious methods in this class (names only):");
+                                foreach (var relatedMethod in relatedMethods.Take(3)) { contextBuilder.AppendLine($"// - {relatedMethod.Name}");}
+                                if (relatedMethods.Count > 3) { contextBuilder.AppendLine($"// - ...and {relatedMethods.Count - 3} more");}
                             }
-                            
-                            // Add info about what scan rule flagged this
                             contextBuilder.AppendLine();
-                            contextBuilder.AppendLine($"// Finding: {finding.Description}");
+                            contextBuilder.AppendLine($"// Finding Description: {finding.Description}");
                             contextBuilder.AppendLine($"// Severity: {finding.Severity}");
                             contextBuilder.AppendLine();
                             
-                            // Combine context with code block
-                            codeBlocks[finding.Location] = contextBuilder.ToString() + codeBlock;
+                            methodCodeBlocks[finding.Location] = contextBuilder.ToString() + codeBlock;
                         }
                     }
                     catch (Exception ex)
                     {
-                        // Log and continue if we can't extract a specific code block
                         _logger.Error($"Failed to extract code for {finding.Location}: {ex.Message}");
+                        methodCodeBlocks[finding.Location] = $"// Error extracting detailed code for {finding.Location}: {ex.Message}";
                     }
                 }
                 
-                // Add relevant resource entries if they exist (can contain embedded payloads)
                 if (assembly.MainModule.Resources.Any())
                 {
-                    var sb = new StringBuilder();
-                    sb.AppendLine("// Assembly Resources (could contain hidden payloads):");
+                    var sbResources = new StringBuilder();
+                    sbResources.AppendLine("// Assembly Resources (could contain hidden payloads):");
                     
                     foreach (var resource in assembly.MainModule.Resources.Take(20))
                     {
-                        sb.AppendLine($"//   {resource.Name} - {GetResourceTypeName(resource)}");
+                        sbResources.AppendLine($"//   {resource.Name} - {GetResourceTypeName(resource)}");
                     }
                     
                     if (assembly.MainModule.Resources.Count > 20)
                     {
-                        sb.AppendLine($"//   ...and {assembly.MainModule.Resources.Count - 20} more resources");
+                        sbResources.AppendLine($"//   ...and {assembly.MainModule.Resources.Count - 20} more resources");
                     }
                     
-                    codeBlocks["Assembly.Resources"] = sb.ToString();
+                    methodCodeBlocks["Assembly.Resources"] = sbResources.ToString();
                 }
             }
             catch (Exception ex)
@@ -293,7 +315,7 @@ namespace MLVScan.Services
                 _logger.Error($"Failed to extract code blocks from {modPath}: {ex.Message}");
             }
             
-            return codeBlocks;
+            return Tuple.Create(methodCodeBlocks, classStructures);
         }
         
         private void CollectSuspiciousStrings(TypeDefinition type, Dictionary<string, List<string>> suspiciousStrings)
@@ -935,6 +957,119 @@ namespace MLVScan.Services
             }
             
             return result.Distinct().ToList();
+        }
+        
+        private string GetFieldVisibility(FieldDefinition field)
+        {
+            if (field.IsPublic) return "public";
+            if (field.IsPrivate) return "private";
+            if (field.IsFamily) return "protected";
+            if (field.IsFamilyOrAssembly) return "protected internal";
+            if (field.IsAssembly) return "internal";
+            return "private"; // Default
+        }
+
+        private string GetPropertyVisibility(PropertyDefinition prop)
+        {
+            // Determine overall visibility based on accessors
+            var getAccess = prop.GetMethod;
+            var setAccess = prop.SetMethod;
+
+            bool isPublic = (getAccess?.IsPublic ?? false) || (setAccess?.IsPublic ?? false);
+            if (isPublic) return "public";
+
+            bool isProtectedInternal = (getAccess?.IsFamilyOrAssembly ?? false) || (setAccess?.IsFamilyOrAssembly ?? false);
+            if (isProtectedInternal) return "protected internal";
+
+            bool isProtected = (getAccess?.IsFamily ?? false) || (setAccess?.IsFamily ?? false);
+            // If one is protected and the other is internal, treat as protected internal for simplicity, covered above.
+            // If one is protected and the other is private/missing, it's protected.
+            if (isProtected) return "protected"; 
+
+            bool isInternal = (getAccess?.IsAssembly ?? false) || (setAccess?.IsAssembly ?? false);
+            if (isInternal) return "internal";
+
+            // If we reach here, it means any accessors present are private, or there are no accessors that make it more visible.
+            // If at least one accessor exists and is private, it's private. 
+            // If no accessors, it's unusual but default to public as per C# auto-property if no visibility specified (though here we list existing ones).
+            if ((getAccess != null && getAccess.IsPrivate) || (setAccess != null && setAccess.IsPrivate) ) return "private";
+            if (getAccess == null && setAccess == null) return "public"; // No accessors, unusual for Cecil-parsed existing property
+
+            return "public"; // Fallback, should be rare
+        }
+
+        private string GenerateClassStructure(TypeDefinition typeDef, string highlightMethodName = null)
+        {
+            if (typeDef == null) return string.Empty;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"// Class Outline: {typeDef.FullName}");
+            if (typeDef.BaseType != null && typeDef.BaseType.FullName != "System.Object")
+            {
+                sb.AppendLine($"// Inherits from: {typeDef.BaseType.FullName}");
+            }
+            if (typeDef.HasInterfaces)
+            {
+                foreach(var ifaceInfo in typeDef.Interfaces)
+                {
+                    sb.AppendLine($"// Implements: {ifaceInfo.InterfaceType.FullName}");
+                }
+            }
+
+            string typeKind = "class"; // Default
+            if (typeDef.IsInterface) typeKind = "interface";
+            else if (typeDef.IsEnum) typeKind = "enum";
+            else if (typeDef.IsValueType) typeKind = "struct"; // struct but not enum
+            
+            sb.AppendLine($"public {typeKind} {typeDef.Name} // Simplified declaration");
+            sb.AppendLine("{");
+
+            // Fields
+            var fields = typeDef.Fields.ToList();
+            if (fields.Any())
+            {
+                sb.AppendLine("  // Fields");
+                foreach (var field in fields.Take(10))
+                {
+                    sb.AppendLine($"  {GetFieldVisibility(field)} {(field.IsStatic ? "static " : "")}{field.FieldType.Name} {field.Name};");
+                }
+                if (fields.Count > 10) sb.AppendLine($"  // ... and {fields.Count - 10} more fields");
+                sb.AppendLine();
+            }
+
+            // Properties
+            var properties = typeDef.Properties.ToList();
+            if (properties.Any())
+            {
+                sb.AppendLine("  // Properties");
+                foreach (var prop in properties.Take(10))
+                {
+                    string accessors = "{ ";
+                    if (prop.GetMethod != null) accessors += "get; ";
+                    if (prop.SetMethod != null) accessors += "set; ";
+                    accessors += "}";
+                    // Determine static based on if either accessor is static
+                    bool isStatic = (prop.GetMethod?.IsStatic ?? false) || (prop.SetMethod?.IsStatic ?? false);
+                    sb.AppendLine($"  {GetPropertyVisibility(prop)} {(isStatic ? "static " : "")}{prop.PropertyType.Name} {prop.Name} {accessors}");
+                }
+                if (properties.Count > 10) sb.AppendLine($"  // ... and {properties.Count - 10} more properties");
+                sb.AppendLine();
+            }
+
+            // Methods (excluding constructors, getters, setters for brevity in this outline)
+            var methods = typeDef.Methods.Where(m => !m.IsConstructor && !m.IsSpecialName).ToList(); // IsSpecialName filters getters/setters like get_Property, set_Property
+            if (methods.Any())
+            {
+                sb.AppendLine("  // Methods (signatures only, excluding constructors/property accessors)");
+                foreach (var method in methods.Take(15))
+                {
+                    string marker = (highlightMethodName != null && method.Name == highlightMethodName) ? " // <<< Method with finding" : "";
+                    sb.AppendLine($"  {GetMethodVisibility(method)} {(method.IsStatic ? "static " : "")}{method.ReturnType.Name} {method.Name}({GetMethodParameters(method)});{marker}");
+                }
+                if (methods.Count > 15) sb.AppendLine($"  // ... and {methods.Count - 15} more methods");
+            }
+            sb.AppendLine("}");
+            return sb.ToString();
         }
         
         private string GetMethodVisibility(MethodDefinition method)
