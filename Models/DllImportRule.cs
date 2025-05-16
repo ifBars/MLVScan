@@ -100,8 +100,8 @@ namespace MLVScan.Models
                         return true;
                     }
 
-                    // Any other DLL import is considered Low risk
-                    _severity = "Low";
+                    // Any other DLL import is considered Medium risk
+                    _severity = "Medium";
                     _description = $"Detected DllImport of {dllName}";
                     return true;
                 }
