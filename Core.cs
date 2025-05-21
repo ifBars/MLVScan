@@ -2,10 +2,9 @@
 using MLVScan.Models;
 using MLVScan.Services;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.1", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.3", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
-[assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace MLVScan
 {
