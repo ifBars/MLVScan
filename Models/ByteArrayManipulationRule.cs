@@ -22,13 +22,13 @@ namespace MLVScan.Models
                     return true;
             }
 
-            // Check for BitConverter methods often used to manipulate raw data
-            return typeName.Contains("BitConverter") &&
-                   (methodName.StartsWith("To") || methodName.StartsWith("GetBytes"));
+            // Intentionally do not flag System.BitConverter usage here to avoid
+            // false positives for common audio processing (e.g., WAV/PCM handling)
+            return false;
         }
 
         public string Description => "Detected byte array manipulation commonly used to hide and load malicious code.";
 
-        public string Severity => "High";
+        public string Severity => "Medium";
     }
 }
