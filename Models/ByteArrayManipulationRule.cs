@@ -27,8 +27,8 @@ namespace MLVScan.Models
             return false;
         }
 
-        public string Description => "Detected byte array manipulation commonly used to hide and load malicious code.";
+        public string Description => "Detected byte array manipulation. Often legitimate (e.g., WAV/PCM audio processing), but can also be used to hide or load malicious payloads.";
 
-        public string Severity => "Medium";
+        public string Severity => "Low";
     }
 }
