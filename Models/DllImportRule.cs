@@ -4,6 +4,12 @@ namespace MLVScan.Models
 {
     public class DllImportRule : IScanRule
     {
+        private string _severity = "Medium";
+        private string _description = "Detected DLL import";
+        
+        public string Description => _description;
+        public string Severity => _severity;
+        
         // List of DLLs that are often misused for malicious purposes
         private static readonly string[] HighRiskDlls =
         [
@@ -122,11 +128,5 @@ namespace MLVScan.Models
 
             return false;
         }
-
-        private string _severity = "Medium";
-        private string _description = "Detected DLL import";
-
-        public string Description => _description;
-        public string Severity => _severity;
     }
 }

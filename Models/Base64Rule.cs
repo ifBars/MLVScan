@@ -4,6 +4,9 @@ namespace MLVScan.Models
 {
     public class Base64Rule : IScanRule
     {
+        public string Description => "Detected FromBase64String call which decodes base64 encrypted strings.";
+        public string Severity => "Low";
+        
         public bool IsSuspicious(MethodReference method)
         {
             if (method?.DeclaringType == null)
@@ -14,9 +17,5 @@ namespace MLVScan.Models
 
             return typeName.Contains("Convert") && methodName.Contains("FromBase64");
         }
-
-        public string Description => "Detected FromBase64String call which decodes base64 encrypted strings.";
-
-        public string Severity => "Medium";
     }
 }

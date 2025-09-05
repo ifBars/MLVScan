@@ -4,6 +4,9 @@ namespace MLVScan.Models
 {
     public class LoadFromStreamRule : IScanRule
     {
+        public string Description => "Detected dynamic assembly loading which could be used to execute hidden code.";
+        public string Severity => "Critical";
+        
         public bool IsSuspicious(MethodReference method)
         {
             if (method?.DeclaringType == null)
@@ -15,9 +18,5 @@ namespace MLVScan.Models
             return (typeName.Contains("Assembly") || typeName.Contains("AssemblyLoadContext")) &&
                    (methodName == "Load" || methodName.Contains("LoadFrom"));
         }
-
-        public string Description => "Detected dynamic assembly loading which could be used to execute hidden code.";
-
-        public string Severity => "Critical";
     }
 }

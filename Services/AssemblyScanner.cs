@@ -203,6 +203,98 @@ namespace MLVScan.Services
                                     rule.Description, 
                                     rule.Severity,
                                     snippetBuilder.ToString().TrimEnd()));
+
+                                // Contextual bump for suspicious strings around network/file calls
+                                try
+                                {
+                                    // Identify network or file-related API usage for contextual analysis
+                                    string declaringTypeFullName = calledMethod.DeclaringType?.FullName ?? string.Empty;
+                                    string calledMethodName = calledMethod.Name ?? string.Empty;
+
+                                    bool isNetworkCall =
+                                        declaringTypeFullName.StartsWith("System.Net", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("UnityEngine.Networking.UnityWebRequest", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("HttpClient", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("WebClient", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("WebRequest", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("Sockets", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("TcpClient", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Contains("UdpClient", StringComparison.OrdinalIgnoreCase);
+
+                                    bool isFileCall =
+                                        declaringTypeFullName.StartsWith("System.IO.", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Equals("System.IO.File", StringComparison.OrdinalIgnoreCase) ||
+                                        declaringTypeFullName.Equals("System.IO.Directory", StringComparison.OrdinalIgnoreCase) ||
+                                        (declaringTypeFullName.StartsWith("System.IO", StringComparison.OrdinalIgnoreCase) &&
+                                         (calledMethodName.Contains("Write", StringComparison.OrdinalIgnoreCase) ||
+                                          calledMethodName.Contains("Create", StringComparison.OrdinalIgnoreCase) ||
+                                          calledMethodName.Contains("Move", StringComparison.OrdinalIgnoreCase) ||
+                                          calledMethodName.Contains("Copy", StringComparison.OrdinalIgnoreCase)));
+
+                                    if (isNetworkCall || isFileCall)
+                                    {
+                                        // Sweep nearby string literals for indicators
+                                        int windowStart = Math.Max(0, i - 10);
+                                        int windowEnd = Math.Min(instructions.Count, i + 11);
+                                        var literals = new List<string>();
+                                        for (int k = windowStart; k < windowEnd; k++)
+                                        {
+                                            if (instructions[k].OpCode == OpCodes.Ldstr && instructions[k].Operand is string s && !string.IsNullOrEmpty(s))
+                                            {
+                                                literals.Add(s);
+                                            }
+                                        }
+
+                                        if (literals.Count > 0)
+                                        {
+                                            bool hasDiscordWebhook = literals.Any(s => s.Contains("discord.com/api/webhooks", StringComparison.OrdinalIgnoreCase));
+                                            bool hasRawPaste = literals.Any(s =>
+                                                s.Contains("pastebin.com/raw", StringComparison.OrdinalIgnoreCase) ||
+                                                s.Contains("raw.githubusercontent.com", StringComparison.OrdinalIgnoreCase) ||
+                                                s.Contains("hastebin.com/raw", StringComparison.OrdinalIgnoreCase));
+                                            bool hasBareIpUrl = literals.Any(s => System.Text.RegularExpressions.Regex.IsMatch(s, @"https?://\d{1,3}(?:\.\d{1,3}){3}", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                                            bool mentionsNgrokOrTelegram = literals.Any(s => s.Contains("ngrok", StringComparison.OrdinalIgnoreCase) || s.Contains("telegram", StringComparison.OrdinalIgnoreCase));
+
+                                            bool writesStartupOrRoaming = literals.Any(s =>
+                                                s.Contains("Startup", StringComparison.OrdinalIgnoreCase) ||
+                                                s.Contains("AppData", StringComparison.OrdinalIgnoreCase) ||
+                                                s.Contains("ProgramData", StringComparison.OrdinalIgnoreCase));
+                                            bool writesExecutable = literals.Any(s =>
+                                                s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                                s.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
+                                                s.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase));
+
+                                            if (isNetworkCall && hasDiscordWebhook)
+                                            {
+                                                findings.Add(new ScanFinding(
+                                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                                                    "Discord webhook endpoint near network call (potential data exfiltration).",
+                                                    "Critical",
+                                                    snippetBuilder.ToString().TrimEnd()));
+                                            }
+                                            else if (isNetworkCall && (hasRawPaste || hasBareIpUrl || mentionsNgrokOrTelegram))
+                                            {
+                                                findings.Add(new ScanFinding(
+                                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                                                    "Potential payload download endpoint near network call (raw paste/code host/IP).",
+                                                    "High",
+                                                    snippetBuilder.ToString().TrimEnd()));
+                                            }
+                                            else if (isFileCall && writesStartupOrRoaming && writesExecutable)
+                                            {
+                                                findings.Add(new ScanFinding(
+                                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                                                    "Executable write near persistence-prone directory (Startup/AppData/ProgramData).",
+                                                    "High",
+                                                    snippetBuilder.ToString().TrimEnd()));
+                                            }
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    // Ignore contextual bump failures
+                                }
                             }
                             
                             // Check for reflection-based calls that might bypass detection

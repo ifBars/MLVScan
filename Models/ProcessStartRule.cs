@@ -4,6 +4,9 @@ namespace MLVScan.Models
 {
     public class ProcessStartRule : IScanRule
     {
+        public string Description => "Detected Process.Start call which could execute arbitrary programs.";
+        public string Severity => "Critical";
+        
         public bool IsSuspicious(MethodReference method)
         {
             if (method?.DeclaringType == null)
@@ -16,9 +19,5 @@ namespace MLVScan.Models
                    (typeName.Contains("Process") && methodName == "Start" ||
                     typeName.Contains("Process") && methodName == "Start");
         }
-
-        public string Description => "Detected Process.Start call which could execute arbitrary programs.";
-
-        public string Severity => "Critical";
     }
 }

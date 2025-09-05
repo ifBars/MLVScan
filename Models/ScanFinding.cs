@@ -1,6 +1,6 @@
 ﻿namespace MLVScan.Models
 {
-    public class ScanFinding(string location, string description, string severity = "Warning", string codeSnippet = null)
+    public class ScanFinding(string location, string description, string severity = "Low", string codeSnippet = null)
     {
         public string Location { get; set; } = location;
         public string Description { get; set; } = description;

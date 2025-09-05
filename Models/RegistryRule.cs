@@ -4,6 +4,9 @@ namespace MLVScan.Models
 {
     public class RegistryRule : IScanRule
     {
+        public string Description => "Detected registry manipulation, which is suspicious for a MelonLoader mod. This could be used to persist malware or modify system settings.";
+        public string Severity => "Critical";
+        
         private static readonly string[] RegistryFunctions =
         [
             "regcreatekeyex",
@@ -81,9 +84,5 @@ namespace MLVScan.Models
 
             return false;
         }
-
-        public string Description => "Detected registry manipulation, which is suspicious for a MelonLoader mod. This could be used to persist malware or modify system settings.";
-
-        public string Severity => "High";
     }
 }

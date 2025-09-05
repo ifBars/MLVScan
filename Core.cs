@@ -20,6 +20,7 @@ namespace MLVScan
         [
             "MLVScan.dll",
             "MLVScan.MelonLoader.dll",
+            "DiscordRPC.dll",
             "CustomTV.dll",
             "CustomTV_Mono.dll",
             "CustomTV_IL2CPP.dll",

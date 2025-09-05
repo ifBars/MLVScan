@@ -22,8 +22,7 @@ namespace MLVScan.Models
                     return true;
             }
 
-            // Intentionally do not flag System.BitConverter usage here to avoid
-            // false positives for common audio processing (e.g., WAV/PCM handling)
+            // Intentionally do not flag System.BitConverter usage here to avoid false positives for common audio processing (e.g., WAV/PCM handling)
             return false;
         }
 
