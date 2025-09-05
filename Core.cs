@@ -2,7 +2,7 @@
 using MLVScan.Models;
 using MLVScan.Services;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.3", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.4", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
@@ -314,7 +314,7 @@ namespace MLVScan
             LoggerInstance.Warning("Recommended security steps:");
             LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
             LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/rV2QSAnqhX");
-            LoggerInstance.Msg("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it's actually malicious");
+            LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it's actually malicious");
             LoggerInstance.Msg("2. Run a full system scan with a trusted antivirus like Malwarebytes");
             LoggerInstance.Msg("   Malwarebytes is recommended as a free and effective antivirus solution");
             LoggerInstance.Msg("3. Use Microsoft Safety Scanner for a secondary scan");
