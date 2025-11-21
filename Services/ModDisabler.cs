@@ -22,7 +22,7 @@ namespace MLVScan.Services
             foreach (var (modFilePath, findings) in scanResults)
             {
                 var severeFindings = findings.Where(f =>
-                    string.Compare(f.Severity, _config.MinSeverityForDisable, StringComparison.OrdinalIgnoreCase) >= 0)
+                    GetSeverityRank(f.Severity) >= GetSeverityRank(_config.MinSeverityForDisable))
                     .ToList();
 
                 if (!forceDisable && severeFindings.Count < _config.SuspiciousThreshold)
@@ -61,6 +61,18 @@ namespace MLVScan.Services
             }
 
             return disabledMods;
+        }
+
+        private static int GetSeverityRank(string severity)
+        {
+            return severity?.ToLower() switch
+            {
+                "critical" => 4,
+                "high" => 3,
+                "medium" => 2,
+                "low" => 1,
+                _ => 0
+            };
         }
     }
 }
