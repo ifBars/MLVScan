@@ -1,6 +1,10 @@
 ﻿using MelonLoader;
 using MLVScan.Models;
 using MLVScan.Services;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 [assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.4", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
@@ -131,150 +135,163 @@ namespace MLVScan
         private void GenerateDetailedReports(List<string> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
-            
-            var promptGenerator = _serviceFactory.CreatePromptGeneratorService();
-            var promptDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Prompts");
 
             foreach (var modPath in disabledMods)
             {
                 var modName = Path.GetFileName(modPath);
+                var fileHash = ModScanner.CalculateFileHash(modPath);
                 LoggerInstance.Warning($"SUSPICIOUS MOD: {modName}");
+                LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
                 LoggerInstance.Msg("-------------------------------");
 
-                if (scanResults.TryGetValue(modPath, out var findings))
+                if (!scanResults.TryGetValue(modPath, out var findings))
                 {
-                    var actualFindings = findings
-                        .Where(f => f.Location != "Assembly scanning")
-                        .ToList();
-
-                    if (actualFindings.Count == 0)
-                    {
-                        LoggerInstance.Msg("No specific suspicious patterns were identified.");
-                        continue;
-                    }
-
-                    var groupedFindings = actualFindings
-                        .GroupBy(f => f.Description)
-                        .ToDictionary(g => g.Key, g => g.ToList());
-
-                    LoggerInstance.Warning($"Total suspicious patterns found: {actualFindings.Count}");
-
-                    var severityCounts = actualFindings
-                        .GroupBy(f => f.Severity)
-                        .OrderByDescending(g => GetSeverityRank(g.Key))
-                        .ToDictionary(g => g.Key, g => g.Count());
-
-                    LoggerInstance.Warning("Severity breakdown:");
-                    foreach (var severityCount in severityCounts)
-                    {
-                        var severityLabel = FormatSeverityLabel(severityCount.Key);
-                        LoggerInstance.Msg($"  {severityLabel}: {severityCount.Value} issue(s)");
-                    }
-
-                    LoggerInstance.Msg("-------------------------------");
-                    LoggerInstance.Warning("Suspicious patterns found:");
-
-                    foreach (var (category, categoryFindings) in groupedFindings)
-                    {
-                        var severity = FormatSeverityLabel(categoryFindings[0].Severity);
-
-                        LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
-
-                        var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
-                        for (var i = 0; i < maxDetailsToShow; i++)
-                        {
-                            var finding = categoryFindings[i];
-                            LoggerInstance.Msg($"  * At: {finding.Location}");
-                            if (!string.IsNullOrEmpty(finding.CodeSnippet))
-                            {
-                                LoggerInstance.Msg($"    Code Snippet (IL):");
-                                foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                                {
-                                    LoggerInstance.Msg($"      {line}");
-                                }
-                            }
-                        }
-
-                        if (categoryFindings.Count > maxDetailsToShow)
-                        {
-                            LoggerInstance.Msg($"  * And {categoryFindings.Count - maxDetailsToShow} more instances...");
-                        }
-
-                        LoggerInstance.Msg("");
-                    }
-
-                    LoggerInstance.Msg("-------------------------------");
-                    DisplaySecurityNotice(modName);
-
-                    try
-                    {
-                        // Generate report and prompt files
-                        var reportDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
-                        Directory.CreateDirectory(reportDirectory);
-
-                        var reportPath = Path.Combine(reportDirectory, $"{modName}.report.txt");
-                        using (var writer = new StreamWriter(reportPath))
-                        {
-                            writer.WriteLine($"MLVScan Detailed Report for {modName}");
-                            writer.WriteLine($"Scan Date: {DateTime.Now}");
-                            writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
-                            writer.WriteLine("==============================================");
-
-                            writer.WriteLine("\nSEVERITY BREAKDOWN:");
-                            foreach (var severityCount in severityCounts)
-                            {
-                                writer.WriteLine($"- {severityCount.Key}: {severityCount.Value} issue(s)");
-                            }
-                            writer.WriteLine("==============================================");
-
-                            foreach (var group in groupedFindings)
-                            {
-                                writer.WriteLine($"\n== {group.Key} ==");
-                                writer.WriteLine($"Severity: {group.Value[0].Severity}");
-                                writer.WriteLine($"Instances: {group.Value.Count}");
-                                writer.WriteLine("\nLocations & Snippets:");
-                                foreach (var finding in group.Value)
-                                {
-                                    writer.WriteLine($"- {finding.Location}");
-                                    if (!string.IsNullOrEmpty(finding.CodeSnippet))
-                                    {
-                                        writer.WriteLine("  Code Snippet (IL):");
-                                        foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                                        {
-                                            writer.WriteLine($"    {line}");
-                                        }
-                                        writer.WriteLine();
-                                    }
-                                }
-                            }
-
-                            WriteSecurityNoticeToReport(writer);
-                        }
-
-                        // Generate LLM analysis prompt
-                        var promptSaved = promptGenerator.SavePromptToFile(
-                            modPath, 
-                            actualFindings, 
-                            promptDirectory);
-                            
-                        if (promptSaved)
-                        {
-                            LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
-                            LoggerInstance.Msg($"LLM analysis prompt saved to: {Path.Combine(promptDirectory, $"{modName}.prompt.md")}");
-                            LoggerInstance.Msg("You can copy the contents of the prompt file into ChatGPT to help determine if this is malware or a false positive, although don't trust ChatGPT to be 100% accurate.");
-                        }
-                        else
-                        {
-                            LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LoggerInstance.Error($"Failed to save detailed report: {ex.Message}");
-                    }
+                    LoggerInstance.Error("Could not find scan results for disabled mod");
+                    continue;
                 }
 
-                LoggerInstance.Warning("-------------------------------");
+                var actualFindings = findings
+                    .Where(f => f.Location != "Assembly scanning")
+                    .ToList();
+
+                if (actualFindings.Count == 0)
+                {
+                    LoggerInstance.Msg("No specific suspicious patterns were identified.");
+                    continue;
+                }
+
+                var groupedFindings = actualFindings
+                    .GroupBy(f => f.Description)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                LoggerInstance.Warning($"Total suspicious patterns found: {actualFindings.Count}");
+
+                var severityCounts = actualFindings
+                    .GroupBy(f => f.Severity)
+                    .OrderByDescending(g => GetSeverityRank(g.Key))
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                LoggerInstance.Warning("Severity breakdown:");
+                foreach (var severityCount in severityCounts)
+                {
+                    var severityLabel = FormatSeverityLabel(severityCount.Key);
+                    LoggerInstance.Msg($"  {severityLabel}: {severityCount.Value} issue(s)");
+                }
+
+                LoggerInstance.Msg("-------------------------------");
+                LoggerInstance.Warning("Suspicious patterns found:");
+
+                foreach (var (category, categoryFindings) in groupedFindings)
+                {
+                    var severity = FormatSeverityLabel(categoryFindings[0].Severity);
+
+                    LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
+
+                    var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
+                    for (var i = 0; i < maxDetailsToShow; i++)
+                    {
+                        var finding = categoryFindings[i];
+                        LoggerInstance.Msg($"  * At: {finding.Location}");
+                        if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                        {
+                            LoggerInstance.Msg($"    Code Snippet (IL):");
+                            foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                LoggerInstance.Msg($"      {line}");
+                            }
+                        }
+                    }
+
+                    if (categoryFindings.Count > maxDetailsToShow)
+                    {
+                        LoggerInstance.Msg($"  * And {categoryFindings.Count - maxDetailsToShow} more instances...");
+                    }
+
+                    LoggerInstance.Msg("");
+                }
+
+                LoggerInstance.Msg("-------------------------------");
+                DisplaySecurityNotice(modName);
+
+                try
+                {
+                    // Generate report and prompt files
+                    var reportDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
+                    if (!Directory.Exists(reportDirectory))
+                    {
+                        Directory.CreateDirectory(reportDirectory);
+                    }
+
+                    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    var reportPath = Path.Combine(reportDirectory, $"{modName}_{timestamp}.report.txt");
+                    var promptDirectory = Path.Combine(reportDirectory, "Prompts");
+                    if (!Directory.Exists(promptDirectory))
+                    {
+                        Directory.CreateDirectory(promptDirectory);
+                    }
+
+                    var promptGenerator = _serviceFactory.CreatePromptGenerator();
+
+                    using (var writer = new StreamWriter(reportPath))
+                    {
+                        writer.WriteLine($"MLVScan Security Report");
+                        writer.WriteLine($"Generated: {DateTime.Now}");
+                        writer.WriteLine($"Mod File: {modName}");
+                        writer.WriteLine($"SHA256 Hash: {fileHash}");
+                        writer.WriteLine($"Path: {modPath}");
+                        writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
+                        writer.WriteLine("\nSeverity Breakdown:");
+                        foreach (var severityCount in severityCounts)
+                        {
+                            writer.WriteLine($"- {severityCount.Key}: {severityCount.Value} issue(s)");
+                        }
+                        writer.WriteLine("==============================================");
+
+                        foreach (var group in groupedFindings)
+                        {
+                            writer.WriteLine($"\n== {group.Key} ==");
+                            writer.WriteLine($"Severity: {group.Value[0].Severity}");
+                            writer.WriteLine($"Instances: {group.Value.Count}");
+                            writer.WriteLine("\nLocations & Snippets:");
+                            foreach (var finding in group.Value)
+                            {
+                                writer.WriteLine($"- {finding.Location}");
+                                if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                                {
+                                    writer.WriteLine("  Code Snippet (IL):");
+                                    foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                    {
+                                        writer.WriteLine($"    {line}");
+                                    }
+                                    writer.WriteLine();
+                                }
+                            }
+                        }
+
+                        WriteSecurityNoticeToReport(writer);
+                    }
+
+                    // Generate LLM analysis prompt
+                    var promptSaved = promptGenerator.SavePromptToFile(
+                        modPath, 
+                        actualFindings, 
+                        promptDirectory);
+                        
+                    if (promptSaved)
+                    {
+                        LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
+                        LoggerInstance.Msg($"LLM analysis prompt saved to: {Path.Combine(promptDirectory, $"{modName}.prompt.md")}");
+                        LoggerInstance.Msg("You can copy the contents of the prompt file into ChatGPT to help determine if this is malware or a false positive, although don't trust ChatGPT to be 100% accurate.");
+                    }
+                    else
+                    {
+                        LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LoggerInstance.Error($"Failed to save detailed report: {ex.Message}");
+                }
             }
 
             LoggerInstance.Warning("====== END OF SCAN REPORT ======");

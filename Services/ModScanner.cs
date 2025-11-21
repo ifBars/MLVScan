@@ -1,6 +1,9 @@
 using MelonLoader;
 using MelonLoader.Utils;
 using MLVScan.Models;
+using System.Security.Cryptography;
+using System.IO;
+using System;
 
 namespace MLVScan.Services
 {
@@ -57,7 +60,8 @@ namespace MLVScan.Services
                     var modFileName = Path.GetFileName(modFile);
                     if (_configManager.IsModWhitelisted(modFileName))
                     {
-                        _logger.Msg($"Skipping whitelisted mod: {modFileName}");
+                        var hash = CalculateFileHash(modFile);
+                        _logger.Msg($"Skipping whitelisted mod: {modFileName} [Hash: {hash}]");
                         continue;
                     }
 
@@ -116,6 +120,25 @@ namespace MLVScan.Services
             catch (Exception ex)
             {
                 _logger.Error($"Error scanning Thunderstore Mod Manager directories: {ex.Message}");
+            }
+        }
+
+        public static string CalculateFileHash(string filePath)
+        {
+            try
+            {
+                using (var sha256 = SHA256.Create())
+                {
+                    using (var stream = File.OpenRead(filePath))
+                    {
+                        var hash = sha256.ComputeHash(stream);
+                        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return "Error calculating hash";
             }
         }
     }
