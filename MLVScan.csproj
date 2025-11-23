@@ -16,6 +16,15 @@
 	<ItemGroup>
 	  <EmbeddedResource Remove="NewFolder\**" />
 	  <None Remove="NewFolder\**" />
+	  <EmbeddedResource Remove="S1API\**" />
+	  <None Remove="S1API\**" />
+	  <EmbeddedResource Remove="MalwareMod\**" />
+	  <None Remove="MalwareMod\**" />
+	  <EmbeddedResource Remove="ReflectionNonLiteralStrings\**" />
+	  <None Remove="ReflectionNonLiteralStrings\**" />
+	  <None Remove="S1API.Il2Cpp.dll_20251122_220307.report.txt" />
+	  <None Remove="S1API.Mono.dll_20251122_220307.report.txt" />
+	  <None Remove="CLAUDE.md" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -497,9 +506,13 @@
 		<Compile Include="Models\Base64Rule.cs" />
 		<Compile Include="Models\ByteArrayManipulationRule.cs" />
 		<Compile Include="Models\DllImportRule.cs" />
+		<Compile Include="Models\EncodedStringRule.cs" />
+		<Compile Include="Models\EnvironmentPathRule.cs" />
 		<Compile Include="Models\IScanRule.cs" />
 		<Compile Include="Models\LoadFromStreamRule.cs" />
+		<Compile Include="Models\MethodSignals.cs" />
 		<Compile Include="Models\ProcessStartRule.cs" />
+		<Compile Include="Models\ReflectionRule.cs" />
 		<Compile Include="Models\RegistryRule.cs" />
 		<Compile Include="Models\ScanConfig.cs" />
 		<Compile Include="Models\ScanFinding.cs" />

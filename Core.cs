@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.4", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.5", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 

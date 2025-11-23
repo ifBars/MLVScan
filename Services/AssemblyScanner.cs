@@ -10,10 +10,12 @@ namespace MLVScan.Services
     {
         private readonly IEnumerable<IScanRule> _rules;
         private DefaultAssemblyResolver _assemblyResolver;
+        private readonly ScanConfig _config;
 
-        public AssemblyScanner(IEnumerable<IScanRule> rules)
+        public AssemblyScanner(IEnumerable<IScanRule> rules, ScanConfig config = null)
         {
             _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+            _config = config ?? new ScanConfig();
             InitializeResolver();
         }
 
@@ -79,6 +81,12 @@ namespace MLVScan.Services
 
                 foreach (var module in assembly.Modules)
                 {
+                    // Scan assembly metadata for hidden payloads
+                    if (_config.DetectAssemblyMetadata)
+                    {
+                        ScanAssemblyMetadata(assembly, findings);
+                    }
+
                     ScanForDllImports(module, findings);
 
                     foreach (var type in module.Types)
@@ -163,6 +171,55 @@ namespace MLVScan.Services
             }
         }
 
+        private void ScanAssemblyMetadata(AssemblyDefinition assembly, List<ScanFinding> findings)
+        {
+            try
+            {
+                foreach (var attr in assembly.CustomAttributes)
+                {
+                    if (attr.AttributeType.Name == "AssemblyMetadataAttribute" && attr.HasConstructorArguments)
+                    {
+                        foreach (var arg in attr.ConstructorArguments)
+                        {
+                            if (arg.Value is string strValue && !string.IsNullOrWhiteSpace(strValue))
+                            {
+                                // Check for numeric encoding patterns
+                                if (EncodedStringRule.IsEncodedString(strValue))
+                                {
+                                    var decoded = EncodedStringRule.DecodeNumericString(strValue);
+                                    if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                                    {
+                                        findings.Add(new ScanFinding(
+                                            $"Assembly Metadata: {attr.AttributeType.Name}",
+                                            $"Hidden payload in assembly metadata attribute. Decoded content: {decoded}",
+                                            "Critical",
+                                            $"Encoded: {strValue}\nDecoded: {decoded}"));
+                                    }
+                                }
+                                // Also check for dot-separated encoding used in metadata
+                                else if (strValue.Contains('.') && strValue.Split('.').Length >= _config.MinimumEncodedStringLength)
+                                {
+                                    var decoded = EncodedStringRule.DecodeNumericString(strValue);
+                                    if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                                    {
+                                        findings.Add(new ScanFinding(
+                                            $"Assembly Metadata: {attr.AttributeType.Name}",
+                                            $"Hidden payload in assembly metadata attribute. Decoded content: {decoded}",
+                                            "Critical",
+                                            $"Encoded: {strValue}\nDecoded: {decoded}"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Skip metadata scanning if it fails
+            }
+        }
+
         private void ScanMethod(MethodDefinition method, List<ScanFinding> findings)
         {
             try
@@ -172,20 +229,81 @@ namespace MLVScan.Services
                     return;
 
                 var instructions = method.Body.Instructions;
+
+                // Initialize signal tracking for this method
+                var methodSignals = _config.EnableMultiSignalDetection ? new MethodSignals() : null;
                 
                 // Check for COM reflection attack pattern (GetTypeFromProgID + Activator.CreateInstance + InvokeMember)
                 DetectCOMReflectionAttack(method, instructions, findings);
                 
+                // Scan for encoded strings in all ldstr instructions
+                for (int i = 0; i < instructions.Count; i++)
+                {
+                    var instruction = instructions[i];
+
+                    // Check for encoded strings
+                    if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string strLiteral)
+                    {
+                        if (EncodedStringRule.IsEncodedString(strLiteral))
+                        {
+                            var decoded = EncodedStringRule.DecodeNumericString(strLiteral);
+                            if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                            {
+                                findings.Add(new ScanFinding(
+                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                                    $"Numeric-encoded string with suspicious content detected. Decoded: {decoded}",
+                                    "High",
+                                    $"Encoded: {strLiteral}\nDecoded: {decoded}"));
+
+                                if (methodSignals != null)
+                                    methodSignals.HasEncodedStrings = true;
+                            }
+                        }
+                    }
+                }
+
                 for (int i = 0; i < instructions.Count; i++)
                 {
                     var instruction = instructions[i];
                     try
                     {
                         // Check for direct method calls
-                        if ((instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt) && 
+                        if ((instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt) &&
                             instruction.Operand is MethodReference calledMethod)
                         {
-                            if (_rules.Any(rule => rule.IsSuspicious(calledMethod)))
+                            // Track signals for multi-pattern detection
+                            if (methodSignals != null)
+                            {
+                                UpdateMethodSignals(methodSignals, calledMethod);
+
+                                // Check for Environment.GetFolderPath with sensitive folder values
+                                if (calledMethod.DeclaringType?.FullName == "System.Environment" &&
+                                    calledMethod.Name == "GetFolderPath")
+                                {
+                                    var folderValue = ExtractFolderPathArgument(instructions, i);
+                                    if (folderValue.HasValue && EnvironmentPathRule.IsSensitiveFolder(folderValue.Value))
+                                    {
+                                        methodSignals.UsesSensitiveFolder = true;
+                                        findings.Add(new ScanFinding(
+                                            $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                                            $"Access to sensitive folder: {EnvironmentPathRule.GetFolderName(folderValue.Value)}",
+                                            "Medium",
+                                            $"Environment.GetFolderPath({folderValue.Value}) // {EnvironmentPathRule.GetFolderName(folderValue.Value)}"));
+                                    }
+                                }
+                            }
+
+                            // Check for legitimate context BEFORE applying rules (especially for reflection)
+                            // This prevents false positives on legitimate mods using Harmony, Il2Cpp interop, etc.
+                            bool isLegitContext = ReflectionRule.IsInLegitimateContext(method);
+                            
+                            // For reflection invocations, skip if in legitimate context
+                            bool isReflectionInvoke = IsReflectionInvokeMethod(calledMethod);
+                            if (isReflectionInvoke && isLegitContext)
+                            {
+                                // Skip reflection detection for legitimate contexts
+                            }
+                            else if (_rules.Any(rule => rule.IsSuspicious(calledMethod)))
                             {
                                 var rule = _rules.First(r => r.IsSuspicious(calledMethod)); // Assuming one rule matches or taking the first
                                 var snippetBuilder = new System.Text.StringBuilder();
@@ -298,12 +416,33 @@ namespace MLVScan.Services
                             }
                             
                             // Check for reflection-based calls that might bypass detection
-                            ScanForReflectionInvocation(method, instruction, calledMethod, i, instructions, findings);
+                            ScanForReflectionInvocation(method, instruction, calledMethod, i, instructions, findings, methodSignals);
                         }
                     }
                     catch (Exception)
                     {
                         // Skip instruction if it can't be properly analyzed
+                    }
+                }
+
+                // After scanning all instructions, check for multi-signal combinations
+                if (methodSignals != null && _config.EnableMultiSignalDetection)
+                {
+                    if (methodSignals.IsCriticalCombination())
+                    {
+                        findings.Add(new ScanFinding(
+                            $"{method.DeclaringType.FullName}.{method.Name}",
+                            $"Critical: Multiple suspicious patterns detected ({methodSignals.GetCombinationDescription()})",
+                            "Critical",
+                            $"This method contains {methodSignals.SignalCount} suspicious signals that form a likely malicious pattern."));
+                    }
+                    else if (methodSignals.IsHighRiskCombination())
+                    {
+                        findings.Add(new ScanFinding(
+                            $"{method.DeclaringType.FullName}.{method.Name}",
+                            $"High risk: Multiple suspicious patterns detected ({methodSignals.GetCombinationDescription()})",
+                            "High",
+                            $"This method contains {methodSignals.SignalCount} suspicious signals."));
                     }
                 }
             }
@@ -404,29 +543,61 @@ namespace MLVScan.Services
             }
         }
         
-        private void ScanForReflectionInvocation(MethodDefinition methodDef, Instruction instruction, MethodReference calledMethod, int index, 
-                                               Mono.Collections.Generic.Collection<Instruction> instructions, List<ScanFinding> findings)
+        private void ScanForReflectionInvocation(MethodDefinition methodDef, Instruction instruction, MethodReference calledMethod, int index,
+                                               Mono.Collections.Generic.Collection<Instruction> instructions, List<ScanFinding> findings,
+                                               MethodSignals methodSignals)
         {
             try
             {
+                // IMPORTANT: Check for legitimate context FIRST before doing any reflection analysis
+                // This prevents false positives on legitimate mods using Harmony, Il2Cpp interop, etc.
+                bool isLegitContext = ReflectionRule.IsInLegitimateContext(methodDef);
+                if (isLegitContext)
+                    return; // Skip all reflection detection for legitimate contexts
+
                 // Only check specific reflection patterns that are commonly used for malicious purposes
                 // Exclude legitimate reflection patterns commonly used in mods
-                
+
                 // Check if this is a reflection-based method invocation
                 bool isReflectionInvoke = IsReflectionInvokeMethod(calledMethod);
                 if (!isReflectionInvoke)
                     return;
-                
+
                 // Extract the method name being invoked via reflection
                 string invokedMethodName = ExtractInvokedMethodName(instructions, index);
+
+                // If we can't determine the method name (non-literal), only flag when other high-risk signals are present.
                 if (string.IsNullOrEmpty(invokedMethodName))
+                {
+                    bool hasRiskSignals = methodSignals != null &&
+                        (methodSignals.HasEncodedStrings ||
+                         methodSignals.UsesSensitiveFolder ||
+                         methodSignals.HasProcessLikeCall ||
+                         methodSignals.HasNetworkCall ||
+                         methodSignals.HasFileWrite ||
+                         methodSignals.HasBase64);
+
+                    if (!hasRiskSignals)
+                        return; // Likely benign reflection usage (e.g., API/Il2Cpp glue).
+
+                    var severity = _config.EnableParanoidReflection ? "High" : "Medium";
+                    var snippetBuilder = new System.Text.StringBuilder();
+                    int contextLines = 4;
+
+                    for (int j = Math.Max(0, index - contextLines); j < Math.Min(instructions.Count, index + contextLines + 1); j++)
+                    {
+                        if (j == index) snippetBuilder.Append(">>> ");
+                        else snippetBuilder.Append("    ");
+                        snippetBuilder.AppendLine(instructions[j].ToString());
+                    }
+
+                    findings.Add(new ScanFinding(
+                        $"{methodDef.DeclaringType.FullName}.{methodDef.Name}:{instruction.Offset}",
+                        "Reflection invocation with non-literal target method name (cannot determine what is being invoked)",
+                        severity,
+                        snippetBuilder.ToString().TrimEnd()));
                     return;
-                
-                // Check for suspicious context before flagging
-                // If we're in what looks like a legitimate mod context (typical MelonLoader patterns), 
-                // don't flag the reflection usage
-                if (IsLikelyLegitimateModContext(methodDef))
-                    return;
+                }
                 
                 // Create a fake method reference for rules to check
                 var fakeMethodRef = new MethodReference(invokedMethodName, methodDef.Module.TypeSystem.Object)
@@ -461,32 +632,6 @@ namespace MLVScan.Services
             {
                 // Skip if reflection analysis fails
             }
-        }
-        
-        private bool IsLikelyLegitimateModContext(MethodDefinition methodDef)
-        {
-            // Check typical patterns for legitimate mod reflection usage
-            
-            // 1. Check if we're in a patching context
-            if (methodDef.DeclaringType.FullName.Contains("Patch") || 
-                methodDef.DeclaringType.FullName.Contains("Harmony") ||
-                methodDef.Name.Contains("Patch") ||
-                methodDef.DeclaringType.FullName.Contains("MonoMod"))
-                return true;
-                
-            // 2. Check if we're in a typical MelonLoader or Unity context
-            if (methodDef.DeclaringType.FullName.Contains("MelonLoader") ||
-                methodDef.DeclaringType.Namespace?.Contains("MelonLoader") == true ||
-                methodDef.DeclaringType.Namespace?.Contains("UnityEngine") == true)
-                return true;
-                
-            // 3. Check if reflection is being used for typical game interop
-            if (methodDef.Name.Contains("Initialize") && !methodDef.Name.Contains("OnInitializeMelon") || 
-                methodDef.Name.Contains("Setup") || 
-                methodDef.Name == "OnSceneWasLoaded")
-                return true;
-                
-            return false;
         }
         
         private bool IsReflectionInvokeMethod(MethodReference method)
@@ -539,31 +684,79 @@ namespace MLVScan.Services
         
         private string ExtractInvokedMethodName(Mono.Collections.Generic.Collection<Instruction> instructions, int currentIndex)
         {
-            // Look backward for string literals that might be method names
-            for (int i = Math.Max(0, currentIndex - 15); i < currentIndex; i++)
+            // IMPROVEMENT: Track local variables to follow one step back
+            var localVarIndex = -1;
+            string methodNameFromLocal = null;
+
+            // Look backward for string literals or local variable loads
+            for (int i = Math.Max(0, currentIndex - 20); i < currentIndex; i++)
             {
                 var instr = instructions[i];
-                
+
                 // Look for string literals (ldstr opcode)
                 if (instr.OpCode == OpCodes.Ldstr && instr.Operand is string str)
                 {
-                    // Look for shell-related strings
-                    if (str.Contains("Shell.Application") || str.Contains("shell32"))
-                        return "ShellExecute";
-                        
-                    // Focus on known dangerous method names rather than all method names
-                    if (IsSuspiciousMethodName(str))
+                    // IMPROVEMENT: Try to decode numeric strings before checking
+                    string effectiveStr = str;
+                    if (EncodedStringRule.IsEncodedString(str))
                     {
-                        return str;
+                        var decoded = EncodedStringRule.DecodeNumericString(str);
+                        if (!string.IsNullOrEmpty(decoded))
+                            effectiveStr = decoded;
+                    }
+
+                    // Look for shell-related strings
+                    if (effectiveStr.Contains("Shell.Application") || effectiveStr.Contains("shell32"))
+                        return "ShellExecute";
+
+                    // Focus on known dangerous method names
+                    if (IsSuspiciousMethodName(effectiveStr))
+                    {
+                        return effectiveStr;
+                    }
+
+                    // Store in case it's assigned to a local variable
+                    methodNameFromLocal = effectiveStr;
+                }
+
+                // Track local variable stores (stloc)
+                if (instr.OpCode == OpCodes.Stloc || instr.OpCode == OpCodes.Stloc_0 ||
+                    instr.OpCode == OpCodes.Stloc_1 || instr.OpCode == OpCodes.Stloc_2 ||
+                    instr.OpCode == OpCodes.Stloc_3 || instr.OpCode == OpCodes.Stloc_S)
+                {
+                    // If we just saw a string literal, this local might hold it
+                    if (methodNameFromLocal != null && i > 0 && instructions[i - 1].OpCode == OpCodes.Ldstr)
+                    {
+                        if (instr.OpCode == OpCodes.Stloc_0) localVarIndex = 0;
+                        else if (instr.OpCode == OpCodes.Stloc_1) localVarIndex = 1;
+                        else if (instr.OpCode == OpCodes.Stloc_2) localVarIndex = 2;
+                        else if (instr.OpCode == OpCodes.Stloc_3) localVarIndex = 3;
+                        else if (instr.Operand is Mono.Cecil.Cil.VariableDefinition varDef)
+                            localVarIndex = varDef.Index;
                     }
                 }
+
+                // Check if we're loading a local that might have the method name
+                if (localVarIndex >= 0 && methodNameFromLocal != null)
+                {
+                    bool isLoadingTrackedLocal = false;
+                    if (instr.OpCode == OpCodes.Ldloc_0 && localVarIndex == 0) isLoadingTrackedLocal = true;
+                    else if (instr.OpCode == OpCodes.Ldloc_1 && localVarIndex == 1) isLoadingTrackedLocal = true;
+                    else if (instr.OpCode == OpCodes.Ldloc_2 && localVarIndex == 2) isLoadingTrackedLocal = true;
+                    else if (instr.OpCode == OpCodes.Ldloc_3 && localVarIndex == 3) isLoadingTrackedLocal = true;
+                    else if (instr.Operand is Mono.Cecil.Cil.VariableDefinition varDef2 && varDef2.Index == localVarIndex)
+                        isLoadingTrackedLocal = true;
+
+                    if (isLoadingTrackedLocal && IsSuspiciousMethodName(methodNameFromLocal))
+                        return methodNameFromLocal;
+                }
             }
-            
+
             // Also look forward a bit for invocation names
             for (int i = currentIndex + 1; i < Math.Min(instructions.Count, currentIndex + 10); i++)
             {
                 var instr = instructions[i];
-                
+
                 // Look for string literals (ldstr opcode)
                 if (instr.OpCode == OpCodes.Ldstr && instr.Operand is string str)
                 {
@@ -571,8 +764,8 @@ namespace MLVScan.Services
                         return str;
                 }
             }
-            
-            return "UnknownReflectionCall"; // Return default name for unknown reflection calls
+
+            return null; // Cannot determine method name
         }
         
         private bool IsSuspiciousMethodName(string str)
@@ -690,6 +883,68 @@ namespace MLVScan.Services
             {
                 // Ignore errors
             }
+        }
+
+        private void UpdateMethodSignals(MethodSignals signals, MethodReference method)
+        {
+            if (method?.DeclaringType == null)
+                return;
+
+            string typeName = method.DeclaringType.FullName;
+            string methodName = method.Name;
+
+            // Check for Base64
+            if (typeName.Contains("Convert") && methodName.Contains("FromBase64"))
+                signals.HasBase64 = true;
+
+            // Check for Process.Start
+            if (typeName.Contains("System.Diagnostics.Process") && methodName == "Start")
+                signals.HasProcessLikeCall = true;
+
+            // Check for reflection invocation
+            if ((typeName == "System.Reflection.MethodInfo" && methodName == "Invoke") ||
+                (typeName == "System.Reflection.MethodBase" && methodName == "Invoke"))
+                signals.HasSuspiciousReflection = true;
+
+            // Check for network calls
+            if (typeName.StartsWith("System.Net") || typeName.Contains("WebRequest") ||
+                typeName.Contains("HttpClient") || typeName.Contains("WebClient"))
+                signals.HasNetworkCall = true;
+
+            // Check for file writes
+            if ((typeName.StartsWith("System.IO.File") && (methodName.Contains("Write") || methodName.Contains("Create"))) ||
+                (typeName.StartsWith("System.IO.Stream") && methodName.Contains("Write")))
+                signals.HasFileWrite = true;
+        }
+
+        private int? ExtractFolderPathArgument(Mono.Collections.Generic.Collection<Instruction> instructions, int currentIndex)
+        {
+            // Look backward for ldc.i4 (load constant int32) instructions
+            for (int i = Math.Max(0, currentIndex - 5); i < currentIndex; i++)
+            {
+                var instr = instructions[i];
+
+                // Check for various forms of loading integer constants
+                if (instr.OpCode == OpCodes.Ldc_I4)
+                {
+                    return (int)instr.Operand;
+                }
+                else if (instr.OpCode == OpCodes.Ldc_I4_S)
+                {
+                    return (sbyte)instr.Operand;
+                }
+                else if (instr.OpCode == OpCodes.Ldc_I4_0) return 0;
+                else if (instr.OpCode == OpCodes.Ldc_I4_1) return 1;
+                else if (instr.OpCode == OpCodes.Ldc_I4_2) return 2;
+                else if (instr.OpCode == OpCodes.Ldc_I4_3) return 3;
+                else if (instr.OpCode == OpCodes.Ldc_I4_4) return 4;
+                else if (instr.OpCode == OpCodes.Ldc_I4_5) return 5;
+                else if (instr.OpCode == OpCodes.Ldc_I4_6) return 6;
+                else if (instr.OpCode == OpCodes.Ldc_I4_7) return 7;
+                else if (instr.OpCode == OpCodes.Ldc_I4_8) return 8;
+            }
+
+            return null;
         }
     }
 }

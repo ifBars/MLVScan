@@ -32,6 +32,8 @@ namespace MLVScan.Services
 
         public AssemblyScanner CreateAssemblyScanner()
         {
+            var config = _configManager?.Config ?? _fallbackConfig;
+
             var rules = new List<IScanRule>
             {
                 new Base64Rule(),
@@ -40,10 +42,13 @@ namespace MLVScan.Services
                 new LoadFromStreamRule(),
                 new ByteArrayManipulationRule(),
                 new DllImportRule(),
-                new RegistryRule()
+                new RegistryRule(),
+                new EncodedStringRule(),
+                new ReflectionRule(config.EnableParanoidReflection),
+                new EnvironmentPathRule()
             };
 
-            return new AssemblyScanner(rules);
+            return new AssemblyScanner(rules, config);
         }
 
         public ModScanner CreateModScanner()
@@ -59,7 +64,7 @@ namespace MLVScan.Services
             return new ModDisabler(_logger, config);
         }
         
-        public PromptGeneratorService CreatePromptGeneratorService()
+        public PromptGeneratorService CreatePromptGenerator()
         {
             var config = _configManager?.Config ?? _fallbackConfig;
             return new PromptGeneratorService(config, _logger);

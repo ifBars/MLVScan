@@ -127,18 +127,32 @@ namespace MLVScan.Services
         {
             try
             {
+                // Check if file exists first
+                if (!File.Exists(filePath))
+                {
+                    return $"File not found: {filePath}";
+                }
+
                 using (var sha256 = SHA256.Create())
                 {
-                    using (var stream = File.OpenRead(filePath))
+                    using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
                         var hash = sha256.ComputeHash(stream);
                         return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
                     }
                 }
             }
-            catch (Exception)
+            catch (UnauthorizedAccessException)
             {
-                return "Error calculating hash";
+                return "Access denied";
+            }
+            catch (IOException ex)
+            {
+                return $"IO Error: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                return $"Error: {ex.Message}";
             }
         }
     }
