@@ -1,11 +1,12 @@
 using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class ReflectionRule : IScanRule
     {
         public string Description => "Detected reflection invocation without determinable target method (potential bypass).";
-        public string Severity => "High";
+        public Severity Severity => Severity.High;
 
         public bool IsSuspicious(MethodReference method)
         {

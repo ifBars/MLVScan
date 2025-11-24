@@ -1,11 +1,12 @@
 ﻿using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class Shell32Rule : IScanRule
     {
         public string Description => "Potential system shell execution detected";
-        public string Severity => "Critical";
+        public Severity Severity => Severity.Critical;
 
         public bool IsSuspicious(MethodReference method)
         {

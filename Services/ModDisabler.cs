@@ -26,8 +26,15 @@ namespace MLVScan.Services
             foreach (var (modFilePath, findings) in scanResults)
             {
                 var severeFindings = findings.Where(f =>
-                    GetSeverityRank(f.Severity) >= GetSeverityRank(_config.MinSeverityForDisable))
+                    (int)f.Severity >= (int)_config.MinSeverityForDisable)
                     .ToList();
+
+                // Skip if no findings meet the minimum severity threshold
+                if (severeFindings.Count == 0)
+                {
+                    _logger.Msg($"Mod {Path.GetFileName(modFilePath)} has findings but none meet minimum severity threshold ({_config.MinSeverityForDisable} - If this is set to Medium, the mod is likely not malicious).");
+                    continue;
+                }
 
                 if (!forceDisable && severeFindings.Count < _config.SuspiciousThreshold)
                 {
@@ -66,18 +73,6 @@ namespace MLVScan.Services
             }
 
             return disabledMods;
-        }
-
-        private static int GetSeverityRank(string severity)
-        {
-            return severity?.ToLower() switch
-            {
-                "critical" => 4,
-                "high" => 3,
-                "medium" => 2,
-                "low" => 1,
-                _ => 0
-            };
         }
     }
 }

@@ -1,11 +1,12 @@
 using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class LoadFromStreamRule : IScanRule
     {
         public string Description => "Detected dynamic assembly loading which could be used to execute hidden code.";
-        public string Severity => "Critical";
+        public Severity Severity => Severity.Critical;
         
         public bool IsSuspicious(MethodReference method)
         {

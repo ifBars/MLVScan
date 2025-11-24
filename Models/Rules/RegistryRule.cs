@@ -1,11 +1,12 @@
 using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class RegistryRule : IScanRule
     {
         public string Description => "Detected registry manipulation, which is suspicious for a MelonLoader mod. This could be used to persist malware or modify system settings.";
-        public string Severity => "Critical";
+        public Severity Severity => Severity.Critical;
         
         private static readonly string[] RegistryFunctions =
         [

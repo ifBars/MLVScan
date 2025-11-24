@@ -6,8 +6,8 @@
 		<RootNamespace>MLVScan</RootNamespace>
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
-		<AssemblyVersion>1.5.7</AssemblyVersion>
-		<FileVersion>1.5.7</FileVersion>
+		<AssemblyVersion>1.5.8</AssemblyVersion>
+		<FileVersion>1.5.8</FileVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<AssemblyName>MLVScan.MelonLoader</AssemblyName>
 		<LangVersion>latest</LangVersion>
@@ -500,30 +500,46 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
-		<Compile Include="Models\Base64Rule.cs" />
-		<Compile Include="Models\ByteArrayManipulationRule.cs" />
 		<Compile Include="Models\DisabledModInfo.cs" />
-		<Compile Include="Models\DllImportRule.cs" />
-		<Compile Include="Models\EncodedBlobSplittingRule.cs" />
-		<Compile Include="Models\EncodedStringPipelineRule.cs" />
-    <Compile Include="Models\EncodedStringLiteralRule.cs" />
-		<Compile Include="Models\EnvironmentPathRule.cs" />
-		<Compile Include="Models\IScanRule.cs" />
-		<Compile Include="Models\LoadFromStreamRule.cs" />
 		<Compile Include="Models\MethodSignals.cs" />
-		<Compile Include="Models\ProcessStartRule.cs" />
-		<Compile Include="Models\ReflectionRule.cs" />
-		<Compile Include="Models\RegistryRule.cs" />
+		<Compile Include="Models\Rules\Base64Rule.cs" />
+		<Compile Include="Models\Rules\ByteArrayManipulationRule.cs" />
+		<Compile Include="Models\Rules\COMReflectionAttackRule.cs" />
+		<Compile Include="Models\Rules\DataExfiltrationRule.cs" />
+		<Compile Include="Models\Rules\DllImportRule.cs" />
+		<Compile Include="Models\Rules\EncodedBlobSplittingRule.cs" />
+		<Compile Include="Models\Rules\EncodedStringLiteralRule.cs" />
+		<Compile Include="Models\Rules\EncodedStringPipelineRule.cs" />
+		<Compile Include="Models\Rules\EnvironmentPathRule.cs" />
+		<Compile Include="Models\Rules\IScanRule.cs" />
+		<Compile Include="Models\Rules\LoadFromStreamRule.cs" />
+		<Compile Include="Models\Rules\PersistenceRule.cs" />
+		<Compile Include="Models\Rules\ProcessStartRule.cs" />
+		<Compile Include="Models\Rules\ReflectionRule.cs" />
+		<Compile Include="Models\Rules\RegistryRule.cs" />
+		<Compile Include="Models\Rules\Shell32Rule.cs" />
 		<Compile Include="Models\ScanConfig.cs" />
 		<Compile Include="Models\ScanFinding.cs" />
-		<Compile Include="Models\Shell32Rule.cs" />
+		<Compile Include="Models\Severity.cs" />
+		<Compile Include="Services\AssemblyResolverFactory.cs" />
 		<Compile Include="Services\AssemblyScanner.cs" />
+		<Compile Include="Services\CodeSnippetBuilder.cs" />
 		<Compile Include="Services\ConfigManager.cs" />
+		<Compile Include="Services\DllImportScanner.cs" />
+		<Compile Include="Services\Helpers\InstructionHelper.cs" />
+		<Compile Include="Services\Helpers\TypeCollectionHelper.cs" />
 		<Compile Include="Services\IlDumpService.cs" />
+		<Compile Include="Services\InstructionAnalyzer.cs" />
+		<Compile Include="Services\MetadataScanner.cs" />
+		<Compile Include="Services\MethodScanner.cs" />
 		<Compile Include="Services\ModDisabler.cs" />
 		<Compile Include="Services\ModScanner.cs" />
 		<Compile Include="Services\PromptGeneratorService.cs" />
+		<Compile Include="Services\ReflectionDetector.cs" />
 		<Compile Include="Services\ServiceFactory.cs" />
+		<Compile Include="Services\SignalTracker.cs" />
+		<Compile Include="Services\StringPatternDetector.cs" />
+		<Compile Include="Services\TypeScanner.cs" />
 	</ItemGroup>
 
 	<ItemGroup>

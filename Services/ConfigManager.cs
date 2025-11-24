@@ -79,7 +79,7 @@ namespace MLVScan.Services
             {
                 EnableAutoScan = _enableAutoScan.Value,
                 EnableAutoDisable = _enableAutoDisable.Value,
-                MinSeverityForDisable = _minSeverityForDisable.Value,
+                MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
                 WhitelistedMods = _whitelistedMods.Value,
@@ -93,7 +93,7 @@ namespace MLVScan.Services
             {
                 _enableAutoScan.Value = newConfig.EnableAutoScan;
                 _enableAutoDisable.Value = newConfig.EnableAutoDisable;
-                _minSeverityForDisable.Value = newConfig.MinSeverityForDisable;
+                _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedMods.Value = newConfig.WhitelistedMods;
@@ -142,6 +142,33 @@ namespace MLVScan.Services
                 modFileName += ".dll";
 
             return Config.WhitelistedMods.Contains(modFileName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static Severity ParseSeverity(string severity)
+        {
+            if (string.IsNullOrWhiteSpace(severity))
+                return Severity.Medium;
+
+            return severity.ToLower() switch
+            {
+                "critical" => Severity.Critical,
+                "high" => Severity.High,
+                "medium" => Severity.Medium,
+                "low" => Severity.Low,
+                _ => Severity.Medium
+            };
+        }
+
+        private static string FormatSeverity(Severity severity)
+        {
+            return severity switch
+            {
+                Severity.Critical => "Critical",
+                Severity.High => "High",
+                Severity.Medium => "Medium",
+                Severity.Low => "Low",
+                _ => "Medium"
+            };
         }
     }
 }

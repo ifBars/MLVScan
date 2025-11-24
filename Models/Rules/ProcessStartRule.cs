@@ -1,11 +1,12 @@
 ﻿using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class ProcessStartRule : IScanRule
     {
         public string Description => "Detected Process.Start call which could execute arbitrary programs.";
-        public string Severity => "Critical";
+        public Severity Severity => Severity.Critical;
         
         public bool IsSuspicious(MethodReference method)
         {

@@ -1,5 +1,6 @@
 using MelonLoader;
 using MLVScan.Models;
+using MLVScan.Models.Rules;
 
 namespace MLVScan.Services
 {
@@ -47,7 +48,10 @@ namespace MLVScan.Services
                 new ReflectionRule(),
                 new EnvironmentPathRule(),
                 new EncodedStringPipelineRule(),
-                new EncodedBlobSplittingRule()
+                new EncodedBlobSplittingRule(),
+                new COMReflectionAttackRule(),
+                new DataExfiltrationRule(),
+                new PersistenceRule()
             };
 
             return new AssemblyScanner(rules, config);

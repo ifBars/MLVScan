@@ -45,7 +45,7 @@ namespace MLVScan.Services
             // Severity breakdown
             var severityCounts = findings
                 .GroupBy(f => f.Severity)
-                .OrderByDescending(g => GetSeverityRank(g.Key))
+                .OrderByDescending(g => (int)g.Key)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             sb.AppendLine("## Severity Breakdown");
@@ -1204,27 +1204,15 @@ namespace MLVScan.Services
             }
         }
 
-        private static int GetSeverityRank(string severity)
+        private static string FormatSeverityLabel(Severity severity)
         {
-            return severity.ToLower() switch
+            return severity switch
             {
-                "critical" => 4,
-                "high" => 3,
-                "medium" => 2,
-                "low" => 1,
-                _ => 0
-            };
-        }
-
-        private static string FormatSeverityLabel(string severity)
-        {
-            return severity.ToLower() switch
-            {
-                "critical" => "CRITICAL",
-                "high" => "HIGH",
-                "medium" => "MEDIUM",
-                "low" => "LOW",
-                _ => severity.ToUpper()
+                Severity.Critical => "CRITICAL",
+                Severity.High => "HIGH",
+                Severity.Medium => "MEDIUM",
+                Severity.Low => "LOW",
+                _ => severity.ToString().ToUpper()
             };
         }
     }

@@ -9,7 +9,7 @@ namespace MLVScan.Models
         public bool EnableAutoDisable { get; set; } = true;
 
         // Minimum severity level to trigger disabling
-        public string MinSeverityForDisable { get; set; } = "Medium";
+        public Severity MinSeverityForDisable { get; set; } = Severity.Medium;
 
         // Where to scan for mods
         public string[] ScanDirectories { get; set; } = ["Mods", "Plugins"];

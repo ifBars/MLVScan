@@ -1,6 +1,7 @@
 using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class ByteArrayManipulationRule : IScanRule
     {
@@ -28,6 +29,6 @@ namespace MLVScan.Models
 
         public string Description => "Detected byte array manipulation. Often legitimate (e.g., WAV/PCM audio processing), but can also be used to hide or load malicious payloads.";
 
-        public string Severity => "Low";
+        public Severity Severity => Severity.Low;
     }
 }

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.7", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.8", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
@@ -109,8 +109,6 @@ namespace MLVScan
 
                 if (filteredResults.Count > 0)
                 {
-                    LoggerInstance.Warning($"Found {filteredResults.Count} potentially malicious mods!");
-
                     var disabledMods = _modDisabler.DisableSuspiciousMods(filteredResults, force);
                     var disabledCount = disabledMods.Count;
                     LoggerInstance.Msg($"Disabled {disabledCount} suspicious mods");
@@ -172,7 +170,7 @@ namespace MLVScan
 
                 var severityCounts = actualFindings
                     .GroupBy(f => f.Severity)
-                    .OrderByDescending(g => GetSeverityRank(g.Key))
+                    .OrderByDescending(g => (int)g.Key)
                     .ToDictionary(g => g.Key, g => g.Count());
 
                 LoggerInstance.Warning("Severity breakdown:");
@@ -318,27 +316,15 @@ namespace MLVScan
             LoggerInstance.Warning("====== END OF SCAN REPORT ======");
         }
 
-        private static int GetSeverityRank(string severity)
+        private static string FormatSeverityLabel(Severity severity)
         {
-            return severity.ToLower() switch
+            return severity switch
             {
-                "critical" => 4,
-                "high" => 3,
-                "medium" => 2,
-                "low" => 1,
-                _ => 0
-            };
-        }
-
-        private static string FormatSeverityLabel(string severity)
-        {
-            return severity.ToLower() switch
-            {
-                "critical" => "CRITICAL",
-                "high" => "HIGH",
-                "medium" => "MEDIUM",
-                "low" => "LOW",
-                _ => severity.ToUpper()
+                Severity.Critical => "CRITICAL",
+                Severity.High => "HIGH",
+                Severity.Medium => "MEDIUM",
+                Severity.Low => "LOW",
+                _ => severity.ToString().ToUpper()
             };
         }
 

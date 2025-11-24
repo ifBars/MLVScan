@@ -1,14 +1,15 @@
 using Mono.Cecil;
+using MLVScan.Models;
 
-namespace MLVScan.Models
+namespace MLVScan.Models.Rules
 {
     public class DllImportRule : IScanRule
     {
-        private string _severity = "Medium";
+        private Severity _severity = Severity.Medium;
         private string _description = "Detected DLL import";
         
         public string Description => _description;
-        public string Severity => _severity;
+        public Severity Severity => _severity;
         
         // List of DLLs that are often misused for malicious purposes
         private static readonly string[] HighRiskDlls =
@@ -88,12 +89,12 @@ namespace MLVScan.Models
                         // If it's also using a high-risk function, mark as Critical
                         if (HighRiskFunctions.Any(func => methodNameLower.Contains(func)))
                         {
-                            _severity = "Critical";
+                            _severity = Severity.Critical;
                             _description = $"Detected high-risk DllImport of {dllName} with suspicious function {method.Name}";
                             return true;
                         }
                         // Otherwise, mark as High risk
-                        _severity = "High";
+                        _severity = Severity.High;
                         _description = $"Detected high-risk DllImport of {dllName}";
                         return true;
                     }
@@ -101,13 +102,13 @@ namespace MLVScan.Models
                     // Check for medium-risk DLLs
                     if (MediumRiskDlls.Any(dll => lowerDllName.Contains(dll.ToLower())))
                     {
-                        _severity = "Medium";
+                        _severity = Severity.Medium;
                         _description = $"Detected medium-risk DllImport of {dllName}";
                         return true;
                     }
 
                     // Any other DLL import is considered Medium risk
-                    _severity = "Medium";
+                    _severity = Severity.Medium;
                     _description = $"Detected DllImport of {dllName}";
                     return true;
                 }
@@ -119,7 +120,7 @@ namespace MLVScan.Models
                     var entryPointLower = entryPoint.ToLower();
                     if (HighRiskFunctions.Any(func => entryPointLower.Contains(func)))
                     {
-                        _severity = "Critical";
+                        _severity = Severity.Critical;
                         _description = $"Detected high-risk function {entryPoint} in DllImport";
                         return true;
                     }
