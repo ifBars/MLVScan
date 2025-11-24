@@ -20,6 +20,9 @@ namespace MLVScan.Models
         // Mods to whitelist (will be skipped during scanning)
         public string[] WhitelistedMods { get; set; } = [];
 
+        // Save a full IL dump of each scanned mod to the reports directory
+        public bool DumpFullIlReports { get; set; } = false;
+
         // Minimum number of numeric segments to consider as encoded string
         public int MinimumEncodedStringLength { get; set; } = 10;
 

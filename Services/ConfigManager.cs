@@ -14,6 +14,7 @@ namespace MLVScan.Services
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
         private readonly MelonPreferences_Entry<string[]> _whitelistedMods;
+        private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
 
         public ConfigManager(MelonLogger.Instance logger)
         {
@@ -41,12 +42,16 @@ namespace MLVScan.Services
                 _whitelistedMods = _category.CreateEntry("WhitelistedMods", Array.Empty<string>(),
                     description: "List of mod filenames to skip when scanning (e.g., 'MLVScan.dll')");
 
+                _dumpFullIlReports = _category.CreateEntry("DumpFullIlReports", false,
+                    description: "When enabled, saves full IL dumps for scanned mods next to reports");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _whitelistedMods.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -77,7 +82,8 @@ namespace MLVScan.Services
                 MinSeverityForDisable = _minSeverityForDisable.Value,
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
-                WhitelistedMods = _whitelistedMods.Value
+                WhitelistedMods = _whitelistedMods.Value,
+                DumpFullIlReports = _dumpFullIlReports.Value
             };
         }
 
@@ -91,6 +97,7 @@ namespace MLVScan.Services
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedMods.Value = newConfig.WhitelistedMods;
+                _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
 
                 MelonPreferences.Save();
 

@@ -6,8 +6,8 @@
 		<RootNamespace>MLVScan</RootNamespace>
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
-		<AssemblyVersion>1.5.6</AssemblyVersion>
-		<FileVersion>1.5.6</FileVersion>
+		<AssemblyVersion>1.5.7</AssemblyVersion>
+		<FileVersion>1.5.7</FileVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<AssemblyName>MLVScan.MelonLoader</AssemblyName>
 		<LangVersion>latest</LangVersion>
@@ -502,8 +502,11 @@
 		<Compile Include="Core.cs" />
 		<Compile Include="Models\Base64Rule.cs" />
 		<Compile Include="Models\ByteArrayManipulationRule.cs" />
+		<Compile Include="Models\DisabledModInfo.cs" />
 		<Compile Include="Models\DllImportRule.cs" />
-		<Compile Include="Models\EncodedStringRule.cs" />
+		<Compile Include="Models\EncodedBlobSplittingRule.cs" />
+		<Compile Include="Models\EncodedStringPipelineRule.cs" />
+    <Compile Include="Models\EncodedStringLiteralRule.cs" />
 		<Compile Include="Models\EnvironmentPathRule.cs" />
 		<Compile Include="Models\IScanRule.cs" />
 		<Compile Include="Models\LoadFromStreamRule.cs" />
@@ -516,6 +519,7 @@
 		<Compile Include="Models\Shell32Rule.cs" />
 		<Compile Include="Services\AssemblyScanner.cs" />
 		<Compile Include="Services\ConfigManager.cs" />
+		<Compile Include="Services\IlDumpService.cs" />
 		<Compile Include="Services\ModDisabler.cs" />
 		<Compile Include="Services\ModScanner.cs" />
 		<Compile Include="Services\PromptGeneratorService.cs" />

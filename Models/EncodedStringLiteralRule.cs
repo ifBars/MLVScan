@@ -4,9 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace MLVScan.Models
 {
-    public class EncodedStringRule : IScanRule
+    public class EncodedStringLiteralRule : IScanRule
     {
-        public string Description => "Detected numeric-encoded strings (potential obfuscated payload).";
+        public string Description => "Detected numeric-encoded string literals (potential obfuscated payload).";
         public string Severity => "High";
 
         private static readonly Regex DashSeparatedPattern = new Regex(@"^\d{2,3}(-\d{2,3}){10,}$", RegexOptions.Compiled);
@@ -86,3 +86,4 @@ namespace MLVScan.Models
         }
     }
 }
+

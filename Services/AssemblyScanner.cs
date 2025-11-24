@@ -212,10 +212,10 @@ namespace MLVScan.Services
                             if (arg.Value is string strValue && !string.IsNullOrWhiteSpace(strValue))
                             {
                                 // Check for numeric encoding patterns
-                                if (EncodedStringRule.IsEncodedString(strValue))
+                                if (EncodedStringLiteralRule.IsEncodedString(strValue))
                                 {
-                                    var decoded = EncodedStringRule.DecodeNumericString(strValue);
-                                    if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                                    var decoded = EncodedStringLiteralRule.DecodeNumericString(strValue);
+                                    if (decoded != null && EncodedStringLiteralRule.ContainsSuspiciousContent(decoded))
                                     {
                                         findings.Add(new ScanFinding(
                                             $"Assembly Metadata: {attr.AttributeType.Name}",
@@ -227,8 +227,8 @@ namespace MLVScan.Services
                                 // Also check for dot-separated encoding used in metadata
                                 else if (strValue.Contains('.') && strValue.Split('.').Length >= _config.MinimumEncodedStringLength)
                                 {
-                                    var decoded = EncodedStringRule.DecodeNumericString(strValue);
-                                    if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                                    var decoded = EncodedStringLiteralRule.DecodeNumericString(strValue);
+                                    if (decoded != null && EncodedStringLiteralRule.ContainsSuspiciousContent(decoded))
                                     {
                                         findings.Add(new ScanFinding(
                                             $"Assembly Metadata: {attr.AttributeType.Name}",
@@ -264,6 +264,12 @@ namespace MLVScan.Services
                 // Check for COM reflection attack pattern (GetTypeFromProgID + Activator.CreateInstance + InvokeMember)
                 DetectCOMReflectionAttack(method, instructions, findings);
                 
+                // Detect encoded string to char decoding pipeline (ASCII number parsing pattern)
+                DetectEncodedStringPipeline(method, instructions, findings, methodSignals);
+                
+                // Detect structured encoded blob splitting pattern (backtick/dash separator in loop)
+                DetectEncodedBlobSplitting(method, instructions, findings, methodSignals);
+                
                 // Scan for encoded strings in all ldstr instructions
                 for (int i = 0; i < instructions.Count; i++)
                 {
@@ -272,10 +278,10 @@ namespace MLVScan.Services
                     // Check for encoded strings
                     if (instruction.OpCode == OpCodes.Ldstr && instruction.Operand is string strLiteral)
                     {
-                        if (EncodedStringRule.IsEncodedString(strLiteral))
+                        if (EncodedStringLiteralRule.IsEncodedString(strLiteral))
                         {
-                            var decoded = EncodedStringRule.DecodeNumericString(strLiteral);
-                            if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                            var decoded = EncodedStringLiteralRule.DecodeNumericString(strLiteral);
+                            if (decoded != null && EncodedStringLiteralRule.ContainsSuspiciousContent(decoded))
                             {
                                 findings.Add(new ScanFinding(
                                     $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
@@ -630,6 +636,289 @@ namespace MLVScan.Services
             }
         }
         
+        private void DetectEncodedStringPipeline(MethodDefinition methodDef, Mono.Collections.Generic.Collection<Instruction> instructions, List<ScanFinding> findings, MethodSignals methodSignals)
+        {
+            try
+            {
+                // Pattern: Int32::Parse → conv.u2 → Select<String,Char> → Concat<Char>
+                // Note: Parse → conv.u2 may be in a lambda, but Select<String,Char> → Concat<Char> is the key indicator
+                bool hasInt32Parse = false;
+                bool hasConvU2 = false;
+                bool hasSelectStringChar = false;
+                bool hasConcatChar = false;
+                
+                int parseIndex = -1;
+                int convU2Index = -1;
+                int selectIndex = -1;
+                int concatIndex = -1;
+                
+                // First pass: Find all components
+                for (int i = 0; i < instructions.Count; i++)
+                {
+                    var instr = instructions[i];
+                    
+                    if (instr.OpCode == OpCodes.Call || instr.OpCode == OpCodes.Callvirt)
+                    {
+                        if (instr.Operand is MethodReference calledMethod && calledMethod.DeclaringType != null)
+                        {
+                            string typeName = calledMethod.DeclaringType.FullName;
+                            string methodName = calledMethod.Name;
+                            
+                            // Check for Int32::Parse(System.String)
+                            if (typeName == "System.Int32" && methodName == "Parse" && 
+                                calledMethod.Parameters.Count == 1 &&
+                                calledMethod.Parameters[0].ParameterType.FullName == "System.String")
+                            {
+                                hasInt32Parse = true;
+                                parseIndex = i;
+                            }
+                            
+                            // Check for Select<String,Char>
+                            if (typeName == "System.Linq.Enumerable" && methodName == "Select")
+                            {
+                                // Check generic arguments
+                                if (calledMethod is GenericInstanceMethod genericMethod &&
+                                    genericMethod.GenericArguments.Count == 2)
+                                {
+                                    var arg1 = genericMethod.GenericArguments[0].FullName;
+                                    var arg2 = genericMethod.GenericArguments[1].FullName;
+                                    if (arg1 == "System.String" && arg2 == "System.Char")
+                                    {
+                                        hasSelectStringChar = true;
+                                        selectIndex = i;
+                                    }
+                                }
+                            }
+                            
+                            // Check for Concat<Char>
+                            if (typeName == "System.String" && methodName == "Concat")
+                            {
+                                if (calledMethod is GenericInstanceMethod genericMethod &&
+                                    genericMethod.GenericArguments.Count == 1 &&
+                                    genericMethod.GenericArguments[0].FullName == "System.Char")
+                                {
+                                    hasConcatChar = true;
+                                    concatIndex = i;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check for conv.u2 (convert to char) near Parse call
+                    if (hasInt32Parse && parseIndex >= 0 && i > parseIndex && i <= parseIndex + 3)
+                    {
+                        if (instr.OpCode == OpCodes.Conv_U2)
+                        {
+                            hasConvU2 = true;
+                            convU2Index = i;
+                        }
+                    }
+                }
+                
+                // Detect pattern: Select<String,Char> → Concat<Char> is the key indicator
+                // Parse → conv.u2 may be in a lambda, so we check for it separately
+                if (hasSelectStringChar && hasConcatChar)
+                {
+                    // Verify the sequence makes sense (Select → Concat)
+                    if (selectIndex < concatIndex)
+                    {
+                        // If we also found Parse → conv.u2 in the same method, that's even more suspicious
+                        bool hasParseConvPattern = hasInt32Parse && hasConvU2 && parseIndex < convU2Index;
+                        
+                        var snippetBuilder = new System.Text.StringBuilder();
+                        int startIdx = Math.Max(0, Math.Min(hasParseConvPattern ? parseIndex : selectIndex, selectIndex) - 2);
+                        int endIdx = Math.Min(instructions.Count, concatIndex + 3);
+                        
+                        for (int j = startIdx; j < endIdx; j++)
+                        {
+                            if (j == selectIndex || j == concatIndex || 
+                                (hasParseConvPattern && (j == parseIndex || j == convU2Index)))
+                                snippetBuilder.Append(">>> ");
+                            else
+                                snippetBuilder.Append("    ");
+                            snippetBuilder.AppendLine(instructions[j].ToString());
+                        }
+                        
+                        findings.Add(new ScanFinding(
+                            $"{methodDef.DeclaringType.FullName}.{methodDef.Name}",
+                            "Detected encoded string to char decoding pipeline (ASCII number parsing pattern)",
+                            "High",
+                            snippetBuilder.ToString().TrimEnd()));
+                        
+                        // Mark type-level signal for reflection gating
+                        if (methodSignals != null)
+                        {
+                            methodSignals.HasEncodedStrings = true;
+                            if (methodDef.DeclaringType != null && _typeSignals.TryGetValue(methodDef.DeclaringType.FullName, out var typeSignal))
+                            {
+                                typeSignal.HasEncodedStrings = true;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Skip if detection fails
+            }
+        }
+        
+        private void DetectEncodedBlobSplitting(MethodDefinition methodDef, Mono.Collections.Generic.Collection<Instruction> instructions, List<ScanFinding> findings, MethodSignals methodSignals)
+        {
+            try
+            {
+                // Pattern: String::Split with separator 96 (`) or 45 (-) in a loop
+                bool hasSplitWithSeparator = false;
+                int splitIndex = -1;
+                char separatorChar = '\0';
+                
+                // Find Split calls with suspicious separators
+                for (int i = 0; i < instructions.Count; i++)
+                {
+                    var instr = instructions[i];
+                    
+                    if (instr.OpCode == OpCodes.Callvirt && instr.Operand is MethodReference calledMethod &&
+                        calledMethod.DeclaringType != null &&
+                        calledMethod.DeclaringType.FullName == "System.String" &&
+                        calledMethod.Name == "Split")
+                    {
+                        // Check if Split has the right signature: Split(Char, StringSplitOptions)
+                        if (calledMethod.Parameters.Count == 2)
+                        {
+                            // Look backward for the separator char constant
+                            for (int j = Math.Max(0, i - 5); j < i; j++)
+                            {
+                                var prevInstr = instructions[j];
+                                
+                                // Check for ldc.i4.s (load constant byte) with value 96 (`) or 45 (-)
+                                if (prevInstr.OpCode == OpCodes.Ldc_I4_S && prevInstr.Operand is sbyte byteVal)
+                                {
+                                    if (byteVal == 96 || byteVal == 45)
+                                    {
+                                        hasSplitWithSeparator = true;
+                                        splitIndex = i;
+                                        separatorChar = (char)byteVal;
+                                        break;
+                                    }
+                                }
+                                // Also check ldc.i4 (load constant int32)
+                                else if (prevInstr.OpCode == OpCodes.Ldc_I4 && prevInstr.Operand is int intVal)
+                                {
+                                    if (intVal == 96 || intVal == 45)
+                                    {
+                                        hasSplitWithSeparator = true;
+                                        splitIndex = i;
+                                        separatorChar = (char)intVal;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!hasSplitWithSeparator || splitIndex < 0)
+                    return;
+                
+                // Now check if the split result is used in a loop pattern
+                // Look for: ldloc.* → clt → brtrue (back edge)
+                bool hasLoopPattern = false;
+                int loopStartIndex = -1;
+                int loopEndIndex = -1;
+                
+                // Search for loop pattern after the split
+                // Pattern: clt → brtrue/brtrue.s with backward branch (loop)
+                for (int i = splitIndex + 1; i < instructions.Count - 1; i++)
+                {
+                    var instr = instructions[i];
+                    
+                    // Check for clt (compare less than)
+                    if (instr.OpCode == OpCodes.Clt)
+                    {
+                        // Look ahead for brtrue/brtrue.s within a few instructions
+                        for (int j = i + 1; j < Math.Min(instructions.Count, i + 5); j++)
+                        {
+                            var branchInstr = instructions[j];
+                            
+                            // Check for brtrue/brtrue.s (branch if true - loop back)
+                            if (branchInstr.OpCode == OpCodes.Brtrue || branchInstr.OpCode == OpCodes.Brtrue_S)
+                            {
+                                // Verify it's a backward branch (loop)
+                                if (branchInstr.Operand is Instruction targetInstr)
+                                {
+                                    int targetIndex = instructions.IndexOf(targetInstr);
+                                    if (targetIndex >= 0 && targetIndex < i)
+                                    {
+                                        // Check if there's a ldloc before the clt (indicates loop variable)
+                                        bool hasLdlocBefore = false;
+                                        for (int k = Math.Max(0, i - 10); k < i; k++)
+                                        {
+                                            var checkInstr = instructions[k];
+                                            if (checkInstr.OpCode == OpCodes.Ldloc || checkInstr.OpCode == OpCodes.Ldloc_0 ||
+                                                checkInstr.OpCode == OpCodes.Ldloc_1 || checkInstr.OpCode == OpCodes.Ldloc_2 ||
+                                                checkInstr.OpCode == OpCodes.Ldloc_3 || checkInstr.OpCode == OpCodes.Ldloc_S)
+                                            {
+                                                hasLdlocBefore = true;
+                                                break;
+                                            }
+                                        }
+                                        
+                                        if (hasLdlocBefore)
+                                        {
+                                            hasLoopPattern = true;
+                                            loopStartIndex = targetIndex;
+                                            loopEndIndex = j;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (hasLoopPattern)
+                        break;
+                }
+                
+                if (hasLoopPattern && loopStartIndex >= 0)
+                {
+                    var snippetBuilder = new System.Text.StringBuilder();
+                    int startIdx = Math.Max(0, splitIndex - 3);
+                    int endIdx = Math.Min(instructions.Count, loopEndIndex + 3);
+                    
+                    for (int j = startIdx; j < endIdx; j++)
+                    {
+                        if (j == splitIndex || (j >= loopStartIndex && j <= loopEndIndex))
+                            snippetBuilder.Append(">>> ");
+                        else
+                            snippetBuilder.Append("    ");
+                        snippetBuilder.AppendLine(instructions[j].ToString());
+                    }
+                    
+                    string separatorName = separatorChar == 96 ? "backtick (`)" : "dash (-)";
+                    findings.Add(new ScanFinding(
+                        $"{methodDef.DeclaringType.FullName}.{methodDef.Name}",
+                        $"Detected structured encoded blob splitting pattern ({separatorName} separator in loop)",
+                        "High",
+                        snippetBuilder.ToString().TrimEnd()));
+                    
+                    // Mark type-level signal for reflection gating
+                    if (methodSignals != null)
+                    {
+                        methodSignals.HasEncodedStrings = true;
+                        if (methodDef.DeclaringType != null && _typeSignals.TryGetValue(methodDef.DeclaringType.FullName, out var typeSignal))
+                        {
+                            typeSignal.HasEncodedStrings = true;
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Skip if detection fails
+            }
+        }
+        
         private void ScanForReflectionInvocation(MethodDefinition methodDef, Instruction instruction, MethodReference calledMethod, int index,
                                                Mono.Collections.Generic.Collection<Instruction> instructions, List<ScanFinding> findings,
                                                MethodSignals methodSignals)
@@ -795,9 +1084,9 @@ namespace MLVScan.Services
                 {
                     // IMPROVEMENT: Try to decode numeric strings before checking
                     string effectiveStr = str;
-                    if (EncodedStringRule.IsEncodedString(str))
+                    if (EncodedStringLiteralRule.IsEncodedString(str))
                     {
-                        var decoded = EncodedStringRule.DecodeNumericString(str);
+                        var decoded = EncodedStringLiteralRule.DecodeNumericString(str);
                         if (!string.IsNullOrEmpty(decoded))
                             effectiveStr = decoded;
                     }
@@ -1112,10 +1401,10 @@ namespace MLVScan.Services
                 // Check for encoded strings
                 if (instr.OpCode == OpCodes.Ldstr && instr.Operand is string strLiteral)
                 {
-                    if (EncodedStringRule.IsEncodedString(strLiteral))
+                    if (EncodedStringLiteralRule.IsEncodedString(strLiteral))
                     {
-                        var decoded = EncodedStringRule.DecodeNumericString(strLiteral);
-                        if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                        var decoded = EncodedStringLiteralRule.DecodeNumericString(strLiteral);
+                        if (decoded != null && EncodedStringLiteralRule.ContainsSuspiciousContent(decoded))
                         {
                             return true;
                         }

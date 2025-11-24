@@ -43,9 +43,11 @@ namespace MLVScan.Services
                 new ByteArrayManipulationRule(),
                 new DllImportRule(),
                 new RegistryRule(),
-                new EncodedStringRule(),
+                new EncodedStringLiteralRule(),
                 new ReflectionRule(),
-                new EnvironmentPathRule()
+                new EnvironmentPathRule(),
+                new EncodedStringPipelineRule(),
+                new EncodedBlobSplittingRule()
             };
 
             return new AssemblyScanner(rules, config);
@@ -68,6 +70,11 @@ namespace MLVScan.Services
         {
             var config = _configManager?.Config ?? _fallbackConfig;
             return new PromptGeneratorService(config, _logger);
+        }
+
+        public IlDumpService CreateIlDumpService()
+        {
+            return new IlDumpService(_logger);
         }
     }
 }

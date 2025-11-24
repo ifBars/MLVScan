@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using MelonLoader;
 using MLVScan.Models;
 
@@ -9,7 +13,7 @@ namespace MLVScan.Services
         private readonly ScanConfig _config = config ?? throw new ArgumentNullException(nameof(config));
         private const string DisabledExtension = ".di";
 
-        public List<string> DisableSuspiciousMods(Dictionary<string, List<ScanFinding>> scanResults, bool forceDisable = false)
+        public List<DisabledModInfo> DisableSuspiciousMods(Dictionary<string, List<ScanFinding>> scanResults, bool forceDisable = false)
         {
             if (!forceDisable && !_config.EnableAutoDisable)
             {
@@ -17,7 +21,7 @@ namespace MLVScan.Services
                 return [];
             }
 
-            var disabledMods = new List<string>();
+            var disabledMods = new List<DisabledModInfo>();
 
             foreach (var (modFilePath, findings) in scanResults)
             {
@@ -33,6 +37,7 @@ namespace MLVScan.Services
 
                 try
                 {
+                    var fileHash = ModScanner.CalculateFileHash(modFilePath);
                     var newFilePath = Path.ChangeExtension(modFilePath, DisabledExtension);
 
                     if (File.Exists(newFilePath))
@@ -42,7 +47,7 @@ namespace MLVScan.Services
 
                     File.Move(modFilePath, newFilePath);
                     _logger.Warning($"Disabled potentially malicious mod: {Path.GetFileName(modFilePath)}");
-                    disabledMods.Add(modFilePath);
+                    disabledMods.Add(new DisabledModInfo(modFilePath, newFilePath, fileHash));
 
                     foreach (var finding in severeFindings.Take(3))
                     {

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.6", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.7", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
@@ -18,6 +18,7 @@ namespace MLVScan
         private ConfigManager _configManager;
         private ModScanner _modScanner;
         private ModDisabler _modDisabler;
+        private IlDumpService _ilDumpService;
         private bool _initialized = false;
 
         private static readonly string[] DefaultWhitelistedMods =
@@ -43,6 +44,7 @@ namespace MLVScan
 
                 _modScanner = _serviceFactory.CreateModScanner();
                 _modDisabler = _serviceFactory.CreateModDisabler();
+                _ilDumpService = _serviceFactory.CreateIlDumpService();
 
                 _initialized = true;
 
@@ -132,19 +134,21 @@ namespace MLVScan
             }
         }
 
-        private void GenerateDetailedReports(List<string> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
+        private void GenerateDetailedReports(List<DisabledModInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
 
-            foreach (var modPath in disabledMods)
+            foreach (var modInfo in disabledMods)
             {
-                var modName = Path.GetFileName(modPath);
-                var fileHash = ModScanner.CalculateFileHash(modPath);
+                var modName = Path.GetFileName(modInfo.OriginalPath);
+                var fileHash = modInfo.FileHash;
+                var accessiblePath = File.Exists(modInfo.DisabledPath) ? modInfo.DisabledPath : modInfo.OriginalPath;
+
                 LoggerInstance.Warning($"SUSPICIOUS MOD: {modName}");
                 LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
                 LoggerInstance.Msg("-------------------------------");
 
-                if (!scanResults.TryGetValue(modPath, out var findings))
+                if (!scanResults.TryGetValue(modInfo.OriginalPath, out var findings))
                 {
                     LoggerInstance.Error("Could not find scan results for disabled mod");
                     continue;
@@ -230,6 +234,21 @@ namespace MLVScan
                         Directory.CreateDirectory(promptDirectory);
                     }
 
+                    if (_configManager?.Config?.DumpFullIlReports == true && _ilDumpService != null)
+                    {
+                        var ilDirectory = Path.Combine(reportDirectory, "IL");
+                        var ilDumpPath = Path.Combine(ilDirectory, $"{modName}_{timestamp}.il.txt");
+                        var dumped = _ilDumpService.TryDumpAssembly(accessiblePath, ilDumpPath);
+                        if (dumped)
+                        {
+                            LoggerInstance.Msg($"Full IL dump saved to: {ilDumpPath}");
+                        }
+                        else
+                        {
+                            LoggerInstance.Warning("Failed to dump IL for this mod (see logs for details).");
+                        }
+                    }
+
                     var promptGenerator = _serviceFactory.CreatePromptGenerator();
 
                     using (var writer = new StreamWriter(reportPath))
@@ -238,7 +257,9 @@ namespace MLVScan
                         writer.WriteLine($"Generated: {DateTime.Now}");
                         writer.WriteLine($"Mod File: {modName}");
                         writer.WriteLine($"SHA256 Hash: {fileHash}");
-                        writer.WriteLine($"Path: {modPath}");
+                        writer.WriteLine($"Original Path: {modInfo.OriginalPath}");
+                        writer.WriteLine($"Disabled Path: {modInfo.DisabledPath}");
+                        writer.WriteLine($"Path Used For Analysis: {accessiblePath}");
                         writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
                         writer.WriteLine("\nSeverity Breakdown:");
                         foreach (var severityCount in severityCounts)
@@ -273,7 +294,7 @@ namespace MLVScan
 
                     // Generate LLM analysis prompt
                     var promptSaved = promptGenerator.SavePromptToFile(
-                        modPath, 
+                        accessiblePath, 
                         actualFindings, 
                         promptDirectory);
                         
