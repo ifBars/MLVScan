@@ -11,11 +11,19 @@ namespace MLVScan.Services
         private readonly IEnumerable<IScanRule> _rules;
         private DefaultAssemblyResolver _assemblyResolver;
         private readonly ScanConfig _config;
+        
+        // Track type-level signals to detect cross-method malicious patterns
+        private Dictionary<string, MethodSignals> _typeSignals;
+        
+        // Queue of pending reflection findings that need type-level signals to be confirmed
+        private List<(MethodDefinition method, Instruction instruction, int index, Mono.Collections.Generic.Collection<Instruction> instructions, MethodSignals methodSignals)> _pendingReflectionFindings;
 
         public AssemblyScanner(IEnumerable<IScanRule> rules, ScanConfig config = null)
         {
             _rules = rules ?? throw new ArgumentNullException(nameof(rules));
             _config = config ?? new ScanConfig();
+            _typeSignals = new Dictionary<string, MethodSignals>();
+            _pendingReflectionFindings = new List<(MethodDefinition, Instruction, int, Mono.Collections.Generic.Collection<Instruction>, MethodSignals)>();
             InitializeResolver();
         }
 
@@ -95,7 +103,7 @@ namespace MLVScan.Services
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 findings.Add(new ScanFinding(
                     "Assembly scanning",
@@ -153,11 +161,31 @@ namespace MLVScan.Services
         {
             try
             {
+                string typeFullName = type.FullName;
+                
+                // Initialize type-level signal tracking for this type
+                if (_config.EnableMultiSignalDetection)
+                {
+                    _typeSignals[typeFullName] = new MethodSignals();
+                }
+                
+                // Clear pending reflection findings for this type
+                _pendingReflectionFindings.Clear();
+                
                 // Scan methods in this type
                 foreach (var method in type.Methods)
                 {
                     ScanMethod(method, findings);
                 }
+                
+                // After scanning all methods, check pending reflection findings with type-level signals
+                if (_config.EnableMultiSignalDetection && _typeSignals.TryGetValue(typeFullName, out var typeSignal))
+                {
+                    ProcessPendingReflectionFindings(typeSignal, findings);
+                }
+                
+                // Clear type signals after processing
+                _typeSignals.Remove(typeFullName);
 
                 // Recursively scan nested types
                 foreach (var nestedType in type.NestedTypes)
@@ -256,7 +284,14 @@ namespace MLVScan.Services
                                     $"Encoded: {strLiteral}\nDecoded: {decoded}"));
 
                                 if (methodSignals != null)
+                                {
                                     methodSignals.HasEncodedStrings = true;
+                                    // Mark type-level signal
+                                    if (method.DeclaringType != null && _typeSignals.TryGetValue(method.DeclaringType.FullName, out var typeSignal))
+                                    {
+                                        typeSignal.HasEncodedStrings = true;
+                                    }
+                                }
                             }
                         }
                     }
@@ -274,7 +309,7 @@ namespace MLVScan.Services
                             // Track signals for multi-pattern detection
                             if (methodSignals != null)
                             {
-                                UpdateMethodSignals(methodSignals, calledMethod);
+                                UpdateMethodSignals(methodSignals, calledMethod, method.DeclaringType);
 
                                 // Check for Environment.GetFolderPath with sensitive folder values
                                 if (calledMethod.DeclaringType?.FullName == "System.Environment" &&
@@ -284,6 +319,11 @@ namespace MLVScan.Services
                                     if (folderValue.HasValue && EnvironmentPathRule.IsSensitiveFolder(folderValue.Value))
                                     {
                                         methodSignals.UsesSensitiveFolder = true;
+                                        // Mark type-level signal
+                                        if (method.DeclaringType != null && _typeSignals.TryGetValue(method.DeclaringType.FullName, out var typeSignal))
+                                        {
+                                            typeSignal.UsesSensitiveFolder = true;
+                                        }
                                         findings.Add(new ScanFinding(
                                             $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
                                             $"Access to sensitive folder: {EnvironmentPathRule.GetFolderName(folderValue.Value)}",
@@ -293,15 +333,62 @@ namespace MLVScan.Services
                                 }
                             }
 
-                            // Check for legitimate context BEFORE applying rules (especially for reflection)
-                            // This prevents false positives on legitimate mods using Harmony, Il2Cpp interop, etc.
-                            bool isLegitContext = ReflectionRule.IsInLegitimateContext(method);
-                            
-                            // For reflection invocations, skip if in legitimate context
+                            // For reflection invocations, only flag if combined with other malicious patterns
                             bool isReflectionInvoke = IsReflectionInvokeMethod(calledMethod);
-                            if (isReflectionInvoke && isLegitContext)
+                            if (isReflectionInvoke)
                             {
-                                // Skip reflection detection for legitimate contexts
+                                // Check if there are other malicious patterns in this method
+                                bool hasOtherMaliciousPatterns = methodSignals != null && 
+                                    (methodSignals.HasEncodedStrings ||
+                                     methodSignals.UsesSensitiveFolder ||
+                                     methodSignals.HasProcessLikeCall ||
+                                     methodSignals.HasNetworkCall ||
+                                     methodSignals.HasFileWrite ||
+                                     methodSignals.HasBase64 ||
+                                     HasAssemblyLoadingInMethod(method, instructions) ||
+                                     HasSuspiciousStringPatterns(method, instructions, i));
+                                
+                                // Also check type-level signals (from other methods in the same type)
+                                bool hasTypeLevelSignals = false;
+                                if (method.DeclaringType != null && _typeSignals.TryGetValue(method.DeclaringType.FullName, out var typeSignal))
+                                {
+                                    hasTypeLevelSignals = typeSignal.HasEncodedStrings ||
+                                                          typeSignal.UsesSensitiveFolder ||
+                                                          typeSignal.HasProcessLikeCall ||
+                                                          typeSignal.HasNetworkCall ||
+                                                          typeSignal.HasFileWrite ||
+                                                          typeSignal.HasBase64;
+                                }
+                                
+                                if (!hasOtherMaliciousPatterns && !hasTypeLevelSignals)
+                                {
+                                    // Queue for later processing after all methods in type are scanned
+                                    if (_config.EnableMultiSignalDetection && method.DeclaringType != null)
+                                    {
+                                        _pendingReflectionFindings.Add((method, instruction, i, instructions, methodSignals));
+                                    }
+                                    continue;
+                                }
+                                
+                                // Reflection combined with other patterns is suspicious
+                                var rule = _rules.FirstOrDefault(r => r is ReflectionRule);
+                                if (rule == null) continue;
+                                
+                                var snippetBuilder = new System.Text.StringBuilder();
+                                int contextLines = 2; // Number of IL lines before and after
+
+                                for (int j = Math.Max(0, i - contextLines); j < Math.Min(instructions.Count, i + contextLines + 1); j++)
+                                {
+                                    if (j == i) snippetBuilder.Append(">>> ");
+                                    else snippetBuilder.Append("    ");
+                                    snippetBuilder.AppendLine(instructions[j].ToString());
+                                }
+                                
+                                findings.Add(new ScanFinding(
+                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", 
+                                    rule.Description + " (combined with other suspicious patterns)", 
+                                    rule.Severity,
+                                    snippetBuilder.ToString().TrimEnd()));
                             }
                             else if (_rules.Any(rule => rule.IsSuspicious(calledMethod)))
                             {
@@ -549,15 +636,6 @@ namespace MLVScan.Services
         {
             try
             {
-                // IMPORTANT: Check for legitimate context FIRST before doing any reflection analysis
-                // This prevents false positives on legitimate mods using Harmony, Il2Cpp interop, etc.
-                bool isLegitContext = ReflectionRule.IsInLegitimateContext(methodDef);
-                if (isLegitContext)
-                    return; // Skip all reflection detection for legitimate contexts
-
-                // Only check specific reflection patterns that are commonly used for malicious purposes
-                // Exclude legitimate reflection patterns commonly used in mods
-
                 // Check if this is a reflection-based method invocation
                 bool isReflectionInvoke = IsReflectionInvokeMethod(calledMethod);
                 if (!isReflectionInvoke)
@@ -566,21 +644,36 @@ namespace MLVScan.Services
                 // Extract the method name being invoked via reflection
                 string invokedMethodName = ExtractInvokedMethodName(instructions, index);
 
+                // Check for other malicious patterns in the method
+                bool hasOtherMaliciousPatterns = methodSignals != null &&
+                    (methodSignals.HasEncodedStrings ||
+                     methodSignals.UsesSensitiveFolder ||
+                     methodSignals.HasProcessLikeCall ||
+                     methodSignals.HasNetworkCall ||
+                     methodSignals.HasFileWrite ||
+                     methodSignals.HasBase64) ||
+                    HasAssemblyLoadingInMethod(methodDef, instructions) ||
+                    HasSuspiciousStringPatterns(methodDef, instructions, index);
+
+                // Also check type-level signals (from other methods in the same type)
+                bool hasTypeLevelSignals = false;
+                if (methodDef.DeclaringType != null && _typeSignals.TryGetValue(methodDef.DeclaringType.FullName, out var typeSignal))
+                {
+                    hasTypeLevelSignals = typeSignal.HasEncodedStrings ||
+                                          typeSignal.UsesSensitiveFolder ||
+                                          typeSignal.HasProcessLikeCall ||
+                                          typeSignal.HasNetworkCall ||
+                                          typeSignal.HasFileWrite ||
+                                          typeSignal.HasBase64;
+                }
+
                 // If we can't determine the method name (non-literal), only flag when other high-risk signals are present.
                 if (string.IsNullOrEmpty(invokedMethodName))
                 {
-                    bool hasRiskSignals = methodSignals != null &&
-                        (methodSignals.HasEncodedStrings ||
-                         methodSignals.UsesSensitiveFolder ||
-                         methodSignals.HasProcessLikeCall ||
-                         methodSignals.HasNetworkCall ||
-                         methodSignals.HasFileWrite ||
-                         methodSignals.HasBase64);
-
-                    if (!hasRiskSignals)
+                    if (!hasOtherMaliciousPatterns && !hasTypeLevelSignals)
                         return; // Likely benign reflection usage (e.g., API/Il2Cpp glue).
 
-                    var severity = _config.EnableParanoidReflection ? "High" : "Medium";
+                    var severity = "High";
                     var snippetBuilder = new System.Text.StringBuilder();
                     int contextLines = 4;
 
@@ -593,11 +686,15 @@ namespace MLVScan.Services
 
                     findings.Add(new ScanFinding(
                         $"{methodDef.DeclaringType.FullName}.{methodDef.Name}:{instruction.Offset}",
-                        "Reflection invocation with non-literal target method name (cannot determine what is being invoked)",
+                        "Reflection invocation with non-literal target method name (cannot determine what is being invoked) - combined with other suspicious patterns",
                         severity,
                         snippetBuilder.ToString().TrimEnd()));
                     return;
                 }
+                
+                // Even if we can determine the method name, only flag if combined with other patterns
+                if (!hasOtherMaliciousPatterns && !hasTypeLevelSignals)
+                    return;
                 
                 // Create a fake method reference for rules to check
                 var fakeMethodRef = new MethodReference(invokedMethodName, methodDef.Module.TypeSystem.Object)
@@ -885,7 +982,7 @@ namespace MLVScan.Services
             }
         }
 
-        private void UpdateMethodSignals(MethodSignals signals, MethodReference method)
+        private void UpdateMethodSignals(MethodSignals signals, MethodReference method, TypeDefinition declaringType)
         {
             if (method?.DeclaringType == null)
                 return;
@@ -895,11 +992,25 @@ namespace MLVScan.Services
 
             // Check for Base64
             if (typeName.Contains("Convert") && methodName.Contains("FromBase64"))
+            {
                 signals.HasBase64 = true;
+                // Mark type-level signal
+                if (declaringType != null && _typeSignals.TryGetValue(declaringType.FullName, out var typeSignal))
+                {
+                    typeSignal.HasBase64 = true;
+                }
+            }
 
             // Check for Process.Start
             if (typeName.Contains("System.Diagnostics.Process") && methodName == "Start")
+            {
                 signals.HasProcessLikeCall = true;
+                // Mark type-level signal
+                if (declaringType != null && _typeSignals.TryGetValue(declaringType.FullName, out var typeSignal))
+                {
+                    typeSignal.HasProcessLikeCall = true;
+                }
+            }
 
             // Check for reflection invocation
             if ((typeName == "System.Reflection.MethodInfo" && methodName == "Invoke") ||
@@ -909,12 +1020,26 @@ namespace MLVScan.Services
             // Check for network calls
             if (typeName.StartsWith("System.Net") || typeName.Contains("WebRequest") ||
                 typeName.Contains("HttpClient") || typeName.Contains("WebClient"))
+            {
                 signals.HasNetworkCall = true;
+                // Mark type-level signal
+                if (declaringType != null && _typeSignals.TryGetValue(declaringType.FullName, out var typeSignal))
+                {
+                    typeSignal.HasNetworkCall = true;
+                }
+            }
 
             // Check for file writes
             if ((typeName.StartsWith("System.IO.File") && (methodName.Contains("Write") || methodName.Contains("Create"))) ||
                 (typeName.StartsWith("System.IO.Stream") && methodName.Contains("Write")))
+            {
                 signals.HasFileWrite = true;
+                // Mark type-level signal
+                if (declaringType != null && _typeSignals.TryGetValue(declaringType.FullName, out var typeSignal))
+                {
+                    typeSignal.HasFileWrite = true;
+                }
+            }
         }
 
         private int? ExtractFolderPathArgument(Mono.Collections.Generic.Collection<Instruction> instructions, int currentIndex)
@@ -945,6 +1070,131 @@ namespace MLVScan.Services
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Checks if the method contains assembly loading calls
+        /// </summary>
+        private bool HasAssemblyLoadingInMethod(MethodDefinition methodDef, Mono.Collections.Generic.Collection<Instruction> instructions)
+        {
+            foreach (var instruction in instructions)
+            {
+                if ((instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt) &&
+                    instruction.Operand is MethodReference calledMethod &&
+                    calledMethod.DeclaringType != null)
+                {
+                    string typeName = calledMethod.DeclaringType.FullName;
+                    string methodName = calledMethod.Name;
+                    
+                    if ((typeName.Contains("Assembly") || typeName.Contains("AssemblyLoadContext")) &&
+                        (methodName == "Load" || methodName.Contains("LoadFrom")))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Checks for suspicious string patterns near the current instruction
+        /// </summary>
+        private bool HasSuspiciousStringPatterns(MethodDefinition methodDef, Mono.Collections.Generic.Collection<Instruction> instructions, int currentIndex)
+        {
+            // Check nearby instructions for suspicious string patterns
+            int windowStart = Math.Max(0, currentIndex - 20);
+            int windowEnd = Math.Min(instructions.Count, currentIndex + 20);
+            
+            for (int i = windowStart; i < windowEnd; i++)
+            {
+                var instr = instructions[i];
+                
+                // Check for encoded strings
+                if (instr.OpCode == OpCodes.Ldstr && instr.Operand is string strLiteral)
+                {
+                    if (EncodedStringRule.IsEncodedString(strLiteral))
+                    {
+                        var decoded = EncodedStringRule.DecodeNumericString(strLiteral);
+                        if (decoded != null && EncodedStringRule.ContainsSuspiciousContent(decoded))
+                        {
+                            return true;
+                        }
+                    }
+                    
+                    // Check for suspicious string content
+                    if (strLiteral.Contains("powershell", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("wscript", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("cscript", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("ShellExecute", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("Startup", StringComparison.OrdinalIgnoreCase) ||
+                        strLiteral.Contains("RunOnce", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+                
+                // Check for Base64 decoding calls
+                if ((instr.OpCode == OpCodes.Call || instr.OpCode == OpCodes.Callvirt) &&
+                    instr.Operand is MethodReference calledMethod &&
+                    calledMethod.DeclaringType != null)
+                {
+                    string typeName = calledMethod.DeclaringType.FullName;
+                    string methodName = calledMethod.Name;
+                    
+                    if (typeName.Contains("Convert") && methodName.Contains("FromBase64"))
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Process pending reflection findings after all methods in a type have been scanned.
+        /// This allows reflection detection to trigger when combined with type-level signals.
+        /// </summary>
+        private void ProcessPendingReflectionFindings(MethodSignals typeSignal, List<ScanFinding> findings)
+        {
+            if (typeSignal == null || _pendingReflectionFindings.Count == 0)
+                return;
+
+            // Check if type has any suspicious signals
+            bool hasTypeLevelSignals = typeSignal.HasEncodedStrings ||
+                                      typeSignal.UsesSensitiveFolder ||
+                                      typeSignal.HasProcessLikeCall ||
+                                      typeSignal.HasNetworkCall ||
+                                      typeSignal.HasFileWrite ||
+                                      typeSignal.HasBase64;
+
+            if (!hasTypeLevelSignals)
+                return;
+
+            var rule = _rules.FirstOrDefault(r => r is ReflectionRule);
+            if (rule == null)
+                return;
+
+            // Process each pending reflection finding
+            foreach (var (method, instruction, index, instructions, methodSignals) in _pendingReflectionFindings)
+            {
+                var snippetBuilder = new System.Text.StringBuilder();
+                int contextLines = 2; // Number of IL lines before and after
+
+                for (int j = Math.Max(0, index - contextLines); j < Math.Min(instructions.Count, index + contextLines + 1); j++)
+                {
+                    if (j == index) snippetBuilder.Append(">>> ");
+                    else snippetBuilder.Append("    ");
+                    snippetBuilder.AppendLine(instructions[j].ToString());
+                }
+
+                findings.Add(new ScanFinding(
+                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
+                    rule.Description + " (combined with other suspicious patterns detected in this type)",
+                    rule.Severity,
+                    snippetBuilder.ToString().TrimEnd()));
+            }
         }
     }
 }

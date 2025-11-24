@@ -44,7 +44,7 @@ namespace MLVScan.Services
                 new DllImportRule(),
                 new RegistryRule(),
                 new EncodedStringRule(),
-                new ReflectionRule(config.EnableParanoidReflection),
+                new ReflectionRule(),
                 new EnvironmentPathRule()
             };
 

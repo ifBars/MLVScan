@@ -20,9 +20,6 @@ namespace MLVScan.Models
         // Mods to whitelist (will be skipped during scanning)
         public string[] WhitelistedMods { get; set; } = [];
 
-        // Enable paranoid reflection mode (flags all non-whitelisted reflection as High severity)
-        public bool EnableParanoidReflection { get; set; } = false;
-
         // Minimum number of numeric segments to consider as encoded string
         public int MinimumEncodedStringLength { get; set; } = 10;
 

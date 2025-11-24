@@ -6,8 +6,8 @@
 		<RootNamespace>MLVScan</RootNamespace>
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
-		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.0.0.0</FileVersion>
+		<AssemblyVersion>1.5.6</AssemblyVersion>
+		<FileVersion>1.5.6</FileVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<AssemblyName>MLVScan.MelonLoader</AssemblyName>
 		<LangVersion>latest</LangVersion>
@@ -57,9 +57,6 @@
 		</Reference>
 		<Reference Include="Autodesk.Fbx">
 			<HintPath>D:\SteamLibrary\steamapps\common\Schedule I\Schedule I_Data\Managed\Autodesk.Fbx.dll</HintPath>
-		</Reference>
-		<Reference Include="Boxophobic.AtmosphericHeightFog.Runtime">
-			<HintPath>D:\SteamLibrary\steamapps\common\Schedule I\Schedule I_Data\Managed\Boxophobic.AtmosphericHeightFog.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Boxophobic.Utils.Scripts">
 			<HintPath>D:\SteamLibrary\steamapps\common\Schedule I\Schedule I_Data\Managed\Boxophobic.Utils.Scripts.dll</HintPath>
