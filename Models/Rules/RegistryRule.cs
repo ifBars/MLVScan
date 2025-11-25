@@ -58,30 +58,29 @@ namespace MLVScan.Models.Rules
                 return true;
             }
 
-            if (method.Resolve() is not { HasCustomAttributes: true } methodDef) return false;
-            foreach (var attribute in methodDef.CustomAttributes)
-            {
-                if (attribute.AttributeType.Name != "DllImportAttribute") continue;
-                foreach (var arg in attribute.ConstructorArguments)
-                {
-                    if (arg.Value is not string dllName ||
-                        !dllName.ToLower().Contains("advapi32")) continue;
-                    if (RegistryFunctions.Any(func => methodName.Contains(func)))
-                        return true;
+            if (method.Resolve() is not { } methodDef) return false;
+            
+            // Check if this is a PInvoke method
+            if ((methodDef.Attributes & MethodAttributes.PInvokeImpl) == 0)
+                return false;
 
-                    foreach (var prop in attribute.Properties)
-                    {
-                        if (prop.Name != "EntryPoint" ||
-                            prop.Argument.Value is not string entryPoint) continue;
-                        var entryPointLower = entryPoint.ToLower();
-                        if (RegistryFunctions.Any(func =>
-                                entryPointLower.Contains(func)))
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
+            if (methodDef.PInvokeInfo == null)
+                return false;
+
+            var dllName = methodDef.PInvokeInfo.Module.Name;
+            var entryPoint = methodDef.PInvokeInfo.EntryPoint ?? method.Name;
+
+            // Check if it's advapi32.dll (registry DLL)
+            if (!dllName.ToLower().Contains("advapi32"))
+                return false;
+
+            // Check method name or entry point for registry functions
+            if (RegistryFunctions.Any(func => methodName.Contains(func)))
+                return true;
+
+            var entryPointLower = entryPoint.ToLower();
+            if (RegistryFunctions.Any(func => entryPointLower.Contains(func)))
+                return true;
 
             return false;
         }

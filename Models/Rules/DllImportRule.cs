@@ -74,60 +74,57 @@ namespace MLVScan.Models.Rules
                 return false;
 
             if (method.Resolve() is not { } methodDef) return false;
-            foreach (var attribute in methodDef.CustomAttributes)
+            
+            // Check if this is a PInvoke method
+            if ((methodDef.Attributes & MethodAttributes.PInvokeImpl) == 0)
+                return false;
+
+            // Get PInvoke information
+            if (methodDef.PInvokeInfo == null)
+                return false;
+
+            var dllName = methodDef.PInvokeInfo.Module.Name;
+            var entryPoint = methodDef.PInvokeInfo.EntryPoint ?? method.Name;
+            
+            var lowerDllName = dllName.ToLower();
+            var entryPointLower = entryPoint.ToLower();
+
+            // Check for high-risk DLLs
+            if (HighRiskDlls.Any(dll => lowerDllName.Contains(dll.ToLower())))
             {
-                if (attribute.AttributeType.Name != "DllImportAttribute") continue;
-                foreach (var arg in attribute.ConstructorArguments)
+                // If it's also using a high-risk function, mark as Critical
+                if (HighRiskFunctions.Any(func => entryPointLower.Contains(func)))
                 {
-                    if (arg.Value is not string dllName) continue;
-                    var lowerDllName = dllName.ToLower();
-
-                    // Check for high-risk DLLs
-                    if (HighRiskDlls.Any(dll => lowerDllName.Contains(dll.ToLower())))
-                    {
-                        var methodNameLower = method.Name.ToLower();
-                        // If it's also using a high-risk function, mark as Critical
-                        if (HighRiskFunctions.Any(func => methodNameLower.Contains(func)))
-                        {
-                            _severity = Severity.Critical;
-                            _description = $"Detected high-risk DllImport of {dllName} with suspicious function {method.Name}";
-                            return true;
-                        }
-                        // Otherwise, mark as High risk
-                        _severity = Severity.High;
-                        _description = $"Detected high-risk DllImport of {dllName}";
-                        return true;
-                    }
-
-                    // Check for medium-risk DLLs
-                    if (MediumRiskDlls.Any(dll => lowerDllName.Contains(dll.ToLower())))
-                    {
-                        _severity = Severity.Medium;
-                        _description = $"Detected medium-risk DllImport of {dllName}";
-                        return true;
-                    }
-
-                    // Any other DLL import is considered Medium risk
-                    _severity = Severity.Medium;
-                    _description = $"Detected DllImport of {dllName}";
+                    _severity = Severity.Critical;
+                    _description = $"Detected high-risk DllImport of {dllName} with suspicious function {entryPoint}";
                     return true;
                 }
-
-                // Check EntryPoint property for high-risk functions
-                foreach (var prop in attribute.Properties)
-                {
-                    if (prop.Name != "EntryPoint" || prop.Argument.Value is not string entryPoint) continue;
-                    var entryPointLower = entryPoint.ToLower();
-                    if (HighRiskFunctions.Any(func => entryPointLower.Contains(func)))
-                    {
-                        _severity = Severity.Critical;
-                        _description = $"Detected high-risk function {entryPoint} in DllImport";
-                        return true;
-                    }
-                }
+                // Otherwise, mark as High risk
+                _severity = Severity.High;
+                _description = $"Detected high-risk DllImport of {dllName}";
+                return true;
             }
 
-            return false;
+            // Check EntryPoint for high-risk functions (even if DLL isn't high-risk)
+            if (HighRiskFunctions.Any(func => entryPointLower.Contains(func)))
+            {
+                _severity = Severity.Critical;
+                _description = $"Detected high-risk function {entryPoint} in DllImport from {dllName}";
+                return true;
+            }
+
+            // Check for medium-risk DLLs
+            if (MediumRiskDlls.Any(dll => lowerDllName.Contains(dll.ToLower())))
+            {
+                _severity = Severity.Medium;
+                _description = $"Detected medium-risk DllImport of {dllName}";
+                return true;
+            }
+
+            // Any other DLL import is considered Medium risk
+            _severity = Severity.Medium;
+            _description = $"Detected DllImport of {dllName}";
+            return true;
         }
     }
 }

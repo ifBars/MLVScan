@@ -22,18 +22,23 @@ namespace MLVScan.Services
             {
                 foreach (var type in TypeCollectionHelper.GetAllTypes(module))
                 {
-                    foreach (var method in type.Methods.Where(method => method.HasCustomAttributes))
+                    foreach (var method in type.Methods)
                     {
                         try
                         {
-                            var dllImportAttribute = method.CustomAttributes.FirstOrDefault(attr => attr.AttributeType.Name == "DllImportAttribute");
-                            if (dllImportAttribute == null)
+                            // Check if this is a PInvoke method
+                            if ((method.Attributes & MethodAttributes.PInvokeImpl) == 0)
+                                continue;
+
+                            if (method.PInvokeInfo == null)
                                 continue;
 
                             if (_rules.Any(rule => rule.IsSuspicious(method)))
                             {
-                                var rule = _rules.First(r => r.IsSuspicious(method)); // Assuming one rule matches or taking the first
-                                var snippet = $"[DllImport(\"{dllImportAttribute.ConstructorArguments.FirstOrDefault().Value}\")]\n{method.ReturnType.Name} {method.Name}({string.Join(", ", method.Parameters.Select(p => $"{p.ParameterType.Name} {p.Name}"))});";
+                                var rule = _rules.First(r => r.IsSuspicious(method));
+                                var dllName = method.PInvokeInfo.Module.Name;
+                                var entryPoint = method.PInvokeInfo.EntryPoint ?? method.Name;
+                                var snippet = $"[DllImport(\"{dllName}\", EntryPoint = \"{entryPoint}\")]\n{method.ReturnType.Name} {method.Name}({string.Join(", ", method.Parameters.Select(p => $"{p.ParameterType.Name} {p.Name}"))});";
                                 findings.Add(new ScanFinding(
                                     $"{method.DeclaringType.FullName}.{method.Name}", 
                                     rule.Description, 
