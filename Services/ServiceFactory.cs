@@ -51,7 +51,8 @@ namespace MLVScan.Services
                 new EncodedBlobSplittingRule(),
                 new COMReflectionAttackRule(),
                 new DataExfiltrationRule(),
-                new PersistenceRule()
+                new PersistenceRule(),
+                new HexStringRule()
             };
 
             return new AssemblyScanner(rules, config);
