@@ -14,16 +14,6 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 	<ItemGroup>
-	  <EmbeddedResource Remove="NewFolder\**" />
-	  <None Remove="NewFolder\**" />
-	  <EmbeddedResource Remove="S1API\**" />
-	  <None Remove="S1API\**" />
-	  <EmbeddedResource Remove="MalwareMod\**" />
-	  <None Remove="MalwareMod\**" />
-	  <EmbeddedResource Remove="ReflectionNonLiteralStrings\**" />
-	  <None Remove="ReflectionNonLiteralStrings\**" />
-	  <None Remove="S1API.Il2Cpp.dll_20251122_220307.report.txt" />
-	  <None Remove="S1API.Mono.dll_20251122_220307.report.txt" />
 	  <None Remove="CLAUDE.md" />
 	</ItemGroup>
 
