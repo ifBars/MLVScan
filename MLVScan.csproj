@@ -6,8 +6,8 @@
 		<RootNamespace>MLVScan</RootNamespace>
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
-		<AssemblyVersion>1.5.9</AssemblyVersion>
-		<FileVersion>1.5.9</FileVersion>
+		<AssemblyVersion>1.6.0</AssemblyVersion>
+		<FileVersion>1.6.0</FileVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<AssemblyName>MLVScan.MelonLoader</AssemblyName>
 		<LangVersion>latest</LangVersion>
@@ -511,6 +511,7 @@
 		<Compile Include="Models\Rules\EncodedStringLiteralRule.cs" />
 		<Compile Include="Models\Rules\EncodedStringPipelineRule.cs" />
 		<Compile Include="Models\Rules\EnvironmentPathRule.cs" />
+		<Compile Include="Models\Rules\HexStringRule.cs" />
 		<Compile Include="Models\Rules\IScanRule.cs" />
 		<Compile Include="Models\Rules\LoadFromStreamRule.cs" />
 		<Compile Include="Models\Rules\PersistenceRule.cs" />
