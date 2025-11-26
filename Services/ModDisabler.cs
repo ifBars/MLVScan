@@ -55,16 +55,6 @@ namespace MLVScan.Services
                     File.Move(modFilePath, newFilePath);
                     _logger.Warning($"Disabled potentially malicious mod: {Path.GetFileName(modFilePath)}");
                     disabledMods.Add(new DisabledModInfo(modFilePath, newFilePath, fileHash));
-
-                    foreach (var finding in severeFindings.Take(3))
-                    {
-                        _logger.Warning($"  - {finding}");
-                    }
-
-                    if (severeFindings.Count > 3)
-                    {
-                        _logger.Warning($"  - And {severeFindings.Count - 3} more suspicious patterns...");
-                    }
                 }
                 catch (Exception ex)
                 {

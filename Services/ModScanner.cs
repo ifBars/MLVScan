@@ -4,6 +4,8 @@ using MLVScan.Models;
 using System.Security.Cryptography;
 using System.IO;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace MLVScan.Services
 {
@@ -58,9 +60,16 @@ namespace MLVScan.Services
                 try
                 {
                     var modFileName = Path.GetFileName(modFile);
-                    if (_configManager.IsModWhitelisted(modFileName))
+                    var hash = CalculateFileHash(modFile);
+
+                    if (Path.GetFullPath(modFile).Equals(Path.GetFullPath(typeof(Core).Assembly.Location), StringComparison.OrdinalIgnoreCase))
                     {
-                        var hash = CalculateFileHash(modFile);
+                        _logger.Msg($"Skipping self: {modFileName}");
+                        continue;
+                    }
+
+                    if (_configManager.IsHashWhitelisted(hash))
+                    {
                         _logger.Msg($"Skipping whitelisted mod: {modFileName} [Hash: {hash}]");
                         continue;
                     }

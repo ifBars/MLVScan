@@ -18,7 +18,7 @@ namespace MLVScan.Models
         public int SuspiciousThreshold { get; set; } = 1;
 
         // Mods to whitelist (will be skipped during scanning)
-        public string[] WhitelistedMods { get; set; } = [];
+        public string[] WhitelistedHashes { get; set; } = [];
 
         // Save a full IL dump of each scanned mod to the reports directory
         public bool DumpFullIlReports { get; set; } = false;

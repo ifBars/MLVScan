@@ -21,14 +21,14 @@ namespace MLVScan
         private IlDumpService _ilDumpService;
         private bool _initialized = false;
 
-        private static readonly string[] DefaultWhitelistedMods =
+        private static readonly string[] DefaultWhitelistedHashes =
         [
-            "MLVScan.dll",
-            "MLVScan.MelonLoader.dll",
-            "DiscordRPC.dll",
-            "CustomTV.dll",
-            "CustomTV_Mono.dll",
-            "CustomTV_IL2CPP.dll",
+            // CustomTV
+            "3918e1454e05de4dd3ace100d8f4d53936c9b93694dbff5bcc0293d689cb0ab7",
+            "8e6dd1943c80e2d1472a9dc2c6722226d961027a7ec20aab9ad8f1184702d138",
+            // UnityExplorer
+            "d47eb6eabd3b6e3b742c7d9693651bc3a61a90dcbe838f9a4276953089ee4951",
+            "cfe43c0d285867a5701d96de1edd25cb02725fe2629b88386351dc07b11a08b5"
         ];
 
         public override void OnEarlyInitializeMelon()
@@ -63,9 +63,9 @@ namespace MLVScan
             {
                 LoggerInstance.Msg("MLVScan initialization complete");
 
-                if (_configManager.Config.WhitelistedMods.Length > 0)
+                if (_configManager.Config.WhitelistedHashes.Length > 0)
                 {
-                    LoggerInstance.Msg($"{_configManager.Config.WhitelistedMods.Length} mod(s) are whitelisted and won't be scanned");
+                    LoggerInstance.Msg($"{_configManager.Config.WhitelistedHashes.Length} mod(s) are whitelisted and won't be scanned");
                     LoggerInstance.Msg("To manage whitelisted mods, edit MelonPreferences.cfg");
                 }
             }
@@ -81,12 +81,12 @@ namespace MLVScan
             if (_configManager == null)
                 return;
 
-            var currentWhitelist = _configManager.GetWhitelistedMods();
+            var currentWhitelist = _configManager.GetWhitelistedHashes();
 
             if (currentWhitelist.Length == 0)
             {
                 LoggerInstance.Msg("Initializing default whitelist");
-                _configManager.SetWhitelistedMods(DefaultWhitelistedMods);
+                _configManager.SetWhitelistedHashes(DefaultWhitelistedHashes);
             }
         }
 
@@ -116,7 +116,7 @@ namespace MLVScan
                     if (disabledCount <= 0) return filteredResults;
                     GenerateDetailedReports(disabledMods, filteredResults);
 
-                    LoggerInstance.Msg("To whitelist any false positives, add them to the MLVScan → WhitelistedMods setting in MelonPreferences.cfg");
+                    LoggerInstance.Msg("To whitelist any false positives, add their SHA256 hash to the MLVScan → WhitelistedHashes setting in MelonPreferences.cfg");
                 }
                 else
                 {
@@ -337,7 +337,7 @@ namespace MLVScan
             LoggerInstance.Msg("Keep in mind that no detection system is perfect, and this mod may be falsely flagged.");
             LoggerInstance.Warning("Recommended security steps:");
             LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
-            LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/rV2QSAnqhX");
+            LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
             LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it's actually malicious");
             LoggerInstance.Msg("2. Run a full system scan with a trusted antivirus like Malwarebytes");
             LoggerInstance.Msg("   Malwarebytes is recommended as a free and effective antivirus solution");
@@ -361,7 +361,7 @@ namespace MLVScan
             writer.WriteLine("  Your system MAY BE INFECTED with malware. Take action immediately.\n");
             writer.WriteLine("RECOMMENDED SECURITY STEPS:");
             writer.WriteLine("1. Check with the modding community first - no detection system is perfect");
-            writer.WriteLine("   Join the modding Discord at: https://discord.gg/rV2QSAnqhX");
+            writer.WriteLine("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
             writer.WriteLine("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it's actually malicious");
             writer.WriteLine("\n2. Run a full system scan with a reputable antivirus program");
             writer.WriteLine("   Free option: Malwarebytes (https://www.malwarebytes.com/)");

@@ -13,7 +13,7 @@ namespace MLVScan.Services
         private readonly MelonPreferences_Entry<string> _minSeverityForDisable;
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
-        private readonly MelonPreferences_Entry<string[]> _whitelistedMods;
+        private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
 
         public ConfigManager(MelonLogger.Instance logger)
@@ -39,8 +39,8 @@ namespace MLVScan.Services
                 _suspiciousThreshold = _category.CreateEntry("SuspiciousThreshold", 1,
                     description: "How many suspicious findings required before disabling a mod");
 
-                _whitelistedMods = _category.CreateEntry("WhitelistedMods", Array.Empty<string>(),
-                    description: "List of mod filenames to skip when scanning (e.g., 'MLVScan.dll')");
+                _whitelistedHashes = _category.CreateEntry("WhitelistedHashes", Array.Empty<string>(),
+                    description: "List of mod SHA256 hashes to skip when scanning");
 
                 _dumpFullIlReports = _category.CreateEntry("DumpFullIlReports", false,
                     description: "When enabled, saves full IL dumps for scanned mods next to reports");
@@ -50,7 +50,7 @@ namespace MLVScan.Services
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
-                _whitelistedMods.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
@@ -82,7 +82,7 @@ namespace MLVScan.Services
                 MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
-                WhitelistedMods = _whitelistedMods.Value,
+                WhitelistedHashes = _whitelistedHashes.Value,
                 DumpFullIlReports = _dumpFullIlReports.Value
             };
         }
@@ -96,7 +96,7 @@ namespace MLVScan.Services
                 _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
-                _whitelistedMods.Value = newConfig.WhitelistedMods;
+                _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
 
                 MelonPreferences.Save();
@@ -110,38 +110,35 @@ namespace MLVScan.Services
             }
         }
 
-        public string[] GetWhitelistedMods()
+        public string[] GetWhitelistedHashes()
         {
-            return _whitelistedMods.Value;
+            return _whitelistedHashes.Value;
         }
 
-        public void SetWhitelistedMods(string[] mods)
+        public void SetWhitelistedHashes(string[] hashes)
         {
-            if (mods == null)
+            if (hashes == null)
                 return;
 
-            var normalizedMods = mods
-                .Where(m => !string.IsNullOrWhiteSpace(m))
-                .Select(m => m.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? m : m + ".dll")
+            var normalizedHashes = hashes
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.ToLowerInvariant())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            _whitelistedMods.Value = normalizedMods;
+            _whitelistedHashes.Value = normalizedHashes;
             MelonPreferences.Save();
 
             UpdateConfigFromPreferences();
-            _logger.Msg($"Updated whitelist with {normalizedMods.Length} mod(s)");
+            _logger.Msg($"Updated whitelist with {normalizedHashes.Length} hash(es)");
         }
 
-        public bool IsModWhitelisted(string modFileName)
+        public bool IsHashWhitelisted(string hash)
         {
-            if (string.IsNullOrWhiteSpace(modFileName))
+            if (string.IsNullOrWhiteSpace(hash))
                 return false;
 
-            if (!modFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                modFileName += ".dll";
-
-            return Config.WhitelistedMods.Contains(modFileName, StringComparer.OrdinalIgnoreCase);
+            return Config.WhitelistedHashes.Contains(hash.ToLowerInvariant(), StringComparer.OrdinalIgnoreCase);
         }
 
         private static Severity ParseSeverity(string severity)
