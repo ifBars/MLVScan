@@ -12,6 +12,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected hexadecimal encoded string (potential obfuscated payload).";
         public Severity Severity => Severity.Medium;
+        public string RuleId => "HexStringRule";
+        public bool RequiresCompanionFinding => false;
 
         // Regex for continuous hex strings (even length, min 16 chars)
         // We look for a sequence of hex digits that is at least 16 characters long.

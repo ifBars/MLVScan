@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Potential system shell execution detected";
         public Severity Severity => Severity.Critical;
+        public string RuleId => "Shell32Rule";
+        public bool RequiresCompanionFinding => false;
 
         public bool IsSuspicious(MethodReference method)
         {

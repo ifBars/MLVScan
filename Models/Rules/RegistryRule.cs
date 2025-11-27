@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected registry manipulation, which is suspicious for a MelonLoader mod. This could be used to persist malware or modify system settings.";
         public Severity Severity => Severity.Critical;
+        public string RuleId => "RegistryRule";
+        public bool RequiresCompanionFinding => false;
         
         private static readonly string[] RegistryFunctions =
         [

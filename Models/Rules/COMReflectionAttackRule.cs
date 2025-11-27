@@ -8,6 +8,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected reflective shell execution via COM (GetTypeFromProgID + InvokeMember pattern).";
         public Severity Severity => Severity.Critical;
+        public string RuleId => "COMReflectionAttackRule";
+        public bool RequiresCompanionFinding => false;
 
         public bool IsSuspicious(MethodReference method)
         {

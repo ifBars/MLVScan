@@ -67,41 +67,65 @@ namespace MLVScan.Services
                         foreach (var rule in _rules)
                         {
                             var ruleFindings = rule.AnalyzeContextualPattern(calledMethod, instructions, i, methodSignals);
-                            result.Findings.AddRange(ruleFindings);
+                            foreach (var finding in ruleFindings)
+                            {
+                                // If rule requires companion finding, check if other rules have been triggered
+                                // Exception: Low severity findings are always allowed (e.g., legitimate update checkers)
+                                if (rule.RequiresCompanionFinding && finding.Severity != Severity.Low)
+                                {
+                                    bool hasOtherTriggeredRules = methodSignals != null && 
+                                        methodSignals.HasTriggeredRuleOtherThan(rule.RuleId);
+                                    
+                                    // Also check type-level triggered rules
+                                    bool hasTypeLevelTriggeredRules = false;
+                                    if (!string.IsNullOrEmpty(typeFullName))
+                                    {
+                                        var typeSignal = _signalTracker.GetTypeSignals(typeFullName);
+                                        if (typeSignal != null)
+                                        {
+                                            hasTypeLevelTriggeredRules = typeSignal.HasTriggeredRuleOtherThan(rule.RuleId);
+                                        }
+                                    }
+                                    
+                                    // Only add finding if other rules have been triggered
+                                    if (!hasOtherTriggeredRules && !hasTypeLevelTriggeredRules)
+                                        continue;
+                                }
+                                
+                                result.Findings.Add(finding);
+                                // Mark rule as triggered
+                                if (methodSignals != null)
+                                {
+                                    _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, rule.RuleId);
+                                }
+                            }
                         }
 
                         // For reflection invocations, only flag if combined with other malicious patterns
                         bool isReflectionInvoke = _reflectionDetector.IsReflectionInvokeMethod(calledMethod);
                         if (isReflectionInvoke)
                         {
-                            // Check if there are other malicious patterns in this method
-                            bool hasOtherMaliciousPatterns = methodSignals != null && 
-                                (methodSignals.HasEncodedStrings ||
-                                 methodSignals.UsesSensitiveFolder ||
-                                 methodSignals.HasProcessLikeCall ||
-                                 methodSignals.HasNetworkCall ||
-                                 methodSignals.HasFileWrite ||
-                                 methodSignals.HasBase64 ||
-                                 _stringPatternDetector.HasAssemblyLoadingInMethod(method, instructions) ||
-                                 _stringPatternDetector.HasSuspiciousStringPatterns(method, instructions, i));
+                            var reflectionRule = _rules.FirstOrDefault(r => r is ReflectionRule);
+                            if (reflectionRule == null)
+                                continue;
                             
-                            // Also check type-level signals (from other methods in the same type)
-                            bool hasTypeLevelSignals = false;
+                            // Check if other rules have been triggered (not just ReflectionRule)
+                            bool hasOtherTriggeredRules = methodSignals != null && 
+                                methodSignals.HasTriggeredRuleOtherThan(reflectionRule.RuleId);
+                            
+                            // Also check type-level triggered rules
+                            bool hasTypeLevelTriggeredRules = false;
                             if (!string.IsNullOrEmpty(typeFullName))
                             {
                                 var typeSignal = _signalTracker.GetTypeSignals(typeFullName);
                                 if (typeSignal != null)
                                 {
-                                    hasTypeLevelSignals = typeSignal.HasEncodedStrings ||
-                                                          typeSignal.UsesSensitiveFolder ||
-                                                          typeSignal.HasProcessLikeCall ||
-                                                          typeSignal.HasNetworkCall ||
-                                                          typeSignal.HasFileWrite ||
-                                                          typeSignal.HasBase64;
+                                    hasTypeLevelTriggeredRules = typeSignal.HasTriggeredRuleOtherThan(reflectionRule.RuleId);
                                 }
                             }
                             
-                            if (!hasOtherMaliciousPatterns && !hasTypeLevelSignals)
+                            // If no other rules have been triggered, queue for later processing
+                            if (!hasOtherTriggeredRules && !hasTypeLevelTriggeredRules)
                             {
                                 // Queue for later processing after all methods in type are scanned
                                 if (_config.EnableMultiSignalDetection && method.DeclaringType != null)
@@ -111,34 +135,54 @@ namespace MLVScan.Services
                                 continue;
                             }
                             
-                            // Reflection combined with other patterns is suspicious
-                            var rule = _rules.FirstOrDefault(r => r is ReflectionRule);
-                            if (rule != null)
+                            // Reflection combined with other triggered rules is suspicious
+                            var snippet = _snippetBuilder.BuildSnippet(instructions, i, 2);
+                            
+                            var finding = new ScanFinding(
+                                $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", 
+                                reflectionRule.Description + " (combined with other suspicious patterns)", 
+                                reflectionRule.Severity,
+                                snippet);
+                            result.Findings.Add(finding);
+                            // Mark rule as triggered
+                            if (methodSignals != null)
                             {
-                                var snippet = _snippetBuilder.BuildSnippet(instructions, i, 2);
-                                
-                                result.Findings.Add(new ScanFinding(
-                                    $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", 
-                                    rule.Description + " (combined with other suspicious patterns)", 
-                                    rule.Severity,
-                                    snippet));
+                                _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, reflectionRule.RuleId);
                             }
                         }
-                        else if (_rules.Any(rule => rule.IsSuspicious(calledMethod)))
+                        else if (_rules.Any(r => r.IsSuspicious(calledMethod)))
                         {
                             var rule = _rules.First(r => r.IsSuspicious(calledMethod));
                             var snippet = _snippetBuilder.BuildSnippet(instructions, i, 2);
                             
-                            result.Findings.Add(new ScanFinding(
+                            var finding = new ScanFinding(
                                 $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}", 
                                 rule.Description, 
                                 rule.Severity,
-                                snippet));
+                                snippet);
+                            result.Findings.Add(finding);
+                            // Mark rule as triggered
+                            if (methodSignals != null)
+                            {
+                                _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, rule.RuleId);
+                            }
                         }
                         
                         // Check for reflection-based calls that might bypass detection
                         var reflectionFindings = _reflectionDetector.ScanForReflectionInvocation(method, instruction, calledMethod, i, instructions, methodSignals);
-                        result.Findings.AddRange(reflectionFindings);
+                        foreach (var finding in reflectionFindings)
+                        {
+                            result.Findings.Add(finding);
+                            // Mark ReflectionRule as triggered if this is a reflection finding
+                            if (methodSignals != null)
+                            {
+                                var reflectionRule = _rules.FirstOrDefault(r => r is ReflectionRule);
+                                if (reflectionRule != null)
+                                {
+                                    _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, reflectionRule.RuleId);
+                                }
+                            }
+                        }
                     }
                 }
                 catch (Exception)

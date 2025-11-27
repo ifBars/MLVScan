@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected FromBase64String call which decodes base64 encrypted strings.";
         public Severity Severity => Severity.Low;
+        public string RuleId => "Base64Rule";
+        public bool RequiresCompanionFinding => false;
         
         public bool IsSuspicious(MethodReference method)
         {

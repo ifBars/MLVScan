@@ -50,7 +50,24 @@ namespace MLVScan.Services
                     var ruleFindings = rule.AnalyzeInstructions(method, instructions, methodSignals);
                     foreach (var finding in ruleFindings)
                     {
+                        // If rule requires companion finding, check if other rules have been triggered
+                        // Exception: Low severity findings are always allowed (e.g., legitimate update checkers)
+                        if (rule.RequiresCompanionFinding && finding.Severity != Severity.Low)
+                        {
+                            bool hasOtherTriggeredRules = methodSignals != null && 
+                                methodSignals.HasTriggeredRuleOtherThan(rule.RuleId);
+                            
+                            // Only add finding if other rules have been triggered
+                            if (!hasOtherTriggeredRules)
+                                continue;
+                        }
+                        
                         result.Findings.Add(finding);
+                        // Mark rule as triggered
+                        if (methodSignals != null)
+                        {
+                            _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, rule.RuleId);
+                        }
                         // Update signals if encoded strings were detected
                         if (methodSignals != null && 
                             (rule is EncodedStringLiteralRule || 
@@ -75,7 +92,24 @@ namespace MLVScan.Services
                             var ruleFindings = rule.AnalyzeStringLiteral(strLiteral, method, i);
                             foreach (var finding in ruleFindings)
                             {
+                                // If rule requires companion finding, check if other rules have been triggered
+                                // Exception: Low severity findings are always allowed (e.g., legitimate update checkers)
+                                if (rule.RequiresCompanionFinding && finding.Severity != Severity.Low)
+                                {
+                                    bool hasOtherTriggeredRules = methodSignals != null && 
+                                        methodSignals.HasTriggeredRuleOtherThan(rule.RuleId);
+                                    
+                                    // Only add finding if other rules have been triggered
+                                    if (!hasOtherTriggeredRules)
+                                        continue;
+                                }
+                                
                                 result.Findings.Add(finding);
+                                // Mark rule as triggered
+                                if (methodSignals != null)
+                                {
+                                    _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, rule.RuleId);
+                                }
                                 // Update signals if encoded strings were detected
                                 if (methodSignals != null)
                                 {

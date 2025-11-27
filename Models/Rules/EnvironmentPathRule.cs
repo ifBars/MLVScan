@@ -8,6 +8,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected Environment.GetFolderPath access to sensitive directories (AppData, Startup, etc.).";
         public Severity Severity => Severity.Low;
+        public string RuleId => "EnvironmentPathRule";
+        public bool RequiresCompanionFinding => false;
 
         // Map of SpecialFolder enum values to names
         private static readonly Dictionary<int, string> SensitiveFolders = new Dictionary<int, string>

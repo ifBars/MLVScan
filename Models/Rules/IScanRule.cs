@@ -8,6 +8,8 @@ namespace MLVScan.Models
     {
         string Description { get; }
         Severity Severity { get; }
+        string RuleId { get; }
+        bool RequiresCompanionFinding { get; }
         bool IsSuspicious(MethodReference method);
 
         /// <summary>

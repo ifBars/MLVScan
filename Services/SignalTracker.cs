@@ -153,6 +153,25 @@ namespace MLVScan.Services
                 }
             }
         }
+
+        /// <summary>
+        /// Marks a rule as having been triggered in the given method and type signals
+        /// </summary>
+        public void MarkRuleTriggered(MethodSignals methodSignals, TypeDefinition declaringType, string ruleId)
+        {
+            if (methodSignals == null || string.IsNullOrEmpty(ruleId))
+                return;
+
+            methodSignals.MarkRuleTriggered(ruleId);
+            if (declaringType != null)
+            {
+                var typeSignal = GetOrCreateTypeSignals(declaringType.FullName);
+                if (typeSignal != null)
+                {
+                    typeSignal.MarkRuleTriggered(ruleId);
+                }
+            }
+        }
     }
 }
 

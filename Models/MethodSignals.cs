@@ -12,6 +12,47 @@ namespace MLVScan.Models
         public bool HasBase64 { get; set; }
         public bool HasNetworkCall { get; set; }
         public bool HasFileWrite { get; set; }
+        
+        private HashSet<string> _triggeredRuleIds = new HashSet<string>();
+        
+        /// <summary>
+        /// Marks a rule as having been triggered in this method/type
+        /// </summary>
+        public void MarkRuleTriggered(string ruleId)
+        {
+            if (!string.IsNullOrEmpty(ruleId))
+            {
+                _triggeredRuleIds.Add(ruleId);
+            }
+        }
+        
+        /// <summary>
+        /// Checks if any rule other than the specified one has been triggered
+        /// </summary>
+        public bool HasTriggeredRuleOtherThan(string ruleId)
+        {
+            if (string.IsNullOrEmpty(ruleId))
+            {
+                return _triggeredRuleIds.Count > 0;
+            }
+            return _triggeredRuleIds.Count > 0 && !_triggeredRuleIds.All(id => id == ruleId);
+        }
+        
+        /// <summary>
+        /// Checks if any rule has been triggered
+        /// </summary>
+        public bool HasAnyTriggeredRule()
+        {
+            return _triggeredRuleIds.Count > 0;
+        }
+        
+        /// <summary>
+        /// Gets all triggered rule IDs
+        /// </summary>
+        public IEnumerable<string> GetTriggeredRuleIds()
+        {
+            return _triggeredRuleIds.ToList();
+        }
 
         public int SignalCount
         {

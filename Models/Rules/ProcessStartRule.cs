@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected Process.Start call which could execute arbitrary programs.";
         public Severity Severity => Severity.Critical;
+        public string RuleId => "ProcessStartRule";
+        public bool RequiresCompanionFinding => false;
         
         public bool IsSuspicious(MethodReference method)
         {

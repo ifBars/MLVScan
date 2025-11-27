@@ -83,19 +83,14 @@ namespace MLVScan.Services
             if (typeSignal == null)
                 return;
 
-            // Check if type has any suspicious signals
-            bool hasTypeLevelSignals = typeSignal.HasEncodedStrings ||
-                                      typeSignal.UsesSensitiveFolder ||
-                                      typeSignal.HasProcessLikeCall ||
-                                      typeSignal.HasNetworkCall ||
-                                      typeSignal.HasFileWrite ||
-                                      typeSignal.HasBase64;
-
-            if (!hasTypeLevelSignals)
+            // Check if other rules have been triggered at type level (not just ReflectionRule)
+            var reflectionRule = _rules.FirstOrDefault(r => r is ReflectionRule);
+            if (reflectionRule == null)
                 return;
+                
+            bool hasTypeLevelTriggeredRules = typeSignal.HasTriggeredRuleOtherThan(reflectionRule.RuleId);
 
-            var rule = _rules.FirstOrDefault(r => r is ReflectionRule);
-            if (rule == null)
+            if (!hasTypeLevelTriggeredRules)
                 return;
 
             // Process each pending reflection finding
@@ -103,11 +98,17 @@ namespace MLVScan.Services
             {
                 var snippet = _snippetBuilder.BuildSnippet(instructions, index, 2);
 
-                findings.Add(new ScanFinding(
+                var finding = new ScanFinding(
                     $"{method.DeclaringType.FullName}.{method.Name}:{instruction.Offset}",
-                    rule.Description + " (combined with other suspicious patterns detected in this type)",
-                    rule.Severity,
-                    snippet));
+                    reflectionRule.Description + " (combined with other suspicious patterns detected in this type)",
+                    reflectionRule.Severity,
+                    snippet);
+                findings.Add(finding);
+                // Mark rule as triggered
+                if (methodSignals != null)
+                {
+                    _signalTracker.MarkRuleTriggered(methodSignals, method.DeclaringType, reflectionRule.RuleId);
+                }
             }
         }
     }

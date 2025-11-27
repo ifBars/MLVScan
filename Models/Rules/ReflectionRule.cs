@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected reflection invocation without determinable target method (potential bypass).";
         public Severity Severity => Severity.High;
+        public string RuleId => "ReflectionRule";
+        public bool RequiresCompanionFinding => true;
 
         public bool IsSuspicious(MethodReference method)
         {

@@ -10,6 +10,8 @@ namespace MLVScan.Models.Rules
         
         public string Description => _description;
         public Severity Severity => _severity;
+        public string RuleId => "DllImportRule";
+        public bool RequiresCompanionFinding => false;
         
         // List of DLLs that are often misused for malicious purposes
         private static readonly string[] HighRiskDlls =

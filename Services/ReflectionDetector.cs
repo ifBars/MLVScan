@@ -288,8 +288,17 @@ namespace MLVScan.Services
             // For process execution, check specific process methods
             if (rule.Description.Contains("process") || rule.Description.Contains("Process"))
             {
+                // For ProcessStartRule, only match exact method names to avoid false positives
+                // like "StartUpdateVolume" matching "Start"
+                if (rule is ProcessStartRule)
+                {
+                    // Only match exact "Start" method name, not substrings
+                    return methodName.Equals("Start", StringComparison.OrdinalIgnoreCase);
+                }
+                
+                // For other process-related rules, use broader matching
                 string[] processMethods = {
-                    "Start", "Process", "Exec", "Run", "Launch"
+                    "Process", "Exec", "Run", "Launch"
                 };
                 
                 return processMethods.Any(name => 

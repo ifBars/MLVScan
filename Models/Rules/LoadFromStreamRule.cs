@@ -7,6 +7,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected dynamic assembly loading which could be used to execute hidden code.";
         public Severity Severity => Severity.Critical;
+        public string RuleId => "LoadFromStreamRule";
+        public bool RequiresCompanionFinding => false;
         
         public bool IsSuspicious(MethodReference method)
         {

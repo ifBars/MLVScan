@@ -8,6 +8,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected encoded string to char decoding pipeline (ASCII number parsing pattern).";
         public Severity Severity => Severity.High;
+        public string RuleId => "EncodedStringPipelineRule";
+        public bool RequiresCompanionFinding => false;
 
         public bool IsSuspicious(MethodReference method)
         {

@@ -51,6 +51,7 @@ namespace MLVScan.Services
                 new EncodedBlobSplittingRule(),
                 new COMReflectionAttackRule(),
                 new DataExfiltrationRule(),
+                new DataInfiltrationRule(),
                 new PersistenceRule(),
                 new HexStringRule()
             };

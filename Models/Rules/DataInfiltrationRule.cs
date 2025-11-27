@@ -5,12 +5,12 @@ using System.Text.RegularExpressions;
 
 namespace MLVScan.Models.Rules
 {
-    public class DataExfiltrationRule : IScanRule
+    public class DataInfiltrationRule : IScanRule
     {
-        public string Description => "Detected potential data exfiltration endpoints (Discord webhooks, raw paste sites, IP URLs).";
-        public Severity Severity => Severity.Critical;
-        public string RuleId => "DataExfiltrationRule";
-        public bool RequiresCompanionFinding => false;
+        public string Description => "Detected data download from suspicious endpoint (potential payload infiltration).";
+        public Severity Severity => Severity.High;
+        public string RuleId => "DataInfiltrationRule";
+        public bool RequiresCompanionFinding => true;
 
         public bool IsSuspicious(MethodReference method)
         {
@@ -39,6 +39,18 @@ namespace MLVScan.Models.Rules
             if (!isNetworkCall)
                 yield break;
 
+            // Only analyze download/read operations (GET, DownloadString, etc.)
+            bool isReadOnlyOperation = calledMethodName.Contains("GetStringAsync", StringComparison.OrdinalIgnoreCase) ||
+                                       calledMethodName.Contains("GetAsync", StringComparison.OrdinalIgnoreCase) ||
+                                       calledMethodName.Contains("GetByteArrayAsync", StringComparison.OrdinalIgnoreCase) ||
+                                       calledMethodName.Contains("DownloadString", StringComparison.OrdinalIgnoreCase) ||
+                                       calledMethodName.Contains("DownloadData", StringComparison.OrdinalIgnoreCase) ||
+                                       calledMethodName.Contains("DownloadFile", StringComparison.OrdinalIgnoreCase);
+
+            // Skip if this is not a download operation
+            if (!isReadOnlyOperation)
+                yield break;
+
             // Sweep nearby string literals for indicators
             int windowStart = Math.Max(0, instructionIndex - 10);
             int windowEnd = Math.Min(instructions.Count, instructionIndex + 11);
@@ -54,25 +66,7 @@ namespace MLVScan.Models.Rules
             if (literals.Count == 0)
                 yield break;
 
-            // Distinguish between GET (read-only) and POST/PUT (data-sending) operations
-            bool isReadOnlyOperation = calledMethodName.Contains("GetStringAsync", StringComparison.OrdinalIgnoreCase) ||
-                                       calledMethodName.Contains("GetAsync", StringComparison.OrdinalIgnoreCase) ||
-                                       calledMethodName.Contains("GetByteArrayAsync", StringComparison.OrdinalIgnoreCase) ||
-                                       calledMethodName.Contains("DownloadString", StringComparison.OrdinalIgnoreCase) ||
-                                       calledMethodName.Contains("DownloadData", StringComparison.OrdinalIgnoreCase);
-            
-            bool isDataSendingOperation = calledMethodName.Contains("PostAsync", StringComparison.OrdinalIgnoreCase) ||
-                                          calledMethodName.Contains("PutAsync", StringComparison.OrdinalIgnoreCase) ||
-                                          calledMethodName.Contains("SendAsync", StringComparison.OrdinalIgnoreCase) ||
-                                          calledMethodName.Contains("UploadString", StringComparison.OrdinalIgnoreCase) ||
-                                          calledMethodName.Contains("UploadData", StringComparison.OrdinalIgnoreCase);
-
-            // Skip GET operations (handled by DataInfiltrationRule)
-            if (isReadOnlyOperation)
-                yield break;
-
             // Check for suspicious URL patterns
-            bool hasDiscordWebhook = literals.Any(s => s.Contains("discord.com/api/webhooks", StringComparison.OrdinalIgnoreCase));
             bool hasRawPaste = literals.Any(s =>
                 s.Contains("pastebin.com/raw", StringComparison.OrdinalIgnoreCase) ||
                 s.Contains("hastebin.com/raw", StringComparison.OrdinalIgnoreCase));
@@ -80,7 +74,6 @@ namespace MLVScan.Models.Rules
             bool mentionsNgrokOrTelegram = literals.Any(s => s.Contains("ngrok", StringComparison.OrdinalIgnoreCase) || s.Contains("telegram", StringComparison.OrdinalIgnoreCase));
             
             // Check for legitimate sources (GitHub releases, mod hosting sites, common CDNs)
-            // Note: raw.githubusercontent.com is allowed for GET operations as it's commonly used for version checking
             bool isLegitimateSource = literals.Any(s =>
                 (s.Contains("github.com/releases", StringComparison.OrdinalIgnoreCase) ||
                  s.Contains("github.com/release", StringComparison.OrdinalIgnoreCase) ||
@@ -97,7 +90,7 @@ namespace MLVScan.Models.Rules
                  s.Contains("gstatic.com", StringComparison.OrdinalIgnoreCase) ||
                  s.Contains("googleapis.com", StringComparison.OrdinalIgnoreCase)) &&
                 !s.Contains("discord.com", StringComparison.OrdinalIgnoreCase));
-            
+
             // Detect specific legitimate source types for more detailed reporting
             bool isGitHubSource = literals.Any(s =>
                 (s.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
@@ -117,22 +110,19 @@ namespace MLVScan.Models.Rules
                 s.Contains("gstatic.com", StringComparison.OrdinalIgnoreCase) ||
                 s.Contains("googleapis.com", StringComparison.OrdinalIgnoreCase));
 
-            // Extract URLs from literals (complete URLs or URL patterns)
+            // Extract URLs from literals
             var urls = new List<string>();
             foreach (var literal in literals)
             {
-                // Check if literal is a complete URL
                 if (literal.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                     literal.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Extract just the URL part (in case there's trailing content)
                     var match = Regex.Match(literal, @"(https?://[^\s""'<>]+)", RegexOptions.IgnoreCase);
                     if (match.Success)
                     {
                         urls.Add(match.Groups[1].Value);
                     }
                 }
-                // Also check for URL patterns embedded in strings (e.g., "baseUrl + path")
                 else if (Regex.IsMatch(literal, @"https?://", RegexOptions.IgnoreCase))
                 {
                     var matches = Regex.Matches(literal, @"(https?://[^\s""'<>]+)", RegexOptions.IgnoreCase);
@@ -144,7 +134,6 @@ namespace MLVScan.Models.Rules
             }
             urls = urls.Distinct().ToList();
             
-            // Build URL list string for inclusion in descriptions
             string urlList = urls.Count > 0 
                 ? $" URL(s): {string.Join(", ", urls)}" 
                 : string.Empty;
@@ -159,35 +148,8 @@ namespace MLVScan.Models.Rules
                 snippetBuilder.AppendLine(instructions[j].ToString());
             }
 
-            // Always flag Discord webhooks regardless of operation type
-            if (hasDiscordWebhook)
-            {
-                yield return new ScanFinding(
-                    $"{method.DeclaringType?.FullName ?? "Unknown"}.{method.Name}:{instructions[instructionIndex].Offset}",
-                    $"Discord webhook endpoint near network call (potential data exfiltration).{urlList}",
-                    Severity.Critical,
-                    snippetBuilder.ToString().TrimEnd());
-            }
-            // For POST/PUT operations, be more aggressive - flag any suspicious URL
-            else if (isDataSendingOperation && (hasRawPaste || hasBareIpUrl || mentionsNgrokOrTelegram))
-            {
-                yield return new ScanFinding(
-                    $"{method.DeclaringType?.FullName ?? "Unknown"}.{method.Name}:{instructions[instructionIndex].Offset}",
-                    $"Data-sending operation (POST/PUT) to suspicious endpoint (potential data exfiltration).{urlList}",
-                    Severity.Critical,
-                    snippetBuilder.ToString().TrimEnd());
-            }
-            // For unknown operation types, use medium severity
-            else if (!isReadOnlyOperation && !isDataSendingOperation && (hasRawPaste || hasBareIpUrl || mentionsNgrokOrTelegram))
-            {
-                yield return new ScanFinding(
-                    $"{method.DeclaringType?.FullName ?? "Unknown"}.{method.Name}:{instructions[instructionIndex].Offset}",
-                    $"Potential payload download endpoint near network call (raw paste/code host/IP).{urlList}",
-                    Severity.Medium,
-                    snippetBuilder.ToString().TrimEnd());
-            }
-            // Low severity: Track legitimate sources used in POST/PUT (less common, but worth noting)
-            else if (isDataSendingOperation && isLegitimateSource)
+            // For GET operations: legitimate sources get Low severity (always allowed)
+            if (isLegitimateSource)
             {
                 string sourceType = isGitHubSource ? "GitHub" :
                                     isModHostingSource ? "mod hosting site" :
@@ -195,8 +157,17 @@ namespace MLVScan.Models.Rules
                 
                 yield return new ScanFinding(
                     $"{method.DeclaringType?.FullName ?? "Unknown"}.{method.Name}:{instructions[instructionIndex].Offset}",
-                    $"Data-sending operation to {sourceType} (unusual but potentially legitimate - API interaction).{urlList}",
+                    $"Read-only network operation to {sourceType} (likely legitimate - version check or resource download).{urlList}",
                     Severity.Low,
+                    snippetBuilder.ToString().TrimEnd());
+            }
+            // Non-legitimate sources: High severity (requires companion finding to actually trigger due to RequiresCompanionFinding = true)
+            else if (hasRawPaste || hasBareIpUrl || mentionsNgrokOrTelegram)
+            {
+                yield return new ScanFinding(
+                    $"{method.DeclaringType?.FullName ?? "Unknown"}.{method.Name}:{instructions[instructionIndex].Offset}",
+                    $"Read-only operation to suspicious endpoint (potential payload download).{urlList}",
+                    Severity.High,
                     snippetBuilder.ToString().TrimEnd());
             }
         }

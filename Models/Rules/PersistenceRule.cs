@@ -8,6 +8,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected executable write near persistence-prone directory (Startup/AppData/ProgramData).";
         public Severity Severity => Severity.High;
+        public string RuleId => "PersistenceRule";
+        public bool RequiresCompanionFinding => false;
 
         public bool IsSuspicious(MethodReference method)
         {

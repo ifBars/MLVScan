@@ -8,6 +8,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected structured encoded blob splitting pattern (backtick/dash separator in loop).";
         public Severity Severity => Severity.High;
+        public string RuleId => "EncodedBlobSplittingRule";
+        public bool RequiresCompanionFinding => false;
 
         public bool IsSuspicious(MethodReference method)
         {

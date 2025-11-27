@@ -9,6 +9,8 @@ namespace MLVScan.Models.Rules
     {
         public string Description => "Detected numeric-encoded string literals (potential obfuscated payload).";
         public Severity Severity => Severity.High;
+        public string RuleId => "EncodedStringLiteralRule";
+        public bool RequiresCompanionFinding => false;
 
         private static readonly Regex DashSeparatedPattern = new Regex(@"^\d{2,3}(-\d{2,3}){10,}$", RegexOptions.Compiled);
         private static readonly Regex DotSeparatedPattern = new Regex(@"^\d{2,3}(\.\d{2,3}){10,}$", RegexOptions.Compiled);
