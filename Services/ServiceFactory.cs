@@ -1,18 +1,27 @@
 using MelonLoader;
+using MLVScan.Abstractions;
+using MLVScan.Adapters;
 using MLVScan.Models;
-using MLVScan.Models.Rules;
+using MLVScan.Services;
 
-namespace MLVScan.Services
+namespace MLVScan
 {
+    /// <summary>
+    /// Factory for creating MLVScan services in the MelonLoader context.
+    /// </summary>
     public class ServiceFactory
     {
         private readonly MelonLogger.Instance _logger;
+        private readonly IScanLogger _scanLogger;
+        private readonly IAssemblyResolverProvider _resolverProvider;
         private readonly ConfigManager _configManager;
         private readonly ScanConfig _fallbackConfig;
 
         public ServiceFactory(MelonLogger.Instance logger)
         {
             _logger = logger;
+            _scanLogger = new MelonScanLogger(logger);
+            _resolverProvider = new GameAssemblyResolverProvider();
             _fallbackConfig = new ScanConfig();
 
             try
@@ -34,29 +43,9 @@ namespace MLVScan.Services
         public AssemblyScanner CreateAssemblyScanner()
         {
             var config = _configManager?.Config ?? _fallbackConfig;
+            var rules = RuleFactory.CreateDefaultRules();
 
-            var rules = new List<IScanRule>
-            {
-                new Base64Rule(),
-                new ProcessStartRule(),
-                new Shell32Rule(),
-                new LoadFromStreamRule(),
-                new ByteArrayManipulationRule(),
-                new DllImportRule(),
-                new RegistryRule(),
-                new EncodedStringLiteralRule(),
-                new ReflectionRule(),
-                new EnvironmentPathRule(),
-                new EncodedStringPipelineRule(),
-                new EncodedBlobSplittingRule(),
-                new COMReflectionAttackRule(),
-                new DataExfiltrationRule(),
-                new DataInfiltrationRule(),
-                new PersistenceRule(),
-                new HexStringRule()
-            };
-
-            return new AssemblyScanner(rules, config);
+            return new AssemblyScanner(rules, config, _resolverProvider);
         }
 
         public ModScanner CreateModScanner()
