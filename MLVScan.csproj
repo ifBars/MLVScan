@@ -519,6 +519,8 @@
     <Compile Include="Models\DisabledModInfo.cs" />
     <Compile Include="Adapters\MelonScanLogger.cs" />
     <Compile Include="Adapters\GameAssemblyResolverProvider.cs" />
+    <Compile Include="Runtime\HarmonyPatches.cs" />
+    <Compile Include="Runtime\RuntimeProtectionService.cs" />
     <Compile Include="Services\ConfigManager.cs" />
     <Compile Include="Services\IlDumpService.cs" />
     <Compile Include="Services\ModDisabler.cs" />

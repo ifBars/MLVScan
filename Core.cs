@@ -1,5 +1,6 @@
 ﻿using MelonLoader;
 using MLVScan.Models;
+using MLVScan.Runtime;
 using MLVScan.Services;
 using System;
 using System.Collections.Generic;
@@ -19,6 +20,7 @@ namespace MLVScan
         private ModScanner _modScanner;
         private ModDisabler _modDisabler;
         private IlDumpService _ilDumpService;
+        private RuntimeProtectionService _runtimeProtectionService;
         private bool _initialized = false;
 
         private static readonly string[] DefaultWhitelistedHashes =
@@ -45,6 +47,28 @@ namespace MLVScan
                 _modScanner = _serviceFactory.CreateModScanner();
                 _modDisabler = _serviceFactory.CreateModDisabler();
                 _ilDumpService = _serviceFactory.CreateIlDumpService();
+
+                // Initialize runtime protection
+                var enableRuntimeProtection = _configManager.EnableRuntimeProtection;
+                var blockRiskyOperations = _configManager.BlockRiskyOperations;
+                LoggerInstance.Msg($"Runtime protection config: EnableRuntimeProtection={enableRuntimeProtection}, BlockRiskyOperations={blockRiskyOperations}");
+                _runtimeProtectionService = new RuntimeProtectionService(
+                    LoggerInstance, 
+                    enableRuntimeProtection, 
+                    blockRiskyOperations);
+
+                if (enableRuntimeProtection)
+                {
+                    HarmonyPatches.Initialize(LoggerInstance, _runtimeProtectionService);
+                    if (blockRiskyOperations)
+                    {
+                        LoggerInstance.Warning("Runtime protection is enabled with BLOCKING mode - risky operations will be blocked!");
+                    }
+                    else
+                    {
+                        LoggerInstance.Msg("Runtime protection is enabled in logging mode - risky operations will be logged but allowed");
+                    }
+                }
 
                 _initialized = true;
 

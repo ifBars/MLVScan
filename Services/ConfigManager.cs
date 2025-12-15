@@ -15,6 +15,8 @@ namespace MLVScan.Services
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
         private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
+        private readonly MelonPreferences_Entry<bool> _enableRuntimeProtection;
+        private readonly MelonPreferences_Entry<bool> _blockRiskyOperations;
 
         public ConfigManager(MelonLogger.Instance logger)
         {
@@ -45,6 +47,12 @@ namespace MLVScan.Services
                 _dumpFullIlReports = _category.CreateEntry("DumpFullIlReports", false,
                     description: "When enabled, saves full IL dumps for scanned mods next to reports");
 
+                _enableRuntimeProtection = _category.CreateEntry("EnableRuntimeProtection", true,
+                    description: "Enable runtime protection patches to monitor risky operations (process starting, network calls, file operations, etc.)");
+
+                _blockRiskyOperations = _category.CreateEntry("BlockRiskyOperations", false,
+                    description: "When enabled, runtime protection will block risky operations instead of just logging them. WARNING: May break legitimate mods!");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -52,6 +60,8 @@ namespace MLVScan.Services
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _enableRuntimeProtection.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockRiskyOperations.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -87,6 +97,9 @@ namespace MLVScan.Services
             };
         }
 
+        public bool EnableRuntimeProtection => _enableRuntimeProtection?.Value ?? true;
+        public bool BlockRiskyOperations => _blockRiskyOperations?.Value ?? false;
+
         public void SaveConfig(ScanConfig newConfig)
         {
             try
@@ -98,6 +111,8 @@ namespace MLVScan.Services
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
+                _enableRuntimeProtection.Value = EnableRuntimeProtection;
+                _blockRiskyOperations.Value = BlockRiskyOperations;
 
                 MelonPreferences.Save();
 
