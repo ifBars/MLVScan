@@ -528,7 +528,7 @@
   </ItemGroup>
   	<ItemGroup>
 	  <PackageReference Include="MLVScan.Core" Version="1.0.0" GeneratePathProperty="true" />
-	  <PackageReference Include="ILRepack" Version="2.0.34" GeneratePathProperty="true" />
+	  <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
 	  <PackageReference Include="Mono.Cecil" Version="0.11.6" />
 	  <PackageReference Include="System.Text.Json" Version="9.0.4" />
 	</ItemGroup>
