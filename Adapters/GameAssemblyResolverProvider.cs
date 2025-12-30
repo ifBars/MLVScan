@@ -42,6 +42,16 @@ namespace MLVScan.Adapters
 
                 if (Directory.Exists(melonLoaderNet6Path))
                     resolver.AddSearchDirectory(melonLoaderNet6Path);
+
+                // Add Mods directory (for mod-to-mod references)
+                var modsPath = MelonEnvironment.ModsDirectory;
+                if (Directory.Exists(modsPath))
+                    resolver.AddSearchDirectory(modsPath);
+
+                // Add Plugins directory (for plugin-to-plugin references)
+                var pluginsPath = MelonEnvironment.PluginsDirectory;
+                if (Directory.Exists(pluginsPath))
+                    resolver.AddSearchDirectory(pluginsPath);
             }
             catch (Exception)
             {
