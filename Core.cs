@@ -1,4 +1,4 @@
-﻿using MelonLoader;
+using MelonLoader;
 using MLVScan.Models;
 using MLVScan.Services;
 using System;
@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.5.9", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.6.0", "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
@@ -19,6 +19,7 @@ namespace MLVScan
         private ModScanner _modScanner;
         private ModDisabler _modDisabler;
         private IlDumpService _ilDumpService;
+        private DeveloperReportGenerator _developerReportGenerator;
         private bool _initialized = false;
 
         private static readonly string[] DefaultWhitelistedHashes =
@@ -36,7 +37,7 @@ namespace MLVScan
             try
             {
                 LoggerInstance.Msg("Pre-scanning for malicious mods...");
-
+                
                 _serviceFactory = new ServiceFactory(LoggerInstance);
                 _configManager = _serviceFactory.CreateConfigManager();
 
@@ -45,6 +46,7 @@ namespace MLVScan
                 _modScanner = _serviceFactory.CreateModScanner();
                 _modDisabler = _serviceFactory.CreateModDisabler();
                 _ilDumpService = _serviceFactory.CreateIlDumpService();
+                _developerReportGenerator = _serviceFactory.CreateDeveloperReportGenerator();
 
                 _initialized = true;
 
@@ -134,6 +136,13 @@ namespace MLVScan
 
         private void GenerateDetailedReports(List<DisabledModInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
+            var isDeveloperMode = _configManager?.Config?.DeveloperMode ?? false;
+
+            if (isDeveloperMode)
+            {
+                LoggerInstance.Msg("Developer Mode: Enabled");
+            }
+
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
 
             foreach (var modInfo in disabledMods)
@@ -181,38 +190,48 @@ namespace MLVScan
                 }
 
                 LoggerInstance.Msg("-------------------------------");
-                LoggerInstance.Warning("Suspicious patterns found:");
 
-                foreach (var (category, categoryFindings) in groupedFindings)
+                // Use developer-friendly reporting if developer mode is enabled
+                if (isDeveloperMode && _developerReportGenerator != null)
                 {
-                    var severity = FormatSeverityLabel(categoryFindings[0].Severity);
+                    _developerReportGenerator.GenerateConsoleReport(modName, actualFindings);
+                }
+                else
+                {
+                    // Standard reporting
+                    LoggerInstance.Warning("Suspicious patterns found:");
 
-                    LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
-
-                    var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
-                    for (var i = 0; i < maxDetailsToShow; i++)
+                    foreach (var (category, categoryFindings) in groupedFindings)
                     {
-                        var finding = categoryFindings[i];
-                        LoggerInstance.Msg($"  * At: {finding.Location}");
-                        if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                        var severity = FormatSeverityLabel(categoryFindings[0].Severity);
+
+                        LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
+
+                        var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
+                        for (var i = 0; i < maxDetailsToShow; i++)
                         {
-                            LoggerInstance.Msg($"    Code Snippet (IL):");
-                            foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                            var finding = categoryFindings[i];
+                            LoggerInstance.Msg($"  * At: {finding.Location}");
+                            if (!string.IsNullOrEmpty(finding.CodeSnippet))
                             {
-                                LoggerInstance.Msg($"      {line}");
+                                LoggerInstance.Msg($"    Code Snippet (IL):");
+                                foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                    {
+                                        LoggerInstance.Msg($"      {line}");
+                                    }
                             }
                         }
+
+                        if (categoryFindings.Count > maxDetailsToShow)
+                        {
+                            LoggerInstance.Msg($"  * And {categoryFindings.Count - maxDetailsToShow} more instances...");
+                        }
+
+                        LoggerInstance.Msg("");
                     }
 
-                    if (categoryFindings.Count > maxDetailsToShow)
-                    {
-                        LoggerInstance.Msg($"  * And {categoryFindings.Count - maxDetailsToShow} more instances...");
-                    }
-
-                    LoggerInstance.Msg("");
+                    LoggerInstance.Msg("-------------------------------");
                 }
-
-                LoggerInstance.Msg("-------------------------------");
                 DisplaySecurityNotice(modName);
 
                 try
@@ -251,43 +270,53 @@ namespace MLVScan
 
                     using (var writer = new StreamWriter(reportPath))
                     {
-                        writer.WriteLine($"MLVScan Security Report");
-                        writer.WriteLine($"Generated: {DateTime.Now}");
-                        writer.WriteLine($"Mod File: {modName}");
-                        writer.WriteLine($"SHA256 Hash: {fileHash}");
-                        writer.WriteLine($"Original Path: {modInfo.OriginalPath}");
-                        writer.WriteLine($"Disabled Path: {modInfo.DisabledPath}");
-                        writer.WriteLine($"Path Used For Analysis: {accessiblePath}");
-                        writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
-                        writer.WriteLine("\nSeverity Breakdown:");
-                        foreach (var severityCount in severityCounts)
+                        if (isDeveloperMode && _developerReportGenerator != null)
                         {
-                            writer.WriteLine($"- {severityCount.Key}: {severityCount.Value} issue(s)");
+                            // Developer-friendly report
+                            var devReport = _developerReportGenerator.GenerateFileReport(modName, fileHash, actualFindings);
+                            writer.Write(devReport);
                         }
-                        writer.WriteLine("==============================================");
-
-                        foreach (var group in groupedFindings)
+                        else
                         {
-                            writer.WriteLine($"\n== {group.Key} ==");
-                            writer.WriteLine($"Severity: {group.Value[0].Severity}");
-                            writer.WriteLine($"Instances: {group.Value.Count}");
-                            writer.WriteLine("\nLocations & Snippets:");
-                            foreach (var finding in group.Value)
+                            // Standard security report
+                            writer.WriteLine($"MLVScan Security Report");
+                            writer.WriteLine($"Generated: {DateTime.Now}");
+                            writer.WriteLine($"Mod File: {modName}");
+                            writer.WriteLine($"SHA256 Hash: {fileHash}");
+                            writer.WriteLine($"Original Path: {modInfo.OriginalPath}");
+                            writer.WriteLine($"Disabled Path: {modInfo.DisabledPath}");
+                            writer.WriteLine($"Path Used For Analysis: {accessiblePath}");
+                            writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
+                            writer.WriteLine("\nSeverity Breakdown:");
+                            foreach (var severityCount in severityCounts)
                             {
-                                writer.WriteLine($"- {finding.Location}");
-                                if (!string.IsNullOrEmpty(finding.CodeSnippet))
+                                writer.WriteLine($"- {severityCount.Key}: {severityCount.Value} issue(s)");
+                            }
+                            writer.WriteLine("==============================================");
+
+                            foreach (var group in groupedFindings)
+                            {
+                                writer.WriteLine($"\n== {group.Key} ==");
+                                writer.WriteLine($"Severity: {group.Value[0].Severity}");
+                                writer.WriteLine($"Instances: {group.Value.Count}");
+                                writer.WriteLine("\nLocations & Snippets:");
+                                foreach (var finding in group.Value)
                                 {
-                                    writer.WriteLine("  Code Snippet (IL):");
-                                    foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                    writer.WriteLine($"- {finding.Location}");
+                                    if (!string.IsNullOrEmpty(finding.CodeSnippet))
                                     {
-                                        writer.WriteLine($"    {line}");
+                                        writer.WriteLine("  Code Snippet (IL):");
+                                        foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                                        {
+                                            writer.WriteLine($"    {line}");
+                                        }
+                                        writer.WriteLine();
                                     }
-                                    writer.WriteLine();
                                 }
                             }
-                        }
 
-                        WriteSecurityNoticeToReport(writer);
+                            WriteSecurityNoticeToReport(writer);
+                        }
                     }
 
                     // Generate LLM analysis prompt

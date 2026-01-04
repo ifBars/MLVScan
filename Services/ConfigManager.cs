@@ -15,6 +15,7 @@ namespace MLVScan.Services
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
         private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
+        private readonly MelonPreferences_Entry<bool> _developerMode;
 
         public ConfigManager(MelonLogger.Instance logger)
         {
@@ -45,6 +46,9 @@ namespace MLVScan.Services
                 _dumpFullIlReports = _category.CreateEntry("DumpFullIlReports", false,
                     description: "When enabled, saves full IL dumps for scanned mods next to reports");
 
+                _developerMode = _category.CreateEntry("DeveloperMode", false,
+                    description: "Developer mode: Shows remediation guidance to help mod developers fix false positives");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -52,6 +56,7 @@ namespace MLVScan.Services
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _developerMode.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -83,7 +88,8 @@ namespace MLVScan.Services
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
                 WhitelistedHashes = _whitelistedHashes.Value,
-                DumpFullIlReports = _dumpFullIlReports.Value
+                DumpFullIlReports = _dumpFullIlReports.Value,
+                DeveloperMode = _developerMode.Value
             };
         }
 
@@ -98,6 +104,7 @@ namespace MLVScan.Services
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
+                _developerMode.Value = newConfig.DeveloperMode;
 
                 MelonPreferences.Save();
 

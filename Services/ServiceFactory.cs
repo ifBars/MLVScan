@@ -71,5 +71,10 @@ namespace MLVScan
         {
             return new IlDumpService(_logger);
         }
+
+        public DeveloperReportGenerator CreateDeveloperReportGenerator()
+        {
+            return new DeveloperReportGenerator(_logger);
+        }
     }
 }

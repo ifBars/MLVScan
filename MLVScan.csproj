@@ -6,8 +6,8 @@
     <RootNamespace>MLVScan</RootNamespace>
     <LangVersion>default</LangVersion>
     <IsPackable>false</IsPackable>
-    <AssemblyVersion>1.5.9</AssemblyVersion>
-    <FileVersion>1.5.9</FileVersion>
+    <AssemblyVersion>1.6.0</AssemblyVersion>
+    <FileVersion>1.6.0</FileVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
     <AssemblyName>MLVScan.MelonLoader</AssemblyName>
     <LangVersion>latest</LangVersion>
@@ -15,6 +15,9 @@
   </PropertyGroup>
   <ItemGroup>
     <None Remove="CLAUDE.md" />
+    <None Remove="LOCAL_DEV_GUIDE.md" />
+    <None Remove="AGENTS.md" />
+    <None Remove="nexuspost.bbcode" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Accessibility">
@@ -520,14 +523,24 @@
     <Compile Include="Adapters\MelonScanLogger.cs" />
     <Compile Include="Adapters\GameAssemblyResolverProvider.cs" />
     <Compile Include="Services\ConfigManager.cs" />
+    <Compile Include="Services\DeveloperReportGenerator.cs" />
     <Compile Include="Services\IlDumpService.cs" />
     <Compile Include="Services\ModDisabler.cs" />
     <Compile Include="Services\ModScanner.cs" />
     <Compile Include="Services\PromptGeneratorService.cs" />
     <Compile Include="Services\ServiceFactory.cs" />
   </ItemGroup>
-  	<ItemGroup>
-	  <PackageReference Include="MLVScan.Core" Version="1.0.0" GeneratePathProperty="true" />
+  
+  <!-- Import local.build.props if it exists for local dev overrides -->
+  <Import Project="local.build.props" Condition="Exists('local.build.props')" />
+  
+  <ItemGroup>
+	  <!-- Use local project reference when UseLocalMLVScanCore is set -->
+	  <ProjectReference Include="..\MLVScan.Core\MLVScan.Core.csproj" Condition="'$(UseLocalMLVScanCore)' == 'true'" />
+	  
+	  <!-- Use NuGet package by default (when local.build.props doesn't exist or UseLocalMLVScanCore is not set) -->
+	  <PackageReference Include="MLVScan.Core" Version="*" GeneratePathProperty="true" Condition="'$(UseLocalMLVScanCore)' != 'true'" />
+	  
 	  <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
 	  <PackageReference Include="Mono.Cecil" Version="0.11.6" />
 	  <PackageReference Include="System.Text.Json" Version="10.0.1" />
@@ -536,7 +549,10 @@
 	<Target Name="ILRepack" AfterTargets="Build">
 		<ItemGroup>
 			<InputAssemblies Include="$(TargetPath)" />
-			<InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" />
+			<!-- Use local build output when UseLocalMLVScanCore is true -->
+			<InputAssemblies Include="..\MLVScan.Core\bin\Release\netstandard2.1\MLVScan.Core.dll" Condition="'$(UseLocalMLVScanCore)' == 'true'" />
+			<!-- Use NuGet package when UseLocalMLVScanCore is false or not set -->
+			<InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" Condition="'$(UseLocalMLVScanCore)' != 'true'" />
 		</ItemGroup>
 		<Exec Command="$(PkgILRepack)\tools\ILRepack.exe /parallel /union /lib:&quot;D:\SteamLibrary\steamapps\common\Schedule I_alternate\Schedule I_Data\Managed&quot; /lib:&quot;D:\SteamLibrary\steamapps\common\Schedule I_alternate\MelonLoader\net35&quot; /out:&quot;$(OutputPath)$(AssemblyName).merged.dll&quot; &quot;@(InputAssemblies, '&quot; &quot;')&quot;" />
 		<Copy SourceFiles="$(OutputPath)$(AssemblyName).merged.dll" DestinationFiles="$(TargetPath)" />

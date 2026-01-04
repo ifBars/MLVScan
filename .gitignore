@@ -3,3 +3,8 @@
 /obj/
 /.idea/
 nexus-post.bbcode
+local.build.props
+AGENTS.md
+CLAUDE.md
+LOCAL_DEV_GUIDE.md
+nexuspost.bbcode
