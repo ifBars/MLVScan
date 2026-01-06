@@ -27,7 +27,7 @@ Detailed documentation is available in the **[MLVScan Wiki](https://github.com/i
 ## 🛡️ Powered by MLVScan.Core
 
 MLVScan is built on **[MLVScan.Core](https://github.com/ifBars/MLVScan.Core)**, a cross-platform malware detection engine.
-The same protection is also available for web browsers via **[MLVScanWeb](https://github.com/ifBars/MLVScanWeb)**.
+The same protection is also available for web browsers via **[MLVScan.Web](https://github.com/ifBars/MLVScan.Web)**.
 
 ## 🤝 Contributing
 
