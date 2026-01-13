@@ -26,6 +26,7 @@ namespace MLVScan.Services
                 return;
 
             _logger.Msg("======= DEVELOPER SCAN REPORT =======");
+            _logger.Msg(PlatformConstants.GetFullVersionInfo());
             _logger.Msg($"Mod: {modName}");
             _logger.Msg("--------------------------------------");
             _logger.Msg($"Total findings: {findings.Count}");
@@ -101,6 +102,7 @@ namespace MLVScan.Services
         {
             var sb = new StringBuilder();
             sb.AppendLine("======= MLVScan Developer Report =======");
+            sb.AppendLine(PlatformConstants.GetFullVersionInfo());
             sb.AppendLine($"Mod: {modName}");
             sb.AppendLine($"SHA256: {hash}");
             sb.AppendLine($"Scan Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");

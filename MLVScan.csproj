@@ -519,6 +519,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Core.cs" />
+    <Compile Include="PlatformConstants.cs" />
     <Compile Include="Models\DisabledModInfo.cs" />
     <Compile Include="Adapters\MelonScanLogger.cs" />
     <Compile Include="Adapters\GameAssemblyResolverProvider.cs" />

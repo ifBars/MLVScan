@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", "1.6.0", "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", MLVScan.PlatformConstants.PlatformVersion, "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
@@ -144,6 +144,7 @@ namespace MLVScan
             }
 
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
+            LoggerInstance.Msg(PlatformConstants.GetFullVersionInfo());
 
             foreach (var modInfo in disabledMods)
             {
@@ -280,6 +281,7 @@ namespace MLVScan
                         {
                             // Standard security report
                             writer.WriteLine($"MLVScan Security Report");
+                            writer.WriteLine(PlatformConstants.GetFullVersionInfo());
                             writer.WriteLine($"Generated: {DateTime.Now}");
                             writer.WriteLine($"Mod File: {modName}");
                             writer.WriteLine($"SHA256 Hash: {fileHash}");
