@@ -544,7 +544,7 @@
 	  
 	  <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
 	  <PackageReference Include="Mono.Cecil" Version="0.11.6" />
-	  <PackageReference Include="System.Text.Json" Version="10.0.1" />
+	  <PackageReference Include="System.Text.Json" Version="10.0.2" />
 	</ItemGroup>
 	
 	<Target Name="ILRepack" AfterTargets="Build">
