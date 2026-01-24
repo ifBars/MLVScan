@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MelonLoader;
+using MLVScan.MelonLoader;
 using MLVScan.Models;
 using MLVScan.Services;
 
@@ -15,9 +16,10 @@ namespace MLVScan
     public class Core : MelonPlugin
     {
         private ServiceFactory _serviceFactory;
-        private ConfigManager _configManager;
-        private ModScanner _modScanner;
-        private ModDisabler _modDisabler;
+        private MelonConfigManager _configManager;
+        private MelonPlatformEnvironment _environment;
+        private MelonPluginScanner _pluginScanner;
+        private MelonPluginDisabler _pluginDisabler;
         private IlDumpService _ilDumpService;
         private DeveloperReportGenerator _developerReportGenerator;
         private bool _initialized = false;
@@ -40,11 +42,12 @@ namespace MLVScan
 
                 _serviceFactory = new ServiceFactory(LoggerInstance);
                 _configManager = _serviceFactory.CreateConfigManager();
+                _environment = _serviceFactory.CreateEnvironment();
 
                 InitializeDefaultWhitelist();
 
-                _modScanner = _serviceFactory.CreateModScanner();
-                _modDisabler = _serviceFactory.CreateModDisabler();
+                _pluginScanner = _serviceFactory.CreatePluginScanner();
+                _pluginDisabler = _serviceFactory.CreatePluginDisabler();
                 _ilDumpService = _serviceFactory.CreateIlDumpService();
                 _developerReportGenerator = _serviceFactory.CreateDeveloperReportGenerator();
 
@@ -103,7 +106,7 @@ namespace MLVScan
                 }
 
                 LoggerInstance.Msg("Scanning for suspicious mods...");
-                var scanResults = _modScanner.ScanAllMods(force);
+                var scanResults = _pluginScanner.ScanAllPlugins(force);
 
                 var filteredResults = scanResults
                     .Where(kv => kv.Value.Count > 0 && kv.Value.Any(f => f.Location != "Assembly scanning"))
@@ -111,7 +114,7 @@ namespace MLVScan
 
                 if (filteredResults.Count > 0)
                 {
-                    var disabledMods = _modDisabler.DisableSuspiciousMods(filteredResults, force);
+                    var disabledMods = _pluginDisabler.DisableSuspiciousPlugins(filteredResults, force);
                     var disabledCount = disabledMods.Count;
                     LoggerInstance.Msg($"Disabled {disabledCount} suspicious mods");
 
@@ -135,7 +138,7 @@ namespace MLVScan
             }
         }
 
-        private void GenerateDetailedReports(List<DisabledModInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
+        private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
             var isDeveloperMode = _configManager?.Config?.DeveloperMode ?? false;
 

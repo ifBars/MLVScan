@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
-using MelonLoader;
+using MLVScan.Abstractions;
 using MLVScan.Models;
 
 namespace MLVScan.Services
@@ -10,9 +13,9 @@ namespace MLVScan.Services
     /// </summary>
     public class DeveloperReportGenerator
     {
-        private readonly MelonLogger.Instance _logger;
+        private readonly IScanLogger _logger;
 
-        public DeveloperReportGenerator(MelonLogger.Instance logger)
+        public DeveloperReportGenerator(IScanLogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -25,12 +28,12 @@ namespace MLVScan.Services
             if (findings == null || findings.Count == 0)
                 return;
 
-            _logger.Msg("======= DEVELOPER SCAN REPORT =======");
-            _logger.Msg(PlatformConstants.GetFullVersionInfo());
-            _logger.Msg($"Mod: {modName}");
-            _logger.Msg("--------------------------------------");
-            _logger.Msg($"Total findings: {findings.Count}");
-            _logger.Msg("");
+            _logger.Info("======= DEVELOPER SCAN REPORT =======");
+            _logger.Info(PlatformConstants.GetFullVersionInfo());
+            _logger.Info($"Mod: {modName}");
+            _logger.Info("--------------------------------------");
+            _logger.Info($"Total findings: {findings.Count}");
+            _logger.Info("");
 
             var groupedByRule = findings
                 .Where(f => f.RuleId != null)
@@ -42,57 +45,57 @@ namespace MLVScan.Services
                 var firstFinding = ruleGroup.First();
                 var count = ruleGroup.Count();
 
-                _logger.Msg($"[{firstFinding.Severity}] {firstFinding.Description}");
-                _logger.Msg($"  Rule: {firstFinding.RuleId}");
-                _logger.Msg($"  Occurrences: {count}");
+                _logger.Info($"[{firstFinding.Severity}] {firstFinding.Description}");
+                _logger.Info($"  Rule: {firstFinding.RuleId}");
+                _logger.Info($"  Occurrences: {count}");
 
                 // Show developer guidance if available
                 if (firstFinding.DeveloperGuidance != null)
                 {
-                    _logger.Msg("");
-                    _logger.Msg("  Developer Guidance:");
-                    _logger.Msg($"  {WrapText(firstFinding.DeveloperGuidance.Remediation, 2)}");
+                    _logger.Info("");
+                    _logger.Info("  Developer Guidance:");
+                    _logger.Info($"  {WrapText(firstFinding.DeveloperGuidance.Remediation, 2)}");
 
                     if (!string.IsNullOrEmpty(firstFinding.DeveloperGuidance.DocumentationUrl))
                     {
-                        _logger.Msg($"  Documentation: {firstFinding.DeveloperGuidance.DocumentationUrl}");
+                        _logger.Info($"  Documentation: {firstFinding.DeveloperGuidance.DocumentationUrl}");
                     }
 
                     if (firstFinding.DeveloperGuidance.AlternativeApis != null &&
                         firstFinding.DeveloperGuidance.AlternativeApis.Length > 0)
                     {
-                        _logger.Msg($"  Suggested APIs: {string.Join(", ", firstFinding.DeveloperGuidance.AlternativeApis)}");
+                        _logger.Info($"  Suggested APIs: {string.Join(", ", firstFinding.DeveloperGuidance.AlternativeApis)}");
                     }
 
                     if (!firstFinding.DeveloperGuidance.IsRemediable)
                     {
-                        _logger.Warning("  ⚠ No safe alternative - this pattern should not be used in MelonLoader mods.");
+                        _logger.Warning("  No safe alternative - this pattern should not be used in mods.");
                     }
                 }
                 else
                 {
-                    _logger.Msg("  (No developer guidance available for this rule)");
+                    _logger.Info("  (No developer guidance available for this rule)");
                 }
 
                 // Show sample locations
-                _logger.Msg("");
-                _logger.Msg("  Sample locations:");
+                _logger.Info("");
+                _logger.Info("  Sample locations:");
                 foreach (var finding in ruleGroup.Take(3))
                 {
-                    _logger.Msg($"    - {finding.Location}");
+                    _logger.Info($"    - {finding.Location}");
                 }
                 if (count > 3)
                 {
-                    _logger.Msg($"    ... and {count - 3} more");
+                    _logger.Info($"    ... and {count - 3} more");
                 }
 
-                _logger.Msg("");
-                _logger.Msg("--------------------------------------");
+                _logger.Info("");
+                _logger.Info("--------------------------------------");
             }
 
-            _logger.Msg("");
-            _logger.Msg("For more information, visit: https://discord.gg/UD4K4chKak");
-            _logger.Msg("=====================================");
+            _logger.Info("");
+            _logger.Info("For more information, visit: https://discord.gg/UD4K4chKak");
+            _logger.Info("=====================================");
         }
 
         /// <summary>
@@ -151,7 +154,7 @@ namespace MLVScan.Services
                     if (!firstFinding.DeveloperGuidance.IsRemediable)
                     {
                         sb.AppendLine("");
-                        sb.AppendLine("WARNING: This pattern has no safe alternative and should not be used in MelonLoader mods.");
+                        sb.AppendLine("WARNING: This pattern has no safe alternative and should not be used in mods.");
                     }
 
                     sb.AppendLine("");

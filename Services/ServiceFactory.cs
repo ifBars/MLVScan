@@ -1,6 +1,8 @@
+using System;
 using MelonLoader;
 using MLVScan.Abstractions;
 using MLVScan.Adapters;
+using MLVScan.MelonLoader;
 using MLVScan.Models;
 using MLVScan.Services;
 
@@ -11,33 +13,40 @@ namespace MLVScan
     /// </summary>
     public class ServiceFactory
     {
-        private readonly MelonLogger.Instance _logger;
+        private readonly MelonLogger.Instance _melonLogger;
         private readonly IScanLogger _scanLogger;
         private readonly IAssemblyResolverProvider _resolverProvider;
-        private readonly ConfigManager _configManager;
+        private readonly MelonConfigManager _configManager;
+        private readonly MelonPlatformEnvironment _environment;
         private readonly ScanConfig _fallbackConfig;
 
         public ServiceFactory(MelonLogger.Instance logger)
         {
-            _logger = logger;
+            _melonLogger = logger ?? throw new ArgumentNullException(nameof(logger));
             _scanLogger = new MelonScanLogger(logger);
             _resolverProvider = new GameAssemblyResolverProvider();
+            _environment = new MelonPlatformEnvironment();
             _fallbackConfig = new ScanConfig();
 
             try
             {
-                _configManager = new ConfigManager(logger);
+                _configManager = new MelonConfigManager(logger);
             }
             catch (Exception ex)
             {
-                _logger.Error($"Failed to create ConfigManager: {ex.Message}");
-                _logger.Msg("Using default configuration values");
+                _melonLogger.Error($"Failed to create ConfigManager: {ex.Message}");
+                _melonLogger.Msg("Using default configuration values");
             }
         }
 
-        public ConfigManager CreateConfigManager()
+        public MelonConfigManager CreateConfigManager()
         {
             return _configManager;
+        }
+
+        public MelonPlatformEnvironment CreateEnvironment()
+        {
+            return _environment;
         }
 
         public AssemblyScanner CreateAssemblyScanner()
@@ -48,33 +57,37 @@ namespace MLVScan
             return new AssemblyScanner(rules, config, _resolverProvider);
         }
 
-        public ModScanner CreateModScanner()
+        public MelonPluginScanner CreatePluginScanner()
         {
-            var assemblyScanner = CreateAssemblyScanner();
             var config = _configManager?.Config ?? _fallbackConfig;
-            return new ModScanner(assemblyScanner, _logger, config, _configManager);
+            return new MelonPluginScanner(
+                _scanLogger,
+                _resolverProvider,
+                config,
+                _configManager,
+                _environment);
         }
 
-        public ModDisabler CreateModDisabler()
+        public MelonPluginDisabler CreatePluginDisabler()
         {
             var config = _configManager?.Config ?? _fallbackConfig;
-            return new ModDisabler(_logger, config);
+            return new MelonPluginDisabler(_scanLogger, config);
         }
 
         public PromptGeneratorService CreatePromptGenerator()
         {
             var config = _configManager?.Config ?? _fallbackConfig;
-            return new PromptGeneratorService(config, _logger);
+            return new PromptGeneratorService(config, _scanLogger);
         }
 
         public IlDumpService CreateIlDumpService()
         {
-            return new IlDumpService(_logger);
+            return new IlDumpService(_scanLogger, _environment);
         }
 
         public DeveloperReportGenerator CreateDeveloperReportGenerator()
         {
-            return new DeveloperReportGenerator(_logger);
+            return new DeveloperReportGenerator(_scanLogger);
         }
     }
 }
