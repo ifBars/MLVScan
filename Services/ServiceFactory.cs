@@ -60,7 +60,7 @@ namespace MLVScan
             var config = _configManager?.Config ?? _fallbackConfig;
             return new ModDisabler(_logger, config);
         }
-        
+
         public PromptGeneratorService CreatePromptGenerator()
         {
             var config = _configManager?.Config ?? _fallbackConfig;

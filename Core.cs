@@ -1,10 +1,10 @@
-using MelonLoader;
-using MLVScan.Models;
-using MLVScan.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using MelonLoader;
+using MLVScan.Models;
+using MLVScan.Services;
 
 [assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", MLVScan.PlatformConstants.PlatformVersion, "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
@@ -37,7 +37,7 @@ namespace MLVScan
             try
             {
                 LoggerInstance.Msg("Pre-scanning for malicious mods...");
-                
+
                 _serviceFactory = new ServiceFactory(LoggerInstance);
                 _configManager = _serviceFactory.CreateConfigManager();
 
@@ -115,7 +115,8 @@ namespace MLVScan
                     var disabledCount = disabledMods.Count;
                     LoggerInstance.Msg($"Disabled {disabledCount} suspicious mods");
 
-                    if (disabledCount <= 0) return filteredResults;
+                    if (disabledCount <= 0)
+                        return filteredResults;
                     GenerateDetailedReports(disabledMods, filteredResults);
 
                     LoggerInstance.Msg("To whitelist any false positives, add their SHA256 hash to the MLVScan → WhitelistedHashes setting in MelonPreferences.cfg");
@@ -217,9 +218,9 @@ namespace MLVScan
                             {
                                 LoggerInstance.Msg($"    Code Snippet (IL):");
                                 foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                                    {
-                                        LoggerInstance.Msg($"      {line}");
-                                    }
+                                {
+                                    LoggerInstance.Msg($"      {line}");
+                                }
                             }
                         }
 
@@ -323,10 +324,10 @@ namespace MLVScan
 
                     // Generate LLM analysis prompt
                     var promptSaved = promptGenerator.SavePromptToFile(
-                        accessiblePath, 
-                        actualFindings, 
+                        accessiblePath,
+                        actualFindings,
                         promptDirectory);
-                        
+
                     if (promptSaved)
                     {
                         LoggerInstance.Msg($"Detailed report saved to: {reportPath}");

@@ -6,8 +6,8 @@
     <RootNamespace>MLVScan</RootNamespace>
     <LangVersion>default</LangVersion>
     <IsPackable>false</IsPackable>
-    <AssemblyVersion>1.6.0</AssemblyVersion>
-    <FileVersion>1.6.0</FileVersion>
+    <AssemblyVersion>1.6.1</AssemblyVersion>
+    <FileVersion>1.6.1</FileVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
     <AssemblyName>MLVScan.MelonLoader</AssemblyName>
     <LangVersion>latest</LangVersion>

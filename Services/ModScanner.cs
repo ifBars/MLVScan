@@ -1,11 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using MelonLoader;
 using MelonLoader.Utils;
 using MLVScan.Models;
-using System.Security.Cryptography;
-using System.IO;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace MLVScan.Services
 {
@@ -75,7 +75,8 @@ namespace MLVScan.Services
                     }
 
                     var findings = _assemblyScanner.Scan(modFile).ToList();
-                    if (findings.Count < _config.SuspiciousThreshold) continue;
+                    if (findings.Count < _config.SuspiciousThreshold)
+                        continue;
                     results.Add(modFile, findings);
                     _logger.Warning($"Found {findings.Count} suspicious patterns in {Path.GetFileName(modFile)}");
                 }
