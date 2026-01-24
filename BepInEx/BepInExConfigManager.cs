@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using BepInEx;
 using BepInEx.Logging;
 using MLVScan.Abstractions;
 using MLVScan.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace MLVScan.BepInEx
 {
@@ -21,12 +21,11 @@ namespace MLVScan.BepInEx
         private readonly string _configPath;
         private ScanConfig _config;
 
-        // JSON serialization options
-        private static readonly JsonSerializerOptions JsonOptions = new()
+        // JSON serialization settings
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
         {
-            WriteIndented = true,
-            PropertyNameCaseInsensitive = true,
-            Converters = { new JsonStringEnumConverter() }
+            Formatting = Formatting.Indented,
+            Converters = { new StringEnumConverter() }
         };
 
         public BepInExConfigManager(ManualLogSource logger, string[] defaultWhitelistedHashes = null)
@@ -48,7 +47,7 @@ namespace MLVScan.BepInEx
                 if (File.Exists(_configPath))
                 {
                     var json = File.ReadAllText(_configPath);
-                    var loaded = JsonSerializer.Deserialize<ScanConfig>(json, JsonOptions);
+                    var loaded = JsonConvert.DeserializeObject<ScanConfig>(json, JsonSettings);
 
                     if (loaded != null)
                     {
@@ -97,7 +96,7 @@ namespace MLVScan.BepInEx
                     Directory.CreateDirectory(configDir);
                 }
 
-                var json = JsonSerializer.Serialize(config, JsonOptions);
+                var json = JsonConvert.SerializeObject(config, JsonSettings);
 
                 File.WriteAllText(_configPath, json);
                 _config = config;
