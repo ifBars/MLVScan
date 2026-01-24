@@ -1,6 +1,6 @@
+using System.Text;
 using MelonLoader;
 using MLVScan.Models;
-using System.Text;
 
 namespace MLVScan.Services
 {
@@ -58,7 +58,7 @@ namespace MLVScan.Services
                         _logger.Msg($"  Documentation: {firstFinding.DeveloperGuidance.DocumentationUrl}");
                     }
 
-                    if (firstFinding.DeveloperGuidance.AlternativeApis != null && 
+                    if (firstFinding.DeveloperGuidance.AlternativeApis != null &&
                         firstFinding.DeveloperGuidance.AlternativeApis.Length > 0)
                     {
                         _logger.Msg($"  Suggested APIs: {string.Join(", ", firstFinding.DeveloperGuidance.AlternativeApis)}");

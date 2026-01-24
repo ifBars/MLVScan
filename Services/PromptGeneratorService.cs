@@ -1,12 +1,12 @@
-using MLVScan.Models;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
-using System.Collections.Generic;
+using MLVScan.Models;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using System.Reflection;
 
 namespace MLVScan.Services
 {
@@ -14,7 +14,7 @@ namespace MLVScan.Services
     {
         private readonly ScanConfig _config;
         private readonly MelonLoader.MelonLogger.Instance _logger;
-        
+
         public PromptGeneratorService(ScanConfig config, MelonLoader.MelonLogger.Instance logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -69,11 +69,11 @@ namespace MLVScan.Services
                 sb.AppendLine($"- **Severity**: {group.Value[0].Severity}");
                 sb.AppendLine($"- **Occurrences**: {group.Value.Count}");
                 sb.AppendLine("- **Locations & Snippets**:");
-                
+
                 foreach (var finding in group.Value.Take(5)) // Show details for up to 5 instances
                 {
                     sb.AppendLine($"  - **Location**: {finding.Location}");
-                    
+
                     if (!string.IsNullOrEmpty(finding.CodeSnippet))
                     {
                         sb.AppendLine("    **IL Snippet (Exact location of suspicious call)**:");
@@ -84,7 +84,7 @@ namespace MLVScan.Services
                         }
                         sb.AppendLine("    ```");
                     }
-                    
+
                     if (methodDecompilations.TryGetValue(finding.Location, out var csharpDecompiledMethod) && !string.IsNullOrWhiteSpace(csharpDecompiledMethod))
                     {
                         sb.AppendLine("    **Attempted C# Decompilation (Entire Method Context & Type Info)**:");
@@ -100,15 +100,15 @@ namespace MLVScan.Services
                     {
                         sb.AppendLine("    **Surrounding Class Structure (Member Signatures Only)**:");
                         sb.AppendLine("    ```csharp");
-                         foreach (var line in classStructureString.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        foreach (var line in classStructureString.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                         {
                             sb.AppendLine($"    {line}");
                         }
                         sb.AppendLine("    ```");
                     }
-                    sb.AppendLine(); 
+                    sb.AppendLine();
                 }
-                
+
                 if (group.Value.Count > 5)
                 {
                     sb.AppendLine($"  - *And {group.Value.Count - 5} more occurrences (details omitted for brevity)*");
@@ -147,7 +147,7 @@ namespace MLVScan.Services
         {
             var methodCodeBlocks = new Dictionary<string, string>();
             var classStructures = new Dictionary<string, string>();
-            
+
             try
             {
                 if (!File.Exists(modPath))
@@ -161,7 +161,7 @@ namespace MLVScan.Services
                 };
 
                 using var assembly = AssemblyDefinition.ReadAssembly(modPath, readerParameters);
-                
+
                 var suspiciousStrings = new Dictionary<string, List<string>>();
                 foreach (var module in assembly.Modules)
                 {
@@ -170,13 +170,13 @@ namespace MLVScan.Services
                         CollectSuspiciousStrings(type, suspiciousStrings);
                     }
                 }
-                
+
                 if (suspiciousStrings.Any())
                 {
                     var sbStrings = new StringBuilder();
                     sbStrings.AppendLine("// Notable string literals found in the assembly:");
                     sbStrings.AppendLine();
-                    
+
                     foreach (var category in suspiciousStrings.Keys.OrderBy(k => k))
                     {
                         sbStrings.AppendLine($"// Potential {category}:");
@@ -184,17 +184,17 @@ namespace MLVScan.Services
                         {
                             sbStrings.AppendLine($"//   \"{EscapeStringForCode(str)}\"");
                         }
-                        
+
                         if (suspiciousStrings[category].Count > 10)
                         {
                             sbStrings.AppendLine($"//   ... and {suspiciousStrings[category].Count - 10} more");
                         }
                         sbStrings.AppendLine();
                     }
-                    
+
                     methodCodeBlocks["SuspiciousStrings"] = sbStrings.ToString();
                 }
-                
+
                 foreach (var finding in findings)
                 {
                     try
@@ -202,7 +202,7 @@ namespace MLVScan.Services
                         var location = finding.Location;
                         if (location == "Assembly scanning" || !location.Contains("."))
                             continue;
-                            
+
                         var methodOffset = string.Empty;
                         string typeNameFromFinding;
                         string methodNameFromFinding;
@@ -213,26 +213,29 @@ namespace MLVScan.Services
                             var fullMethodPath = parts[0];
                             methodOffset = parts[1];
                             var lastDotIndex = fullMethodPath.LastIndexOf('.');
-                            if (lastDotIndex <= 0) continue;
+                            if (lastDotIndex <= 0)
+                                continue;
                             typeNameFromFinding = fullMethodPath.Substring(0, lastDotIndex);
                             methodNameFromFinding = fullMethodPath.Substring(lastDotIndex + 1);
                         }
                         else // Format: Namespace.Type.Method (likely a DllImport)
                         {
                             var lastDotIndex = location.LastIndexOf('.');
-                            if (lastDotIndex <= 0) continue;
+                            if (lastDotIndex <= 0)
+                                continue;
                             typeNameFromFinding = location.Substring(0, lastDotIndex);
                             methodNameFromFinding = location.Substring(lastDotIndex + 1);
                         }
-                        
+
                         var typeDefinition = FindType(assembly.MainModule, typeNameFromFinding);
-                        if (typeDefinition == null) continue;
-                        
+                        if (typeDefinition == null)
+                            continue;
+
                         // Generate and store class structure (once per type for efficiency, mapped by finding location)
                         if (!classStructures.ContainsKey(finding.Location) || classStructures[finding.Location] == string.Empty) // Check to avoid recomputing for same type via different findings if keying by typeName
                         {
-                             // We want to store it per finding location for easy lookup in GeneratePrompt
-                             classStructures[finding.Location] = GenerateClassStructure(typeDefinition, methodNameFromFinding);
+                            // We want to store it per finding location for easy lookup in GeneratePrompt
+                            classStructures[finding.Location] = GenerateClassStructure(typeDefinition, methodNameFromFinding);
                         }
 
                         var methodDefinition = typeDefinition.Methods.FirstOrDefault(m => m.Name == methodNameFromFinding);
@@ -244,18 +247,18 @@ namespace MLVScan.Services
                             // We still want class context if possible.
                             if (!methodCodeBlocks.ContainsKey(finding.Location)) // Avoid overwriting if already processed (e.g. from SuspiciousStrings)
                             {
-                                 methodCodeBlocks[finding.Location] = $"// DllImport or external method: {finding.Location}. Primary context is the IL snippet and class structure.";
+                                methodCodeBlocks[finding.Location] = $"// DllImport or external method: {finding.Location}. Primary context is the IL snippet and class structure.";
                             }
-                            continue; 
+                            continue;
                         }
-                        
+
                         if (!methodDefinition.HasBody && !methodDefinition.IsAbstract) // Abstract methods are fine, but others need a body
                         {
-                             if (!methodCodeBlocks.ContainsKey(finding.Location))
-                             {
+                            if (!methodCodeBlocks.ContainsKey(finding.Location))
+                            {
                                 methodCodeBlocks[finding.Location] = $"// Method {methodNameFromFinding} has no body or is abstract.";
-                             }
-                             continue;
+                            }
+                            continue;
                         }
 
                         var codeBlock = DecompileMethod(methodDefinition); // This is the existing method decompilation
@@ -266,22 +269,27 @@ namespace MLVScan.Services
                             if (typeDefinition.HasCustomAttributes)
                             {
                                 contextBuilder.AppendLine("// Type attributes:");
-                                foreach (var attr in typeDefinition.CustomAttributes.Take(5)) { contextBuilder.AppendLine($"// - {attr.AttributeType.Name}"); }
-                                if (typeDefinition.CustomAttributes.Count > 5) { contextBuilder.AppendLine($"// - ...and {typeDefinition.CustomAttributes.Count - 5} more");}
+                                foreach (var attr in typeDefinition.CustomAttributes.Take(5))
+                                { contextBuilder.AppendLine($"// - {attr.AttributeType.Name}"); }
+                                if (typeDefinition.CustomAttributes.Count > 5)
+                                { contextBuilder.AppendLine($"// - ...and {typeDefinition.CustomAttributes.Count - 5} more"); }
                             }
-                            if (typeDefinition.BaseType != null && typeDefinition.BaseType.FullName != "System.Object") { contextBuilder.AppendLine($"// Inherits from: {typeDefinition.BaseType.FullName}");}
+                            if (typeDefinition.BaseType != null && typeDefinition.BaseType.FullName != "System.Object")
+                            { contextBuilder.AppendLine($"// Inherits from: {typeDefinition.BaseType.FullName}"); }
                             var relatedMethods = FindRelatedSuspiciousMethods(typeDefinition, methodDefinition);
                             if (relatedMethods.Any())
                             {
                                 contextBuilder.AppendLine("// Other suspicious methods in this class (names only):");
-                                foreach (var relatedMethod in relatedMethods.Take(3)) { contextBuilder.AppendLine($"// - {relatedMethod.Name}");}
-                                if (relatedMethods.Count > 3) { contextBuilder.AppendLine($"// - ...and {relatedMethods.Count - 3} more");}
+                                foreach (var relatedMethod in relatedMethods.Take(3))
+                                { contextBuilder.AppendLine($"// - {relatedMethod.Name}"); }
+                                if (relatedMethods.Count > 3)
+                                { contextBuilder.AppendLine($"// - ...and {relatedMethods.Count - 3} more"); }
                             }
                             contextBuilder.AppendLine();
                             contextBuilder.AppendLine($"// Finding Description: {finding.Description}");
                             contextBuilder.AppendLine($"// Severity: {finding.Severity}");
                             contextBuilder.AppendLine();
-                            
+
                             methodCodeBlocks[finding.Location] = contextBuilder.ToString() + codeBlock;
                         }
                     }
@@ -291,22 +299,22 @@ namespace MLVScan.Services
                         methodCodeBlocks[finding.Location] = $"// Error extracting detailed code for {finding.Location}: {ex.Message}";
                     }
                 }
-                
+
                 if (assembly.MainModule.Resources.Any())
                 {
                     var sbResources = new StringBuilder();
                     sbResources.AppendLine("// Assembly Resources (could contain hidden payloads):");
-                    
+
                     foreach (var resource in assembly.MainModule.Resources.Take(20))
                     {
                         sbResources.AppendLine($"//   {resource.Name} - {GetResourceTypeName(resource)}");
                     }
-                    
+
                     if (assembly.MainModule.Resources.Count > 20)
                     {
                         sbResources.AppendLine($"//   ...and {assembly.MainModule.Resources.Count - 20} more resources");
                     }
-                    
+
                     methodCodeBlocks["Assembly.Resources"] = sbResources.ToString();
                 }
             }
@@ -314,17 +322,18 @@ namespace MLVScan.Services
             {
                 _logger.Error($"Failed to extract code blocks from {modPath}: {ex.Message}");
             }
-            
+
             return Tuple.Create(methodCodeBlocks, classStructures);
         }
-        
+
         private void CollectSuspiciousStrings(TypeDefinition type, Dictionary<string, List<string>> suspiciousStrings)
         {
             // Process this type
             foreach (var method in type.Methods)
             {
-                if (!method.HasBody) continue;
-                
+                if (!method.HasBody)
+                    continue;
+
                 foreach (var instruction in method.Body.Instructions)
                 {
                     if (instruction.OpCode.Name == "ldstr" && instruction.Operand is string str)
@@ -336,7 +345,7 @@ namespace MLVScan.Services
                             {
                                 suspiciousStrings[category] = new List<string>();
                             }
-                            
+
                             if (!suspiciousStrings[category].Contains(str))
                             {
                                 suspiciousStrings[category].Add(str);
@@ -345,14 +354,14 @@ namespace MLVScan.Services
                     }
                 }
             }
-            
+
             // Process nested types recursively
             foreach (var nestedType in type.NestedTypes)
             {
                 CollectSuspiciousStrings(nestedType, suspiciousStrings);
             }
         }
-        
+
         private bool IsSuspiciousString(string value, out string category)
         {
             if (string.IsNullOrEmpty(value))
@@ -360,105 +369,106 @@ namespace MLVScan.Services
                 category = string.Empty;
                 return false;
             }
-            
+
             // Check for potential Base64 encoded content
             if (value.Length > 20 && IsLikelyBase64(value))
             {
                 category = "Base64 encoded data";
                 return true;
             }
-            
+
             // Check for URLs or network addresses
-            if (value.StartsWith("http://") || value.StartsWith("https://") || 
+            if (value.StartsWith("http://") || value.StartsWith("https://") ||
                 value.StartsWith("ftp://") || value.StartsWith("ws://"))
             {
                 category = "URL";
                 return true;
             }
-            
-            if (value.Contains(".exe") || value.Contains(".dll") || value.Contains(".bat") || 
+
+            if (value.Contains(".exe") || value.Contains(".dll") || value.Contains(".bat") ||
                 value.Contains(".cmd") || value.Contains(".ps1") || value.Contains(".vbs"))
             {
                 category = "executable file reference";
                 return true;
             }
-            
+
             // Check for IP addresses
             if (IsLikelyIPAddress(value))
             {
                 category = "IP address";
                 return true;
             }
-            
+
             // Check for registry paths
-            if (value.StartsWith("HKEY_") || value.Contains("\\Software\\") || 
+            if (value.StartsWith("HKEY_") || value.Contains("\\Software\\") ||
                 value.Contains("\\Microsoft\\") || value.Contains("\\System\\"))
             {
                 category = "registry path";
                 return true;
             }
-            
+
             // Check for commands that might be executed
-            if (value.StartsWith("cmd ") || value.StartsWith("powershell ") || 
+            if (value.StartsWith("cmd ") || value.StartsWith("powershell ") ||
                 value.Contains(" /c ") || value.Contains(" /k "))
             {
                 category = "command line";
                 return true;
             }
-            
+
             // Check for cryptographic indicators
-            if (value.Contains("encrypt") || value.Contains("decrypt") || 
-                value.Contains("aes") || value.Contains("rsa") || value.Contains("md5") || 
+            if (value.Contains("encrypt") || value.Contains("decrypt") ||
+                value.Contains("aes") || value.Contains("rsa") || value.Contains("md5") ||
                 value.Contains("sha") || value.Contains("hash"))
             {
                 category = "cryptographic reference";
                 return true;
             }
-            
+
             // Check for potentially malicious domains
-            if ((value.Contains(".") && !value.Contains(" ") && !value.Contains("\\") && 
-                 !value.EndsWith(".cs") && !value.EndsWith(".txt") && value.Length > 5) || 
-                value.Contains("pastebin") || value.Contains("discord") || 
+            if ((value.Contains(".") && !value.Contains(" ") && !value.Contains("\\") &&
+                 !value.EndsWith(".cs") && !value.EndsWith(".txt") && value.Length > 5) ||
+                value.Contains("pastebin") || value.Contains("discord") ||
                 value.Contains("webhook"))
             {
                 category = "domain or web service";
                 return true;
             }
-            
+
             category = string.Empty;
             return false;
         }
-        
+
         private bool IsLikelyBase64(string value)
         {
             // Simple heuristic for base64 encoded content
-            if (value.Length % 4 != 0) return false;
-            
+            if (value.Length % 4 != 0)
+                return false;
+
             // Check for common base64 characters
             foreach (var c in value)
             {
-                if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || 
+                if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
                       (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '='))
                 {
                     return false;
                 }
             }
-            
+
             // If it's longer than 20 chars and has a good distribution of characters, likely base64
-            return value.Length > 20 && value.Any(c => c >= 'A' && c <= 'Z') && 
+            return value.Length > 20 && value.Any(c => c >= 'A' && c <= 'Z') &&
                    value.Any(c => c >= 'a' && c <= 'z') && value.Any(c => c >= '0' && c <= '9');
         }
-        
+
         private bool IsLikelyIPAddress(string value)
         {
             // Simple check for IP v4 or v6 address patterns
             var ipv4Pattern = @"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}";
             var ipv6Pattern = @"^[0-9a-fA-F:]+";
-            
-            return System.Text.RegularExpressions.Regex.IsMatch(value, ipv4Pattern) || 
+
+            return System.Text.RegularExpressions.Regex.IsMatch(value, ipv4Pattern) ||
                    System.Text.RegularExpressions.Regex.IsMatch(value, ipv6Pattern);
         }
-        
+
         private string GetResourceTypeName(Mono.Cecil.Resource resource)
         {
             if (resource is Mono.Cecil.EmbeddedResource embedded)
@@ -469,18 +479,18 @@ namespace MLVScan.Services
                 {
                     var buffer = new byte[Math.Min(stream.Length, 16)];
                     stream.Read(buffer, 0, buffer.Length);
-                    
+
                     // Check file signatures to identify binary content
                     if (buffer.Length >= 2 && buffer[0] == 0x4D && buffer[1] == 0x5A)
                     {
                         return "PE File/DLL (MZ header)";
                     }
-                    if (buffer.Length >= 4 && buffer[0] == 0x7F && buffer[1] == 0x45 && 
+                    if (buffer.Length >= 4 && buffer[0] == 0x7F && buffer[1] == 0x45 &&
                         buffer[2] == 0x4C && buffer[3] == 0x46)
                     {
                         return "ELF Binary";
                     }
-                    if (buffer.Length >= 4 && buffer[0] == 0x50 && buffer[1] == 0x4B && 
+                    if (buffer.Length >= 4 && buffer[0] == 0x50 && buffer[1] == 0x4B &&
                         buffer[2] == 0x03 && buffer[3] == 0x04)
                     {
                         return "ZIP Archive";
@@ -489,38 +499,39 @@ namespace MLVScan.Services
                     {
                         return "JPEG Image";
                     }
-                    if (buffer.Length >= 3 && buffer[0] == 0x47 && buffer[1] == 0x49 && 
+                    if (buffer.Length >= 3 && buffer[0] == 0x47 && buffer[1] == 0x49 &&
                         buffer[2] == 0x46)
                     {
                         return "GIF Image";
                     }
-                    if (buffer.Length >= 4 && ((buffer[0] == 0x89 && buffer[1] == 0x50 && 
+                    if (buffer.Length >= 4 && ((buffer[0] == 0x89 && buffer[1] == 0x50 &&
                                                 buffer[2] == 0x4E && buffer[3] == 0x47) ||
                                                (buffer[0] == 0x42 && buffer[1] == 0x4D)))
                     {
                         return "PNG or BMP Image";
                     }
-                    
+
                     return $"Binary data ({stream.Length} bytes)";
                 }
                 return "Empty resource";
             }
             return resource.ResourceType.ToString();
         }
-        
+
         private List<MethodDefinition> FindRelatedSuspiciousMethods(TypeDefinition type, MethodDefinition currentMethod)
         {
             var result = new List<MethodDefinition>();
-            
+
             foreach (var method in type.Methods)
             {
-                if (method == currentMethod || !method.HasBody) continue;
-                
+                if (method == currentMethod || !method.HasBody)
+                    continue;
+
                 foreach (var instruction in method.Body.Instructions)
                 {
-                    if ((instruction.OpCode.Name == "call" || instruction.OpCode.Name == "callvirt" || 
-                         instruction.OpCode.Name == "newobj") && 
-                        instruction.Operand is MethodReference methodRef && 
+                    if ((instruction.OpCode.Name == "call" || instruction.OpCode.Name == "callvirt" ||
+                         instruction.OpCode.Name == "newobj") &&
+                        instruction.Operand is MethodReference methodRef &&
                         IsSuspiciousMethodCall(methodRef))
                     {
                         result.Add(method);
@@ -528,52 +539,52 @@ namespace MLVScan.Services
                     }
                 }
             }
-            
+
             return result;
         }
-        
+
         private TypeDefinition FindType(ModuleDefinition module, string fullTypeName)
         {
             foreach (var type in module.Types)
             {
                 if (type.FullName == fullTypeName)
                     return type;
-                    
+
                 // Check nested types
                 var nestedType = FindNestedType(type, fullTypeName);
                 if (nestedType != null)
                     return nestedType;
             }
-            
+
             return null;
         }
-        
+
         private TypeDefinition FindNestedType(TypeDefinition parentType, string fullTypeName)
         {
             foreach (var nestedType in parentType.NestedTypes)
             {
                 if (nestedType.FullName == fullTypeName)
                     return nestedType;
-                    
+
                 var foundType = FindNestedType(nestedType, fullTypeName);
                 if (foundType != null)
                     return foundType;
             }
-            
+
             return null;
         }
-        
+
         private string DecompileMethod(MethodDefinition method)
         {
             if (!method.HasBody)
                 return string.Empty;
-                
+
             var sb = new StringBuilder();
-            
+
             // Add method signature
             sb.AppendLine($"{GetMethodVisibility(method)} {method.ReturnType.Name} {method.Name}({GetMethodParameters(method)})");
             sb.AppendLine("{");
-            
+
             // Attempt to reconstruct high-level C# code from IL instructions
             var reconstructedCode = ReconstructCode(method);
             if (!string.IsNullOrEmpty(reconstructedCode))
@@ -584,34 +595,34 @@ namespace MLVScan.Services
             {
                 // Fallback to a more detailed version of IL instructions
                 sb.AppendLine("    // Method body:");
-                
+
                 // Track if we're inside a try/catch block
                 var exceptionHandlers = method.Body.ExceptionHandlers.ToList();
                 var handlerStarts = exceptionHandlers.Select(h => h.HandlerStart.Offset).ToHashSet();
                 var handlerEnds = exceptionHandlers.Select(h => h.HandlerEnd?.Offset ?? int.MaxValue).ToHashSet();
                 var tryStarts = exceptionHandlers.Select(h => h.TryStart.Offset).ToHashSet();
                 var tryEnds = exceptionHandlers.Select(h => h.TryEnd?.Offset ?? int.MaxValue).ToHashSet();
-                
+
                 bool inTryBlock = false;
                 bool inCatchBlock = false;
-                
+
                 // Track variable and parameter usage
                 var variables = method.Body.Variables.ToList();
                 var parameters = method.Parameters.ToList();
-                
+
                 // Group instructions by sequence
                 var instructions = method.Body.Instructions.ToList();
                 for (int i = 0; i < instructions.Count; i++)
                 {
                     var instruction = instructions[i];
-                    
+
                     // Check for try/catch block boundaries
                     if (tryStarts.Contains(instruction.Offset) && !inTryBlock)
                     {
                         sb.AppendLine("    try {");
                         inTryBlock = true;
                     }
-                    
+
                     if (handlerStarts.Contains(instruction.Offset) && !inCatchBlock)
                     {
                         var handler = exceptionHandlers.FirstOrDefault(h => h.HandlerStart.Offset == instruction.Offset);
@@ -619,33 +630,33 @@ namespace MLVScan.Services
                         inTryBlock = false;
                         inCatchBlock = true;
                     }
-                    
-                    if ((tryEnds.Contains(instruction.Offset) && inTryBlock) || 
+
+                    if ((tryEnds.Contains(instruction.Offset) && inTryBlock) ||
                         (handlerEnds.Contains(instruction.Offset) && inCatchBlock))
                     {
                         sb.AppendLine("    }");
                         inTryBlock = false;
                         inCatchBlock = false;
                     }
-                    
+
                     // Format the current instruction with enhanced context
                     var line = FormatInstructionWithContext(instruction, i, instructions, variables, parameters);
                     if (!string.IsNullOrEmpty(line))
                     {
                         // Add indentation based on nesting
                         string indent = "    ";
-                        if (inTryBlock || inCatchBlock) 
+                        if (inTryBlock || inCatchBlock)
                             indent += "    ";
-                        
+
                         sb.AppendLine($"{indent}{line}");
                     }
                 }
-                
+
                 // Close any open blocks
                 if (inTryBlock || inCatchBlock)
                     sb.AppendLine("    }");
             }
-            
+
             // Add context about method parameters and local variables
             if (method.Parameters.Count > 0)
             {
@@ -656,7 +667,7 @@ namespace MLVScan.Services
                     sb.AppendLine($"    // {parameter.ParameterType.FullName} {parameter.Name}");
                 }
             }
-            
+
             if (method.Body.Variables.Count > 0)
             {
                 sb.AppendLine();
@@ -666,7 +677,7 @@ namespace MLVScan.Services
                     sb.AppendLine($"    // {variable.VariableType.FullName} var_{variable.Index}");
                 }
             }
-            
+
             // Show references to suspicious APIs
             var suspiciousApis = FindSuspiciousApiCalls(method);
             if (suspiciousApis.Any())
@@ -678,26 +689,26 @@ namespace MLVScan.Services
                     sb.AppendLine($"    // {api}");
                 }
             }
-            
+
             sb.AppendLine("}");
-            
+
             return sb.ToString();
         }
-        
+
         private string ReconstructCode(MethodDefinition method)
         {
             var sb = new StringBuilder();
-            
+
             try
             {
                 // This is a simplified attempt to convert IL to C# code
                 // It won't handle all cases, but will try to provide more readable output
                 var instructions = method.Body.Instructions.ToList();
-                
+
                 for (int i = 0; i < instructions.Count; i++)
                 {
                     var instruction = instructions[i];
-                    
+
                     // Look for common patterns and convert them to C# syntax
                     if (instruction.OpCode.Name == "call" || instruction.OpCode.Name == "callvirt")
                     {
@@ -722,11 +733,11 @@ namespace MLVScan.Services
                         sb.AppendLine($"    // String: \"{EscapeStringForCode(stringValue)}\"");
                     }
                 }
-                
+
                 // If we couldn't reconstruct anything meaningful, return empty
                 if (sb.Length == 0)
                     return string.Empty;
-                    
+
                 return sb.ToString();
             }
             catch
@@ -735,34 +746,34 @@ namespace MLVScan.Services
                 return string.Empty;
             }
         }
-        
+
         private string EscapeStringForCode(string value)
         {
             if (string.IsNullOrEmpty(value))
                 return value;
-                
+
             return value.Replace("\"", "\\\"")
                         .Replace("\r", "\\r")
                         .Replace("\n", "\\n")
                         .Replace("\t", "\\t");
         }
-        
+
         private string GetMethodCallRepresentation(MethodReference methodRef, List<Instruction> instructions, int currentIndex)
         {
             var methodName = methodRef.Name;
             var typeName = methodRef.DeclaringType.Name;
-            
+
             // Known suspicious method patterns to highlight
             if (methodName.Contains("Process") && methodName.Contains("Start"))
             {
                 return $"System.Diagnostics.Process.Start(...) // Executes external process";
             }
-            
+
             if (methodName.Contains("Load") && typeName.Contains("Assembly"))
             {
                 return $"Assembly.{methodName}(...) // Dynamically loads code";
             }
-            
+
             if ((methodName.Contains("FromBase64") || methodName.Contains("GetString")) && typeName.Contains("Convert"))
             {
                 // Look back for string parameters
@@ -777,57 +788,57 @@ namespace MLVScan.Services
                         break;
                     }
                 }
-                
+
                 return $"Convert.{methodName}(\"{base64Value}\") // Decodes Base64 data";
             }
-            
-            if (methodName.Contains("RegOpenKey") || methodName.Contains("RegCreateKey") || 
+
+            if (methodName.Contains("RegOpenKey") || methodName.Contains("RegCreateKey") ||
                 methodName.Contains("Registry") && (methodName.Contains("Get") || methodName.Contains("Set")))
             {
                 return $"{typeName}.{methodName}(...) // Registry manipulation";
             }
-            
+
             if (methodName.Contains("CreateFile") || methodName.Contains("WriteFile") || methodName.Contains("ReadFile"))
             {
                 return $"{typeName}.{methodName}(...) // File system operation";
             }
-            
-            if (methodName.Contains("Socket") || methodName.Contains("Connect") || 
+
+            if (methodName.Contains("Socket") || methodName.Contains("Connect") ||
                 methodName.Contains("Send") || methodName.Contains("Receive"))
             {
                 return $"{typeName}.{methodName}(...) // Network communication";
             }
-            
+
             // Default representation
             return $"{typeName}.{methodName}(...)";
         }
-        
-        private string FormatInstructionWithContext(Instruction instruction, int index, 
+
+        private string FormatInstructionWithContext(Instruction instruction, int index,
             List<Instruction> allInstructions, List<VariableDefinition> variables, List<ParameterDefinition> parameters)
         {
             var opCode = instruction.OpCode.Name;
-            
+
             // Skip nop instructions to reduce noise
             if (opCode == "nop")
                 return string.Empty;
-                
+
             var result = new StringBuilder();
-            
+
             // Add instruction offset as comment for reference
             result.Append($"/* {instruction.Offset:X4} */ ");
-            
+
             // Format operand with enhanced context
             if (instruction.Operand is MethodReference methodRef)
             {
                 // For method calls, provide more context
                 result.Append($"{opCode} {methodRef.DeclaringType.FullName}.{methodRef.Name}()");
-                
+
                 // Add parameter details if available
                 if (methodRef.Parameters.Count > 0)
                 {
                     result.Append($" // Takes: {string.Join(", ", methodRef.Parameters.Select(p => p.ParameterType.Name))}");
                 }
-                
+
                 // Add special comments for known suspicious calls
                 if (IsSuspiciousMethodCall(methodRef))
                 {
@@ -860,7 +871,7 @@ namespace MLVScan.Services
                 var displayValue = stringValue;
                 if (displayValue.Length > 50)
                     displayValue = displayValue.Substring(0, 47) + "...";
-                    
+
                 result.Append($"{opCode} \"{EscapeStringForCode(displayValue)}\"");
             }
             else if (instruction.Operand is Instruction targetInstruction)
@@ -874,98 +885,103 @@ namespace MLVScan.Services
                 var operandText = instruction.Operand?.ToString() ?? string.Empty;
                 result.Append($"{opCode} {operandText}");
             }
-            
+
             return result.ToString();
         }
-        
+
         private bool IsSuspiciousMethodCall(MethodReference methodRef)
         {
             var typeName = methodRef.DeclaringType.FullName;
             var methodName = methodRef.Name;
-            
-            return 
+
+            return
                 // Process start
                 (typeName.Contains("Process") && methodName.Contains("Start")) ||
-                
+
                 // Dynamic assembly loading
-                (typeName.Contains("Assembly") && 
+                (typeName.Contains("Assembly") &&
                  (methodName.Contains("Load") || methodName.Contains("LoadFrom") || methodName.Contains("LoadFile"))) ||
-                
+
                 // Base64 decoding
                 (typeName.Contains("Convert") && methodName.Contains("FromBase64")) ||
-                
+
                 // Registry operations
-                ((typeName.Contains("Registry") || methodName.Contains("Reg")) && 
-                 (methodName.Contains("CreateKey") || methodName.Contains("OpenKey") || 
+                ((typeName.Contains("Registry") || methodName.Contains("Reg")) &&
+                 (methodName.Contains("CreateKey") || methodName.Contains("OpenKey") ||
                   methodName.Contains("SetValue") || methodName.Contains("GetValue"))) ||
-                  
+
                 // Shell execute
                 (typeName.Contains("Shell32") || methodName.Contains("ShellExecute")) ||
-                
+
                 // Network operations
-                ((typeName.Contains("Socket") || typeName.Contains("Http") || typeName.Contains("Tcp") || 
+                ((typeName.Contains("Socket") || typeName.Contains("Http") || typeName.Contains("Tcp") ||
                   typeName.Contains("Web") || typeName.Contains("Net")) &&
-                 (methodName.Contains("Connect") || methodName.Contains("Send") || 
+                 (methodName.Contains("Connect") || methodName.Contains("Send") ||
                   methodName.Contains("Download") || methodName.Contains("Upload")));
         }
-        
+
         private string GetSuspiciousMethodDescription(MethodReference methodRef)
         {
             var typeName = methodRef.DeclaringType.FullName;
             var methodName = methodRef.Name;
-            
+
             if (typeName.Contains("Process") && methodName.Contains("Start"))
                 return "Executes external programs";
-                
-            if (typeName.Contains("Assembly") && 
+
+            if (typeName.Contains("Assembly") &&
                 (methodName.Contains("Load") || methodName.Contains("LoadFrom") || methodName.Contains("LoadFile")))
                 return "Dynamically loads code which could be malicious";
-                
+
             if (typeName.Contains("Convert") && methodName.Contains("FromBase64"))
                 return "Decodes potentially obfuscated data";
-                
-            if ((typeName.Contains("Registry") || methodName.Contains("Reg")) && 
-                (methodName.Contains("CreateKey") || methodName.Contains("OpenKey") || 
+
+            if ((typeName.Contains("Registry") || methodName.Contains("Reg")) &&
+                (methodName.Contains("CreateKey") || methodName.Contains("OpenKey") ||
                  methodName.Contains("SetValue") || methodName.Contains("GetValue")))
                 return "Manipulates system registry which can persist malware";
-                
+
             if (typeName.Contains("Shell32") || methodName.Contains("ShellExecute"))
                 return "Executes system commands";
-                
-            if ((typeName.Contains("Socket") || typeName.Contains("Http") || typeName.Contains("Tcp") || 
+
+            if ((typeName.Contains("Socket") || typeName.Contains("Http") || typeName.Contains("Tcp") ||
                  typeName.Contains("Web") || typeName.Contains("Net")) &&
-                (methodName.Contains("Connect") || methodName.Contains("Send") || 
+                (methodName.Contains("Connect") || methodName.Contains("Send") ||
                  methodName.Contains("Download") || methodName.Contains("Upload")))
                 return "Performs network operations that could exfiltrate data or download malware";
-                
+
             return "Potentially suspicious behavior";
         }
-        
+
         private List<string> FindSuspiciousApiCalls(MethodDefinition method)
         {
             var result = new List<string>();
-            
+
             foreach (var instruction in method.Body.Instructions)
             {
-                if ((instruction.OpCode.Name == "call" || instruction.OpCode.Name == "callvirt" || 
-                     instruction.OpCode.Name == "newobj") && 
-                    instruction.Operand is MethodReference methodRef && 
+                if ((instruction.OpCode.Name == "call" || instruction.OpCode.Name == "callvirt" ||
+                     instruction.OpCode.Name == "newobj") &&
+                    instruction.Operand is MethodReference methodRef &&
                     IsSuspiciousMethodCall(methodRef))
                 {
                     result.Add($"{methodRef.DeclaringType.FullName}.{methodRef.Name}() - {GetSuspiciousMethodDescription(methodRef)}");
                 }
             }
-            
+
             return result.Distinct().ToList();
         }
-        
+
         private string GetFieldVisibility(FieldDefinition field)
         {
-            if (field.IsPublic) return "public";
-            if (field.IsPrivate) return "private";
-            if (field.IsFamily) return "protected";
-            if (field.IsFamilyOrAssembly) return "protected internal";
-            if (field.IsAssembly) return "internal";
+            if (field.IsPublic)
+                return "public";
+            if (field.IsPrivate)
+                return "private";
+            if (field.IsFamily)
+                return "protected";
+            if (field.IsFamilyOrAssembly)
+                return "protected internal";
+            if (field.IsAssembly)
+                return "internal";
             return "private"; // Default
         }
 
@@ -976,31 +992,38 @@ namespace MLVScan.Services
             var setAccess = prop.SetMethod;
 
             bool isPublic = (getAccess?.IsPublic ?? false) || (setAccess?.IsPublic ?? false);
-            if (isPublic) return "public";
+            if (isPublic)
+                return "public";
 
             bool isProtectedInternal = (getAccess?.IsFamilyOrAssembly ?? false) || (setAccess?.IsFamilyOrAssembly ?? false);
-            if (isProtectedInternal) return "protected internal";
+            if (isProtectedInternal)
+                return "protected internal";
 
             bool isProtected = (getAccess?.IsFamily ?? false) || (setAccess?.IsFamily ?? false);
             // If one is protected and the other is internal, treat as protected internal for simplicity, covered above.
             // If one is protected and the other is private/missing, it's protected.
-            if (isProtected) return "protected"; 
+            if (isProtected)
+                return "protected";
 
             bool isInternal = (getAccess?.IsAssembly ?? false) || (setAccess?.IsAssembly ?? false);
-            if (isInternal) return "internal";
+            if (isInternal)
+                return "internal";
 
             // If we reach here, it means any accessors present are private, or there are no accessors that make it more visible.
             // If at least one accessor exists and is private, it's private. 
             // If no accessors, it's unusual but default to public as per C# auto-property if no visibility specified (though here we list existing ones).
-            if ((getAccess != null && getAccess.IsPrivate) || (setAccess != null && setAccess.IsPrivate) ) return "private";
-            if (getAccess == null && setAccess == null) return "public"; // No accessors, unusual for Cecil-parsed existing property
+            if ((getAccess != null && getAccess.IsPrivate) || (setAccess != null && setAccess.IsPrivate))
+                return "private";
+            if (getAccess == null && setAccess == null)
+                return "public"; // No accessors, unusual for Cecil-parsed existing property
 
             return "public"; // Fallback, should be rare
         }
 
         private string GenerateClassStructure(TypeDefinition typeDef, string highlightMethodName = null)
         {
-            if (typeDef == null) return string.Empty;
+            if (typeDef == null)
+                return string.Empty;
 
             var sb = new StringBuilder();
             sb.AppendLine($"// Class Outline: {typeDef.FullName}");
@@ -1010,17 +1033,20 @@ namespace MLVScan.Services
             }
             if (typeDef.HasInterfaces)
             {
-                foreach(var ifaceInfo in typeDef.Interfaces)
+                foreach (var ifaceInfo in typeDef.Interfaces)
                 {
                     sb.AppendLine($"// Implements: {ifaceInfo.InterfaceType.FullName}");
                 }
             }
 
             string typeKind = "class"; // Default
-            if (typeDef.IsInterface) typeKind = "interface";
-            else if (typeDef.IsEnum) typeKind = "enum";
-            else if (typeDef.IsValueType) typeKind = "struct"; // struct but not enum
-            
+            if (typeDef.IsInterface)
+                typeKind = "interface";
+            else if (typeDef.IsEnum)
+                typeKind = "enum";
+            else if (typeDef.IsValueType)
+                typeKind = "struct"; // struct but not enum
+
             sb.AppendLine($"public {typeKind} {typeDef.Name} // Simplified declaration");
             sb.AppendLine("{");
 
@@ -1033,7 +1059,8 @@ namespace MLVScan.Services
                 {
                     sb.AppendLine($"  {GetFieldVisibility(field)} {(field.IsStatic ? "static " : "")}{field.FieldType.Name} {field.Name};");
                 }
-                if (fields.Count > 10) sb.AppendLine($"  // ... and {fields.Count - 10} more fields");
+                if (fields.Count > 10)
+                    sb.AppendLine($"  // ... and {fields.Count - 10} more fields");
                 sb.AppendLine();
             }
 
@@ -1045,14 +1072,17 @@ namespace MLVScan.Services
                 foreach (var prop in properties.Take(10))
                 {
                     string accessors = "{ ";
-                    if (prop.GetMethod != null) accessors += "get; ";
-                    if (prop.SetMethod != null) accessors += "set; ";
+                    if (prop.GetMethod != null)
+                        accessors += "get; ";
+                    if (prop.SetMethod != null)
+                        accessors += "set; ";
                     accessors += "}";
                     // Determine static based on if either accessor is static
                     bool isStatic = (prop.GetMethod?.IsStatic ?? false) || (prop.SetMethod?.IsStatic ?? false);
                     sb.AppendLine($"  {GetPropertyVisibility(prop)} {(isStatic ? "static " : "")}{prop.PropertyType.Name} {prop.Name} {accessors}");
                 }
-                if (properties.Count > 10) sb.AppendLine($"  // ... and {properties.Count - 10} more properties");
+                if (properties.Count > 10)
+                    sb.AppendLine($"  // ... and {properties.Count - 10} more properties");
                 sb.AppendLine();
             }
 
@@ -1066,21 +1096,26 @@ namespace MLVScan.Services
                     string marker = (highlightMethodName != null && method.Name == highlightMethodName) ? " // <<< Method with finding" : "";
                     sb.AppendLine($"  {GetMethodVisibility(method)} {(method.IsStatic ? "static " : "")}{method.ReturnType.Name} {method.Name}({GetMethodParameters(method)});{marker}");
                 }
-                if (methods.Count > 15) sb.AppendLine($"  // ... and {methods.Count - 15} more methods");
+                if (methods.Count > 15)
+                    sb.AppendLine($"  // ... and {methods.Count - 15} more methods");
             }
             sb.AppendLine("}");
             return sb.ToString();
         }
-        
+
         private string GetMethodVisibility(MethodDefinition method)
         {
-            if (method.IsPublic) return "public";
-            if (method.IsPrivate) return "private";
-            if (method.IsFamily) return "protected";
-            if (method.IsFamilyOrAssembly) return "protected internal";
+            if (method.IsPublic)
+                return "public";
+            if (method.IsPrivate)
+                return "private";
+            if (method.IsFamily)
+                return "protected";
+            if (method.IsFamilyOrAssembly)
+                return "protected internal";
             return "internal";
         }
-        
+
         private string GetMethodParameters(MethodDefinition method)
         {
             var parameters = new List<string>();
@@ -1088,85 +1123,85 @@ namespace MLVScan.Services
             {
                 parameters.Add($"{param.ParameterType.Name} {param.Name}");
             }
-            
+
             return string.Join(", ", parameters);
         }
-        
+
         private string FormatInstruction(Instruction instruction)
         {
             var opCode = instruction.OpCode.Name;
-            
+
             // Skip nop instructions to reduce noise
             if (opCode == "nop")
                 return string.Empty;
-                
+
             var operand = FormatOperand(instruction.Operand);
             return $"{opCode} {operand}".Trim();
         }
-        
+
         private string FormatOperand(object operand)
         {
             if (operand == null)
                 return string.Empty;
-                
+
             if (operand is MethodReference methodRef)
                 return $"{methodRef.DeclaringType.Name}.{methodRef.Name}()";
-                
+
             if (operand is TypeReference typeRef)
                 return typeRef.FullName;
-                
+
             if (operand is FieldReference fieldRef)
                 return $"{fieldRef.DeclaringType.Name}.{fieldRef.Name}";
-                
+
             if (operand is string stringValue)
                 return $"\"{stringValue}\"";
-                
+
             return operand.ToString();
         }
-        
+
         private string ExtractAssemblyMetadata(string modPath)
         {
             try
             {
                 if (!File.Exists(modPath))
                     return string.Empty;
-                    
+
                 var sb = new StringBuilder();
-                
+
                 var readerParameters = new ReaderParameters
                 {
                     ReadWrite = false,
                     InMemory = true,
                     ReadSymbols = false
                 };
-                
+
                 using var assembly = AssemblyDefinition.ReadAssembly(modPath, readerParameters);
-                
+
                 // Basic assembly info
                 sb.AppendLine($"- **Assembly Name**: {assembly.Name.Name}");
                 sb.AppendLine($"- **Version**: {assembly.Name.Version}");
-                
+
                 if (!string.IsNullOrEmpty(assembly.Name.Culture))
                     sb.AppendLine($"- **Culture**: {assembly.Name.Culture}");
-                    
+
                 // List of referenced assemblies
                 sb.AppendLine("- **Referenced Assemblies**:");
                 foreach (var reference in assembly.MainModule.AssemblyReferences.Take(10))
                 {
                     sb.AppendLine($"  - {reference.Name} (v{reference.Version})");
                 }
-                
+
                 if (assembly.MainModule.AssemblyReferences.Count > 10)
                     sb.AppendLine($"  - *and {assembly.MainModule.AssemblyReferences.Count - 10} more...*");
-                
+
                 // Custom attributes that might be relevant for security analysis
                 var securityRelevantAttributes = assembly.CustomAttributes
-                    .Where(attr => 
-                        attr.AttributeType.Name.Contains("Security") || 
+                    .Where(attr =>
+                        attr.AttributeType.Name.Contains("Security") ||
                         attr.AttributeType.Name.Contains("Permission") ||
                         attr.AttributeType.Name.Contains("Unsafe"))
                     .ToList();
-                    
+
                 if (securityRelevantAttributes.Any())
                 {
                     sb.AppendLine("- **Security-Related Attributes**:");
@@ -1175,7 +1210,7 @@ namespace MLVScan.Services
                         sb.AppendLine($"  - {attr.AttributeType.Name}");
                     }
                 }
-                
+
                 return sb.ToString();
             }
             catch (Exception ex)
@@ -1193,7 +1228,7 @@ namespace MLVScan.Services
                 var modName = Path.GetFileName(modPath);
                 Directory.CreateDirectory(outputDirectory);
                 var filePath = Path.Combine(outputDirectory, $"{modName}.prompt.md");
-                
+
                 File.WriteAllText(filePath, prompt);
                 return true;
             }
