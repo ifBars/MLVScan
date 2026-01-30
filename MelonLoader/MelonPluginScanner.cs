@@ -29,10 +29,9 @@ namespace MLVScan.MelonLoader
 
         protected override IEnumerable<string> GetScanDirectories()
         {
-            // Configured directories relative to game root
             foreach (var scanDir in Config.ScanDirectories)
             {
-                yield return Path.Combine(MelonEnvironment.GameRootDirectory, scanDir);
+                yield return Path.Combine(_environment.GameRootDirectory, scanDir);
             }
         }
 
