@@ -13,19 +13,18 @@ namespace MLVScan.BepInEx
     {
         private readonly string _dataDir;
         private readonly string _reportsDir;
+        private readonly string[] _pluginDirectories;
 
         public BepInExPlatformEnvironment()
         {
             _dataDir = Path.Combine(Paths.BepInExRootPath, "MLVScan");
             _reportsDir = Path.Combine(_dataDir, "Reports");
+            _pluginDirectories = new[] { Paths.PluginPath };
         }
 
         public string GameRootDirectory => Paths.GameRootPath;
 
-        public string[] PluginDirectories => new[]
-        {
-            Paths.PluginPath
-        };
+        public string[] PluginDirectories => _pluginDirectories;
 
         public string DataDirectory
         {
