@@ -39,10 +39,18 @@ Detailed documentation is available in the **[MLVScan Wiki](https://github.com/i
 - Configuration stored in `MelonPreferences.cfg`
 - Reports saved to `UserData/MLVScan/Reports/`
 
-**BepInEx:**
+**BepInEx 5.x:**
 - Runs as a preloader patcher (scans before chainloader)
 - Configuration stored in `BepInEx/config/MLVScan.json`
 - Reports saved to `BepInEx/MLVScan/Reports/`
+- Install via `BepInEx/patchers` folder
+
+**BepInEx 6.x (IL2CPP / Mono):**
+- Runs as a preloader patcher (scans before chainloader)
+- Configuration stored in `BepInEx/config/MLVScan.json` (same as 5.x)
+- Reports saved to `BepInEx/MLVScan/Reports/` (same as 5.x)
+- Uses `[PatcherPlugin]` attribute-based packaging instead of patchers folder
+- Plugin compatibility: BepInEx 5.x plugins may require updating for 6.x API changes
 
 ## 🛡️ Powered by MLVScan.Core
 

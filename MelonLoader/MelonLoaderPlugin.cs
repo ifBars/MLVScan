@@ -233,7 +233,7 @@ namespace MLVScan.MelonLoader
                                         CallChainNodeType.EntryPoint => "[ENTRY]",
                                         CallChainNodeType.IntermediateCall => "[CALL]",
                                         CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                                        _ => "[???"
+                                        _ => "[???]"
                                     };
                                     LoggerInstance.Msg($"      {prefix} {node.Location}");
                                 }
@@ -357,7 +357,7 @@ namespace MLVScan.MelonLoader
                                                 CallChainNodeType.EntryPoint => "[ENTRY]",
                                                 CallChainNodeType.IntermediateCall => "[CALL]",
                                                 CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                                                _ => "[???"
+                                                _ => "[???]"
                                             };
                                             writer.WriteLine($"    {prefix} {node.Location}");
                                             if (!string.IsNullOrEmpty(node.Description))
