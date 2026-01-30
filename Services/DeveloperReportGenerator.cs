@@ -256,7 +256,7 @@ namespace MLVScan.Services
                                 DataFlowNodeType.Transform => "[TRANSFORM]",
                                 DataFlowNodeType.Sink => "[SINK]",
                                 DataFlowNodeType.Intermediate => "[PASS]",
-                                _ => "[????]"
+                                _ => "[???]"
                             };
                             sb.AppendLine($"{arrow}{prefix} {node.Operation} ({node.DataDescription})");
                             sb.AppendLine($"{new string(' ', arrow.Length)}     Location: {node.Location}");
