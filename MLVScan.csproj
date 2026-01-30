@@ -212,7 +212,7 @@
     <!-- Use NuGet package by default -->
     <PackageReference Include="MLVScan.Core" Version="*" GeneratePathProperty="true" />
 
-    <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.2" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
@@ -236,14 +236,15 @@
       <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
     </ItemGroup>
     <PropertyGroup>
-      <ILRepackArgs>&quot;$(PkgILRepack)\tools\ILRepack.exe&quot; /parallel /union</ILRepackArgs>
-      <ILRepackLibArgs Condition="'@(ILRepackLib)' != ''">/lib:&quot;@(ILRepackLib, '&quot; /lib:&quot;')&quot;</ILRepackLibArgs>
-      <ILRepackArgs>$(ILRepackArgs) $(ILRepackLibArgs)</ILRepackArgs>
-      <ILRepackArgs>$(ILRepackArgs) /out:&quot;$(OutputPath)$(AssemblyName).merged.dll&quot;</ILRepackArgs>
-      <ILRepackArgs>$(ILRepackArgs) &quot;@(InputAssemblies, '&quot; &quot;')&quot;</ILRepackArgs>
+      <MergedAssemblyPath>$(OutputPath)$(AssemblyName).merged.dll</MergedAssemblyPath>
     </PropertyGroup>
-    <Exec Command="$(ILRepackArgs)" />
-    <Copy SourceFiles="$(OutputPath)$(AssemblyName).merged.dll" DestinationFiles="$(TargetPath)" Condition="Exists('$(OutputPath)$(AssemblyName).merged.dll')" />
+    <ILRepack 
+      Parallel="true" 
+      Union="true"
+      LibraryPath="@(ILRepackLib)"
+      OutputFile="$(MergedAssemblyPath)" 
+      InputAssemblies="@(InputAssemblies)" />
+    <Copy SourceFiles="$(MergedAssemblyPath)" DestinationFiles="$(TargetPath)" Condition="Exists('$(MergedAssemblyPath)')" />
   </Target>
 
 
