@@ -18,6 +18,16 @@
   </PropertyGroup>
 
   <!-- ============================================ -->
+  <!-- Additional NuGet Sources for BepInEx        -->
+  <!-- ============================================ -->
+  <PropertyGroup Condition="'$(Configuration)'=='BepInEx' or '$(Configuration)'=='BepInEx6Mono' or '$(Configuration)'=='BepInEx6IL2CPP'">
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <!-- ============================================ -->
   <!-- MelonLoader Configuration                   -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='MelonLoader'">
@@ -137,8 +147,8 @@
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='MelonLoader'">
     <!-- Use NuGet packages when local paths are not set -->
-    <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" Condition="'$(MelonLoaderPath)' == ''" />
-    <PackageReference Include="0Harmony" Version="2.3.0" Condition="'$(MelonLoaderPath)' == ''" />
+    <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" GeneratePathProperty="true" Condition="'$(MelonLoaderPath)' == ''" />
+
     <PackageReference Include="UnityEngine.CoreModule" Version="0.0.1" Condition="'$(GameManagedPath)' == ''" />
 
     <!-- Use local references when paths are set -->
@@ -157,11 +167,13 @@
   </ItemGroup>
 
   <!-- ============================================ -->
-  <!-- BepInEx References                          -->
+  <!-- BepInEx 5.x References                      -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx'">
-    <!-- Use NuGet package for BepInEx.Core (compilation only) -->
-    <PackageReference Include="BepInEx.Core" Version="5.*" PrivateAssets="all"
+    <!-- Use NuGet package for BepInEx 5.x (compilation only) -->
+    <PackageReference Include="BepInEx.Core" Version="5.*" PrivateAssets="all" GeneratePathProperty="true"
+                      Condition="'$(BepInExCorePath)' == ''" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" PrivateAssets="all"
                       Condition="'$(BepInExCorePath)' == ''" />
     <!-- Or use local reference if BepInExCorePath is set -->
     <Reference Include="BepInEx" Private="false" Condition="'$(BepInExCorePath)' != ''">
@@ -176,19 +188,21 @@
   <!-- BepInEx 6.x Mono References                 -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6Mono'">
-    <PackageReference Include="BepInEx.Core" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="BepInEx.Unity.Mono" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="BepInEx.Unity.Mono.Preloader" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="BepInEx.Preloader.Core" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Unity.Mono" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Unity.Mono.Preloader" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
   </ItemGroup>
 
   <!-- ============================================ -->
   <!-- BepInEx 6.x IL2CPP References               -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
-    <PackageReference Include="BepInEx.Core" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="BepInEx.Preloader.Core" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.*-*" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
   </ItemGroup>
 
   <!-- ============================================ -->
@@ -211,14 +225,15 @@
       <InputAssemblies Include="$(TargetPath)" />
       <InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" />
       <!-- Reference paths for ILRepack to resolve dependencies -->
+      <ILRepackLib Include="$(PkgLavaGang_MelonLoader)\lib\net35" Condition="'$(Configuration)' == 'MelonLoader' and '$(PkgLavaGang_MelonLoader)' != ''" />
       <ILRepackLib Include="$(MelonLoaderPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(MelonLoaderPath)' != ''" />
       <ILRepackLib Include="$(GameManagedPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(GameManagedPath)' != ''" />
-      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\net6.0" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
-      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Core)' != '' and ('$(Configuration)' == 'BepInEx' or '$(Configuration)' == 'BepInEx6Mono')" />
-      <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and ('$(Configuration)' == 'BepInEx6IL2CPP' or '$(Configuration)' == 'BepInEx6Mono')" />
-      <ILRepackLib Include="$(PkgBepInEx_Unity_IL2CPP)\lib\net6.0" Condition="'$(PkgBepInEx_Unity_IL2CPP)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
+      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono_Preloader)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono_Preloader)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
+      <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
+      <ILRepackLib Include="$(PkgBepInEx_Unity_IL2CPP)\lib\net6.0" Condition="'$(PkgBepInEx_Unity_IL2CPP)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
+      <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
     </ItemGroup>
     <PropertyGroup>
       <ILRepackArgs>&quot;$(PkgILRepack)\tools\ILRepack.exe&quot; /parallel /union</ILRepackArgs>

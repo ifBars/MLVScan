@@ -41,7 +41,7 @@ jobs:
         name: MLVScan.BepInEx
         path: bin/BepInEx/**/MLVScan.BepInEx.dll
         
-    # BepInEx 6 Mono
+    # BepInEx 6.x Mono
     - name: Build BepInEx6Mono
       run: dotnet build MLVScan.csproj -c BepInEx6Mono --no-restore
       
@@ -51,7 +51,7 @@ jobs:
         name: MLVScan.BepInEx6.Mono
         path: bin/BepInEx6Mono/**/MLVScan.BepInEx6.Mono.dll
         
-    # BepInEx 6 IL2CPP
+    # BepInEx 6.x IL2CPP
     - name: Build BepInEx6IL2CPP
       run: dotnet build MLVScan.csproj -c BepInEx6IL2CPP --no-restore
       
