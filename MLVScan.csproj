@@ -190,11 +190,8 @@
   <!-- Shared Package References                   -->
   <!-- ============================================ -->
   <ItemGroup>
-    <!-- Use local project reference when UseLocalMLVScanCore is set -->
-    <ProjectReference Include="..\MLVScan.Core\MLVScan.Core.csproj" Condition="'$(UseLocalMLVScanCore)' == 'true'" Properties="Configuration=Release" />
-
     <!-- Use NuGet package by default -->
-    <PackageReference Include="MLVScan.Core" Version="*" GeneratePathProperty="true" Condition="'$(UseLocalMLVScanCore)' != 'true'" />
+    <PackageReference Include="MLVScan.Core" Version="*" GeneratePathProperty="true" />
 
     <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
@@ -207,10 +204,7 @@
   <Target Name="ILRepack" AfterTargets="Build">
     <ItemGroup>
       <InputAssemblies Include="$(TargetPath)" />
-      <!-- Use local build output from Release (fixed path since MLVScan.Core is platform-agnostic) -->
-      <InputAssemblies Include="..\MLVScan.Core\bin\Release\netstandard2.1\MLVScan.Core.dll" Condition="'$(UseLocalMLVScanCore)' == 'true'" />
-      <!-- Use NuGet package when UseLocalMLVScanCore is false or not set -->
-      <InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" Condition="'$(UseLocalMLVScanCore)' != 'true'" />
+      <InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" />
       <!-- Reference paths for ILRepack to resolve dependencies -->
       <ILRepackLib Include="$(MelonLoaderPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(MelonLoaderPath)' != ''" />
       <ILRepackLib Include="$(GameManagedPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(GameManagedPath)' != ''" />
