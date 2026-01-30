@@ -1,0 +1,47 @@
+<Project>
+  <!--
+    Local development overrides for MLVScan
+
+    Copy this file to local.build.props and uncomment/edit values as needed.
+    This file is git-ignored and won't affect production builds.
+
+    Usage:
+    1. Copy this file to local.build.props
+    2. Uncomment and set paths for your game installation
+    3. Build with: dotnet build MLVScan.sln -c MelonLoader (or other config)
+  -->
+
+  <PropertyGroup>
+    <!-- ============================================ -->
+    <!-- MLVScan.Core Configuration                   -->
+    <!-- ============================================ -->
+
+    <!-- Use local MLVScan.Core project instead of NuGet package -->
+    <!-- <UseLocalMLVScanCore>true</UseLocalMLVScanCore> -->
+
+
+    <!-- ============================================ -->
+    <!-- MelonLoader Build Configuration             -->
+    <!-- ============================================ -->
+
+    <!-- Path to MelonLoader installation (contains MelonLoader.dll, 0Harmony.dll) -->
+    <!-- <MelonLoaderPath>C:\Games\Schedule I\MelonLoader\net6</MelonLoaderPath> -->
+
+    <!-- Path to game's Managed folder (contains UnityEngine.CoreModule.dll) -->
+    <!-- <GameManagedPath>C:\Games\Schedule I\Schedule I_Data\Managed</GameManagedPath> -->
+
+    <!-- Path to deploy built DLL after build (optional) -->
+    <!-- <MelonPluginsPath>C:\Games\Schedule I\Plugins</MelonPluginsPath> -->
+
+
+    <!-- ============================================ -->
+    <!-- BepInEx Build Configuration                 -->
+    <!-- ============================================ -->
+
+    <!-- Use local BepInEx assemblies instead of NuGet packages -->
+    <!-- <BepInExCorePath>C:\Games\Schedule I\BepInEx\core</BepInExCorePath> -->
+
+    <!-- Path to deploy built DLL as patcher (optional) -->
+    <!-- <BepInExPatchersPath>C:\Games\Schedule I\BepInEx\patchers</BepInExPatchersPath> -->
+  </PropertyGroup>
+</Project>
