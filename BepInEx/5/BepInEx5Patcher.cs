@@ -104,7 +104,6 @@ namespace MLVScan.BepInEx5
                 {
                     _logger.LogInfo("No suspicious plugins detected.");
                 }
-                }
 
                 _logger.LogInfo("MLVScan preloader scan complete.");
             }
