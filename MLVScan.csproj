@@ -136,16 +136,21 @@
   <!-- MelonLoader References                      -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='MelonLoader'">
-    <Reference Include="MelonLoader">
+    <!-- Use NuGet packages when local paths are not set -->
+    <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" Condition="'$(MelonLoaderPath)' == ''" />
+    <PackageReference Include="0Harmony" Version="2.3.0" Condition="'$(MelonLoaderPath)' == ''" />
+    <PackageReference Include="UnityEngine.CoreModule" Version="0.0.1" Condition="'$(GameManagedPath)' == ''" />
+
+    <!-- Use local references when paths are set -->
+    <Reference Include="MelonLoader" Condition="'$(MelonLoaderPath)' != ''">
       <HintPath>$(MelonLoaderPath)\MelonLoader.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="0Harmony">
+    <Reference Include="0Harmony" Condition="'$(MelonLoaderPath)' != ''">
       <HintPath>$(MelonLoaderPath)\0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Unity References (only needed for MelonLoader which uses MelonEnvironment) -->
-    <Reference Include="UnityEngine.CoreModule">
+    <Reference Include="UnityEngine.CoreModule" Condition="'$(GameManagedPath)' != ''">
       <HintPath>$(GameManagedPath)\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
