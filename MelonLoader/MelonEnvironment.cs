@@ -54,10 +54,18 @@ namespace MLVScan.MelonLoader
         {
             get
             {
-                // Unity managed assemblies location
-                var managedPath = Path.Combine(_gameRoot, "Schedule I_Data", "Managed");
-                if (Directory.Exists(managedPath))
-                    return managedPath;
+                // Find Unity data folder dynamically (pattern: *_Data)
+                try
+                {
+                    var dataFolders = Directory.GetDirectories(_gameRoot, "*_Data");
+                    foreach (var dataFolder in dataFolders)
+                    {
+                        var managedPath = Path.Combine(dataFolder, "Managed");
+                        if (Directory.Exists(managedPath))
+                            return managedPath;
+                    }
+                }
+                catch { /* Ignore enumeration errors */ }
 
                 // Fallback for Il2Cpp games
                 var il2cppPath = Path.Combine(_gameRoot, "MelonLoader", "Managed");
