@@ -85,6 +85,10 @@ namespace MLVScan.BepInEx6.IL2CPP
                         _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
                 }
+                else if (!config.EnableAutoScan)
+                {
+                    _logger.LogInfo("Automatic scanning is disabled in configuration.");
+                }
                 else
                 {
                     _logger.LogInfo("No suspicious plugins detected.");
