@@ -6,7 +6,7 @@
 
 **MLVScan** is a security-focused mod loader plugin that protects your game by scanning mods for malicious patterns *before* they execute.
 
-Supports **MelonLoader** and **BepInEx 5.x**.
+Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (IL2CPP/Mono).
 
 ![MLVScan Example](example.png)
 
