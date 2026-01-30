@@ -6,6 +6,7 @@ using System.Text;
 using BepInEx;
 using BepInEx.Logging;
 using MLVScan.Models;
+using MLVScan.Models.Rules;
 using MLVScan.Services;
 
 namespace MLVScan.BepInEx
@@ -74,6 +75,35 @@ namespace MLVScan.BepInEx
             {
                 _logger.LogWarning($"[{finding.Severity}] {finding.Description}");
                 _logger.LogInfo($"  Location: {finding.Location}");
+
+                if (finding.HasCallChain && finding.CallChain != null)
+                {
+                    _logger.LogInfo("  Call Chain:");
+                    foreach (var node in finding.CallChain.Nodes.Take(5))
+                    {
+                        var prefix = node.NodeType switch
+                        {
+                            CallChainNodeType.EntryPoint => "[ENTRY]",
+                            CallChainNodeType.IntermediateCall => "[CALL]",
+                            CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                            _ => "[???"
+                        };
+                        _logger.LogInfo($"    {prefix} {node.Location}");
+                    }
+                    if (finding.CallChain.Nodes.Count > 5)
+                    {
+                        _logger.LogInfo($"    ... and {finding.CallChain.Nodes.Count - 5} more");
+                    }
+                }
+
+                if (finding.HasDataFlow && finding.DataFlowChain != null)
+                {
+                    _logger.LogInfo($"  Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
+                    if (finding.DataFlowChain.IsCrossMethod)
+                    {
+                        _logger.LogInfo($"    Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods involved");
+                    }
+                }
             }
 
             if (findings.Count > 3)
@@ -159,6 +189,38 @@ namespace MLVScan.BepInEx
                     foreach (var finding in group.Take(10))
                     {
                         sb.AppendLine($"  - {finding.Location}");
+
+                        if (finding.HasCallChain && finding.CallChain != null)
+                        {
+                            sb.AppendLine("    Call Chain Analysis:");
+                            foreach (var node in finding.CallChain.Nodes)
+                            {
+                                var prefix = node.NodeType switch
+                                {
+                                    CallChainNodeType.EntryPoint => "[ENTRY]",
+                                    CallChainNodeType.IntermediateCall => "[CALL]",
+                                    CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                    _ => "[???"
+                                };
+                                sb.AppendLine($"      {prefix} {node.Location}");
+                                if (!string.IsNullOrEmpty(node.Description))
+                                {
+                                    sb.AppendLine($"           {node.Description}");
+                                }
+                            }
+                        }
+
+                        if (finding.HasDataFlow && finding.DataFlowChain != null)
+                        {
+                            sb.AppendLine("    Data Flow Analysis:");
+                            sb.AppendLine($"      Pattern: {finding.DataFlowChain.Pattern}");
+                            sb.AppendLine($"      Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
+                            if (finding.DataFlowChain.IsCrossMethod)
+                            {
+                                sb.AppendLine($"      Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                            }
+                        }
+
                         if (!string.IsNullOrEmpty(finding.CodeSnippet))
                         {
                             foreach (var line in finding.CodeSnippet.Split('\n').Take(5))

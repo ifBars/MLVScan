@@ -17,6 +17,16 @@ namespace MLVScan
         /// Platform name identifier.
         /// </summary>
         public const string PlatformName = "MLVScan.MelonLoader";
+#elif BEPINEX6_IL2CPP
+        /// <summary>
+        /// Platform name identifier.
+        /// </summary>
+        public const string PlatformName = "MLVScan.BepInEx6.IL2CPP";
+#elif BEPINEX6_MONO
+        /// <summary>
+        /// Platform name identifier.
+        /// </summary>
+        public const string PlatformName = "MLVScan.BepInEx6.Mono";
 #elif BEPINEX
         /// <summary>
         /// Platform name identifier.

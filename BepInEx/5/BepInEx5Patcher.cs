@@ -3,15 +3,16 @@ using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Logging;
 using Mono.Cecil;
+using MLVScan.BepInEx;
 using MLVScan.BepInEx.Adapters;
 
-namespace MLVScan.BepInEx
+namespace MLVScan.BepInEx5
 {
     /// <summary>
-    /// BepInEx preloader patcher that scans plugins for malicious patterns
+    /// BepInEx 5.x preloader patcher that scans plugins for malicious patterns
     /// before the chainloader initializes them.
     /// </summary>
-    public static class MLVScanPatcher
+    public static class BepInEx5Patcher
     {
         private static ManualLogSource _logger;
 

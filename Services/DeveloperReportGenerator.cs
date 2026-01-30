@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using MLVScan.Abstractions;
 using MLVScan.Models;
+using MLVScan.Models.Rules;
 
 namespace MLVScan.Services
 {
@@ -83,13 +84,41 @@ namespace MLVScan.Services
                 foreach (var finding in ruleGroup.Take(3))
                 {
                     _logger.Info($"    - {finding.Location}");
+
+                    if (finding.HasCallChain && finding.CallChain != null)
+                    {
+                        _logger.Info("      Call Chain:");
+                        foreach (var node in finding.CallChain.Nodes.Take(3))
+                        {
+                            var prefix = node.NodeType switch
+                            {
+                                CallChainNodeType.EntryPoint => "[ENTRY]",
+                                CallChainNodeType.IntermediateCall => "[CALL]",
+                                CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                _ => "[???"
+                            };
+                            _logger.Info($"        {prefix} {node.Location}");
+                        }
+                        if (finding.CallChain.Nodes.Count > 3)
+                        {
+                            _logger.Info($"        ... and {finding.CallChain.Nodes.Count - 3} more");
+                        }
+                    }
+
+                    if (finding.HasDataFlow && finding.DataFlowChain != null)
+                    {
+                        _logger.Info($"      Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}%)");
+                        if (finding.DataFlowChain.IsCrossMethod)
+                        {
+                            _logger.Info($"        Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                        }
+                    }
                 }
                 if (count > 3)
                 {
                     _logger.Info($"    ... and {count - 3} more");
                 }
 
-                _logger.Info("");
                 _logger.Info("--------------------------------------");
             }
 
@@ -170,12 +199,76 @@ namespace MLVScan.Services
                 foreach (var finding in ruleGroup)
                 {
                     sb.AppendLine($"Location: {finding.Location}");
+
+                    // Show call chain if available
+                    if (finding.HasCallChain && finding.CallChain != null)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("--- CALL CHAIN ANALYSIS ---");
+                        sb.AppendLine(finding.CallChain.Summary);
+                        sb.AppendLine();
+                        sb.AppendLine("Attack Path:");
+                        foreach (var node in finding.CallChain.Nodes)
+                        {
+                            var prefix = node.NodeType switch
+                            {
+                                CallChainNodeType.EntryPoint => "[ENTRY]",
+                                CallChainNodeType.IntermediateCall => "[CALL]",
+                                CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                _ => "[???"
+                            };
+                            sb.AppendLine($"  {prefix} {node.Location}");
+                            if (!string.IsNullOrEmpty(node.Description))
+                            {
+                                sb.AppendLine($"         {node.Description}");
+                            }
+                        }
+                    }
+
+                    // Show data flow chain if available
+                    if (finding.HasDataFlow && finding.DataFlowChain != null)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("--- DATA FLOW ANALYSIS ---");
+                        sb.AppendLine($"Pattern: {finding.DataFlowChain.Pattern}");
+                        sb.AppendLine($"Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
+                        sb.AppendLine(finding.DataFlowChain.Summary);
+
+                        if (finding.DataFlowChain.IsCrossMethod)
+                        {
+                            sb.AppendLine();
+                            sb.AppendLine("Cross-Method Flow:");
+                            foreach (var method in finding.DataFlowChain.InvolvedMethods)
+                            {
+                                sb.AppendLine($"  - {method}");
+                            }
+                        }
+
+                        sb.AppendLine();
+                        sb.AppendLine("Data Flow Path:");
+                        for (int i = 0; i < finding.DataFlowChain.Nodes.Count; i++)
+                        {
+                            var node = finding.DataFlowChain.Nodes[i];
+                            var arrow = i > 0 ? "  -> " : "    ";
+                            var prefix = node.NodeType switch
+                            {
+                                DataFlowNodeType.Source => "[SOURCE]",
+                                DataFlowNodeType.Transform => "[TRANSFORM]",
+                                DataFlowNodeType.Sink => "[SINK]",
+                                DataFlowNodeType.Intermediate => "[PASS]",
+                                _ => "[????]"
+                            };
+                            sb.AppendLine($"{arrow}{prefix} {node.Operation} ({node.DataDescription})");
+                            sb.AppendLine($"{new string(' ', arrow.Length)}     Location: {node.Location}");
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(finding.CodeSnippet))
                     {
                         sb.AppendLine("Code Snippet:");
                         sb.AppendLine(finding.CodeSnippet);
                     }
-                    sb.AppendLine("");
+                    sb.AppendLine();
                 }
             }
 

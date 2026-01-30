@@ -2,16 +2,15 @@ using System;
 using MelonLoader;
 using MLVScan.Abstractions;
 using MLVScan.Adapters;
-using MLVScan.MelonLoader;
 using MLVScan.Models;
 using MLVScan.Services;
 
-namespace MLVScan
+namespace MLVScan.MelonLoader
 {
     /// <summary>
     /// Factory for creating MLVScan services in the MelonLoader context.
     /// </summary>
-    public class ServiceFactory
+    public class MelonLoaderServiceFactory
     {
         private readonly MelonLogger.Instance _melonLogger;
         private readonly IScanLogger _scanLogger;
@@ -20,7 +19,7 @@ namespace MLVScan
         private readonly MelonPlatformEnvironment _environment;
         private readonly ScanConfig _fallbackConfig;
 
-        public ServiceFactory(MelonLogger.Instance logger)
+        public MelonLoaderServiceFactory(MelonLogger.Instance logger)
         {
             _melonLogger = logger ?? throw new ArgumentNullException(nameof(logger));
             _scanLogger = new MelonScanLogger(logger);
