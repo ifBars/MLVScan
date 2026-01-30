@@ -1,9 +1,15 @@
+using System;
+using System.Linq;
 using MelonLoader;
+using MLVScan.Abstractions;
 using MLVScan.Models;
 
-namespace MLVScan.Services
+namespace MLVScan.MelonLoader
 {
-    public class ConfigManager
+    /// <summary>
+    /// MelonLoader implementation of IConfigManager using MelonPreferences.
+    /// </summary>
+    public class MelonConfigManager : IConfigManager
     {
         private readonly MelonLogger.Instance _logger;
         private readonly MelonPreferences_Category _category;
@@ -17,7 +23,7 @@ namespace MLVScan.Services
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
         private readonly MelonPreferences_Entry<bool> _developerMode;
 
-        public ConfigManager(MelonLogger.Instance logger)
+        public MelonConfigManager(MelonLogger.Instance logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -71,6 +77,12 @@ namespace MLVScan.Services
         }
 
         public ScanConfig Config { get; private set; }
+
+        public ScanConfig LoadConfig()
+        {
+            UpdateConfigFromPreferences();
+            return Config;
+        }
 
         private void OnConfigChanged<T>(T oldValue, T newValue)
         {

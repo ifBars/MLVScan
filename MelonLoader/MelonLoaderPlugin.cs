@@ -3,21 +3,28 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MelonLoader;
+using MelonLoader.Utils;
 using MLVScan.Models;
+using MLVScan.Models.Rules;
 using MLVScan.Services;
 
-[assembly: MelonInfo(typeof(MLVScan.Core), "MLVScan", MLVScan.PlatformConstants.PlatformVersion, "Bars")]
+[assembly: MelonInfo(typeof(MLVScan.MelonLoader.MelonLoaderPlugin), "MLVScan", MLVScan.PlatformConstants.PlatformVersion, "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
 [assembly: MelonColor(255, 139, 0, 0)]
 
-namespace MLVScan
+namespace MLVScan.MelonLoader
 {
-    public class Core : MelonPlugin
+    /// <summary>
+    /// MelonLoader plugin entry point for MLVScan.
+    /// Sets up services, initializes the default whitelist, and orchestrates scanning, disabling, and reporting.
+    /// </summary>
+    public class MelonLoaderPlugin : MelonPlugin
     {
-        private ServiceFactory _serviceFactory;
-        private ConfigManager _configManager;
-        private ModScanner _modScanner;
-        private ModDisabler _modDisabler;
+        private MelonLoaderServiceFactory _serviceFactory;
+        private MelonConfigManager _configManager;
+        private MelonPlatformEnvironment _environment;
+        private MelonPluginScanner _pluginScanner;
+        private MelonPluginDisabler _pluginDisabler;
         private IlDumpService _ilDumpService;
         private DeveloperReportGenerator _developerReportGenerator;
         private bool _initialized = false;
@@ -38,13 +45,14 @@ namespace MLVScan
             {
                 LoggerInstance.Msg("Pre-scanning for malicious mods...");
 
-                _serviceFactory = new ServiceFactory(LoggerInstance);
+                _serviceFactory = new MelonLoaderServiceFactory(LoggerInstance);
                 _configManager = _serviceFactory.CreateConfigManager();
+                _environment = _serviceFactory.CreateEnvironment();
 
                 InitializeDefaultWhitelist();
 
-                _modScanner = _serviceFactory.CreateModScanner();
-                _modDisabler = _serviceFactory.CreateModDisabler();
+                _pluginScanner = _serviceFactory.CreatePluginScanner();
+                _pluginDisabler = _serviceFactory.CreatePluginDisabler();
                 _ilDumpService = _serviceFactory.CreateIlDumpService();
                 _developerReportGenerator = _serviceFactory.CreateDeveloperReportGenerator();
 
@@ -103,7 +111,7 @@ namespace MLVScan
                 }
 
                 LoggerInstance.Msg("Scanning for suspicious mods...");
-                var scanResults = _modScanner.ScanAllMods(force);
+                var scanResults = _pluginScanner.ScanAllPlugins(force);
 
                 var filteredResults = scanResults
                     .Where(kv => kv.Value.Count > 0 && kv.Value.Any(f => f.Location != "Assembly scanning"))
@@ -111,7 +119,7 @@ namespace MLVScan
 
                 if (filteredResults.Count > 0)
                 {
-                    var disabledMods = _modDisabler.DisableSuspiciousMods(filteredResults, force);
+                    var disabledMods = _pluginDisabler.DisableSuspiciousPlugins(filteredResults, force);
                     var disabledCount = disabledMods.Count;
                     LoggerInstance.Msg($"Disabled {disabledCount} suspicious mods");
 
@@ -135,7 +143,7 @@ namespace MLVScan
             }
         }
 
-        private void GenerateDetailedReports(List<DisabledModInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
+        private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
             var isDeveloperMode = _configManager?.Config?.DeveloperMode ?? false;
 
@@ -198,7 +206,7 @@ namespace MLVScan
                 {
                     _developerReportGenerator.GenerateConsoleReport(modName, actualFindings);
                 }
-                else
+                    else
                 {
                     // Standard reporting
                     LoggerInstance.Warning("Suspicious patterns found:");
@@ -214,9 +222,39 @@ namespace MLVScan
                         {
                             var finding = categoryFindings[i];
                             LoggerInstance.Msg($"  * At: {finding.Location}");
+
+                            if (finding.HasCallChain && finding.CallChain != null)
+                            {
+                                LoggerInstance.Msg("    Call Chain Analysis:");
+                                foreach (var node in finding.CallChain.Nodes.Take(4))
+                                {
+                                    var prefix = node.NodeType switch
+                                    {
+                                        CallChainNodeType.EntryPoint => "[ENTRY]",
+                                        CallChainNodeType.IntermediateCall => "[CALL]",
+                                        CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                        _ => "[???]"
+                                    };
+                                    LoggerInstance.Msg($"      {prefix} {node.Location}");
+                                }
+                                if (finding.CallChain.Nodes.Count > 4)
+                                {
+                                    LoggerInstance.Msg($"      ... and {finding.CallChain.Nodes.Count - 4} more");
+                                }
+                            }
+
+                            if (finding.HasDataFlow && finding.DataFlowChain != null)
+                            {
+                                LoggerInstance.Msg($"    Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
+                                if (finding.DataFlowChain.IsCrossMethod)
+                                {
+                                    LoggerInstance.Msg($"    Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                                }
+                            }
+
                             if (!string.IsNullOrEmpty(finding.CodeSnippet))
                             {
-                                LoggerInstance.Msg($"    Code Snippet (IL):");
+                                LoggerInstance.Msg("    Code Snippet (IL):");
                                 foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                                 {
                                     LoggerInstance.Msg($"      {line}");
@@ -239,7 +277,7 @@ namespace MLVScan
                 try
                 {
                     // Generate report and prompt files
-                    var reportDirectory = Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
+                    var reportDirectory = Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
                     if (!Directory.Exists(reportDirectory))
                     {
                         Directory.CreateDirectory(reportDirectory);
@@ -302,10 +340,45 @@ namespace MLVScan
                                 writer.WriteLine($"\n== {group.Key} ==");
                                 writer.WriteLine($"Severity: {group.Value[0].Severity}");
                                 writer.WriteLine($"Instances: {group.Value.Count}");
-                                writer.WriteLine("\nLocations & Snippets:");
+                                writer.WriteLine("\nLocations & Analysis:");
                                 foreach (var finding in group.Value)
                                 {
                                     writer.WriteLine($"- {finding.Location}");
+
+                                    if (finding.HasCallChain && finding.CallChain != null)
+                                    {
+                                        writer.WriteLine("  Call Chain Analysis:");
+                                        writer.WriteLine($"  {finding.CallChain.Summary}");
+                                        writer.WriteLine("  Attack Path:");
+                                        foreach (var node in finding.CallChain.Nodes)
+                                        {
+                                            var prefix = node.NodeType switch
+                                            {
+                                                CallChainNodeType.EntryPoint => "[ENTRY]",
+                                                CallChainNodeType.IntermediateCall => "[CALL]",
+                                                CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                                _ => "[???]"
+                                            };
+                                            writer.WriteLine($"    {prefix} {node.Location}");
+                                            if (!string.IsNullOrEmpty(node.Description))
+                                            {
+                                                writer.WriteLine($"         {node.Description}");
+                                            }
+                                        }
+                                    }
+
+                                    if (finding.HasDataFlow && finding.DataFlowChain != null)
+                                    {
+                                        writer.WriteLine("  Data Flow Analysis:");
+                                        writer.WriteLine($"  Pattern: {finding.DataFlowChain.Pattern}");
+                                        writer.WriteLine($"  Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
+                                        writer.WriteLine($"  {finding.DataFlowChain.Summary}");
+                                        if (finding.DataFlowChain.IsCrossMethod)
+                                        {
+                                            writer.WriteLine($"  Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                                        }
+                                    }
+
                                     if (!string.IsNullOrEmpty(finding.CodeSnippet))
                                     {
                                         writer.WriteLine("  Code Snippet (IL):");
@@ -406,6 +479,7 @@ namespace MLVScan
             writer.WriteLine("\nDETAILED MALWARE REMOVAL GUIDES:");
             writer.WriteLine("- Malwarebytes Guide: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
             writer.WriteLine("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
+            writer.WriteLine("- XWorm (Common Modding Malware) Removal Guide: https://www.pcrisk.com/removal-guides/27436-xworm-rat");
             writer.WriteLine("\n=============================================");
         }
     }

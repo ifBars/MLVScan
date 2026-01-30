@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using MLVScan.Abstractions;
 using MLVScan.Models;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -13,9 +14,9 @@ namespace MLVScan.Services
     public class PromptGeneratorService
     {
         private readonly ScanConfig _config;
-        private readonly MelonLoader.MelonLogger.Instance _logger;
+        private readonly IScanLogger _logger;
 
-        public PromptGeneratorService(ScanConfig config, MelonLoader.MelonLogger.Instance logger)
+        public PromptGeneratorService(ScanConfig config, IScanLogger logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

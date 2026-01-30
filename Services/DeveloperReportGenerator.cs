@@ -1,6 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
-using MelonLoader;
+using MLVScan.Abstractions;
 using MLVScan.Models;
+using MLVScan.Models.Rules;
 
 namespace MLVScan.Services
 {
@@ -10,9 +14,9 @@ namespace MLVScan.Services
     /// </summary>
     public class DeveloperReportGenerator
     {
-        private readonly MelonLogger.Instance _logger;
+        private readonly IScanLogger _logger;
 
-        public DeveloperReportGenerator(MelonLogger.Instance logger)
+        public DeveloperReportGenerator(IScanLogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -25,12 +29,12 @@ namespace MLVScan.Services
             if (findings == null || findings.Count == 0)
                 return;
 
-            _logger.Msg("======= DEVELOPER SCAN REPORT =======");
-            _logger.Msg(PlatformConstants.GetFullVersionInfo());
-            _logger.Msg($"Mod: {modName}");
-            _logger.Msg("--------------------------------------");
-            _logger.Msg($"Total findings: {findings.Count}");
-            _logger.Msg("");
+            _logger.Info("======= DEVELOPER SCAN REPORT =======");
+            _logger.Info(PlatformConstants.GetFullVersionInfo());
+            _logger.Info($"Mod: {modName}");
+            _logger.Info("--------------------------------------");
+            _logger.Info($"Total findings: {findings.Count}");
+            _logger.Info("");
 
             var groupedByRule = findings
                 .Where(f => f.RuleId != null)
@@ -42,57 +46,85 @@ namespace MLVScan.Services
                 var firstFinding = ruleGroup.First();
                 var count = ruleGroup.Count();
 
-                _logger.Msg($"[{firstFinding.Severity}] {firstFinding.Description}");
-                _logger.Msg($"  Rule: {firstFinding.RuleId}");
-                _logger.Msg($"  Occurrences: {count}");
+                _logger.Info($"[{firstFinding.Severity}] {firstFinding.Description}");
+                _logger.Info($"  Rule: {firstFinding.RuleId}");
+                _logger.Info($"  Occurrences: {count}");
 
                 // Show developer guidance if available
                 if (firstFinding.DeveloperGuidance != null)
                 {
-                    _logger.Msg("");
-                    _logger.Msg("  Developer Guidance:");
-                    _logger.Msg($"  {WrapText(firstFinding.DeveloperGuidance.Remediation, 2)}");
+                    _logger.Info("");
+                    _logger.Info("  Developer Guidance:");
+                    _logger.Info($"  {WrapText(firstFinding.DeveloperGuidance.Remediation, 2)}");
 
                     if (!string.IsNullOrEmpty(firstFinding.DeveloperGuidance.DocumentationUrl))
                     {
-                        _logger.Msg($"  Documentation: {firstFinding.DeveloperGuidance.DocumentationUrl}");
+                        _logger.Info($"  Documentation: {firstFinding.DeveloperGuidance.DocumentationUrl}");
                     }
 
                     if (firstFinding.DeveloperGuidance.AlternativeApis != null &&
                         firstFinding.DeveloperGuidance.AlternativeApis.Length > 0)
                     {
-                        _logger.Msg($"  Suggested APIs: {string.Join(", ", firstFinding.DeveloperGuidance.AlternativeApis)}");
+                        _logger.Info($"  Suggested APIs: {string.Join(", ", firstFinding.DeveloperGuidance.AlternativeApis)}");
                     }
 
                     if (!firstFinding.DeveloperGuidance.IsRemediable)
                     {
-                        _logger.Warning("  ⚠ No safe alternative - this pattern should not be used in MelonLoader mods.");
+                        _logger.Warning("  No safe alternative - this pattern should not be used in mods.");
                     }
                 }
                 else
                 {
-                    _logger.Msg("  (No developer guidance available for this rule)");
+                    _logger.Info("  (No developer guidance available for this rule)");
                 }
 
                 // Show sample locations
-                _logger.Msg("");
-                _logger.Msg("  Sample locations:");
+                _logger.Info("");
+                _logger.Info("  Sample locations:");
                 foreach (var finding in ruleGroup.Take(3))
                 {
-                    _logger.Msg($"    - {finding.Location}");
+                    _logger.Info($"    - {finding.Location}");
+
+                    if (finding.HasCallChain && finding.CallChain != null)
+                    {
+                        _logger.Info("      Call Chain:");
+                        foreach (var node in finding.CallChain.Nodes.Take(3))
+                        {
+                            var prefix = node.NodeType switch
+                            {
+                                CallChainNodeType.EntryPoint => "[ENTRY]",
+                                CallChainNodeType.IntermediateCall => "[CALL]",
+                                CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                _ => "[???]"
+                            };
+                            _logger.Info($"        {prefix} {node.Location}");
+                        }
+                        if (finding.CallChain.Nodes.Count > 3)
+                        {
+                            _logger.Info($"        ... and {finding.CallChain.Nodes.Count - 3} more");
+                        }
+                    }
+
+                    if (finding.HasDataFlow && finding.DataFlowChain != null)
+                    {
+                        _logger.Info($"      Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}%)");
+                        if (finding.DataFlowChain.IsCrossMethod)
+                        {
+                            _logger.Info($"        Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                        }
+                    }
                 }
                 if (count > 3)
                 {
-                    _logger.Msg($"    ... and {count - 3} more");
+                    _logger.Info($"    ... and {count - 3} more");
                 }
 
-                _logger.Msg("");
-                _logger.Msg("--------------------------------------");
+                _logger.Info("--------------------------------------");
             }
 
-            _logger.Msg("");
-            _logger.Msg("For more information, visit: https://discord.gg/UD4K4chKak");
-            _logger.Msg("=====================================");
+            _logger.Info("");
+            _logger.Info("For more information, visit: https://discord.gg/UD4K4chKak");
+            _logger.Info("=====================================");
         }
 
         /// <summary>
@@ -151,7 +183,7 @@ namespace MLVScan.Services
                     if (!firstFinding.DeveloperGuidance.IsRemediable)
                     {
                         sb.AppendLine("");
-                        sb.AppendLine("WARNING: This pattern has no safe alternative and should not be used in MelonLoader mods.");
+                        sb.AppendLine("WARNING: This pattern has no safe alternative and should not be used in mods.");
                     }
 
                     sb.AppendLine("");
@@ -167,12 +199,76 @@ namespace MLVScan.Services
                 foreach (var finding in ruleGroup)
                 {
                     sb.AppendLine($"Location: {finding.Location}");
+
+                    // Show call chain if available
+                    if (finding.HasCallChain && finding.CallChain != null)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("--- CALL CHAIN ANALYSIS ---");
+                        sb.AppendLine(finding.CallChain.Summary);
+                        sb.AppendLine();
+                        sb.AppendLine("Attack Path:");
+                        foreach (var node in finding.CallChain.Nodes)
+                        {
+                            var prefix = node.NodeType switch
+                            {
+                                CallChainNodeType.EntryPoint => "[ENTRY]",
+                                CallChainNodeType.IntermediateCall => "[CALL]",
+                                CallChainNodeType.SuspiciousDeclaration => "[DECL]",
+                                _ => "[???]"
+                            };
+                            sb.AppendLine($"  {prefix} {node.Location}");
+                            if (!string.IsNullOrEmpty(node.Description))
+                            {
+                                sb.AppendLine($"         {node.Description}");
+                            }
+                        }
+                    }
+
+                    // Show data flow chain if available
+                    if (finding.HasDataFlow && finding.DataFlowChain != null)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("--- DATA FLOW ANALYSIS ---");
+                        sb.AppendLine($"Pattern: {finding.DataFlowChain.Pattern}");
+                        sb.AppendLine($"Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
+                        sb.AppendLine(finding.DataFlowChain.Summary);
+
+                        if (finding.DataFlowChain.IsCrossMethod)
+                        {
+                            sb.AppendLine();
+                            sb.AppendLine("Cross-Method Flow:");
+                            foreach (var method in finding.DataFlowChain.InvolvedMethods)
+                            {
+                                sb.AppendLine($"  - {method}");
+                            }
+                        }
+
+                        sb.AppendLine();
+                        sb.AppendLine("Data Flow Path:");
+                        for (int i = 0; i < finding.DataFlowChain.Nodes.Count; i++)
+                        {
+                            var node = finding.DataFlowChain.Nodes[i];
+                            var arrow = i > 0 ? "  -> " : "    ";
+                            var prefix = node.NodeType switch
+                            {
+                                DataFlowNodeType.Source => "[SOURCE]",
+                                DataFlowNodeType.Transform => "[TRANSFORM]",
+                                DataFlowNodeType.Sink => "[SINK]",
+                                DataFlowNodeType.Intermediate => "[PASS]",
+                                _ => "[???]"
+                            };
+                            sb.AppendLine($"{arrow}{prefix} {node.Operation} ({node.DataDescription})");
+                            sb.AppendLine($"{new string(' ', arrow.Length)}     Location: {node.Location}");
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(finding.CodeSnippet))
                     {
                         sb.AppendLine("Code Snippet:");
                         sb.AppendLine(finding.CodeSnippet);
                     }
-                    sb.AppendLine("");
+                    sb.AppendLine();
                 }
             }
 

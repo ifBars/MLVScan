@@ -1,0 +1,76 @@
+name: Build MLVScan
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Install Mono (for ILRepack)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mono-complete
+        
+    # MelonLoader
+    - name: Restore MelonLoader dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=MelonLoader
+      
+    - name: Build MelonLoader
+      run: dotnet build MLVScan.csproj -c MelonLoader --no-restore
+      
+    - name: Upload MelonLoader Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MLVScan.MelonLoader
+        path: bin/MelonLoader/**/MLVScan.MelonLoader.dll
+        
+    # BepInEx 5
+    - name: Restore BepInEx dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx
+      
+    - name: Build BepInEx
+      run: dotnet build MLVScan.csproj -c BepInEx --no-restore
+      
+    - name: Upload BepInEx Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MLVScan.BepInEx
+        path: bin/BepInEx/**/MLVScan.BepInEx.dll
+        
+    # BepInEx 6.x Mono
+    - name: Restore BepInEx6Mono dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx6Mono
+      
+    - name: Build BepInEx6Mono
+      run: dotnet build MLVScan.csproj -c BepInEx6Mono --no-restore
+      
+    - name: Upload BepInEx6Mono Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MLVScan.BepInEx6.Mono
+        path: bin/BepInEx6Mono/**/MLVScan.BepInEx6.Mono.dll
+        
+    # BepInEx 6.x IL2CPP
+    - name: Restore BepInEx6IL2CPP dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx6IL2CPP
+      
+    - name: Build BepInEx6IL2CPP
+      run: dotnet build MLVScan.csproj -c BepInEx6IL2CPP --no-restore
+      
+    - name: Upload BepInEx6IL2CPP Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MLVScan.BepInEx6.IL2CPP
+        path: bin/BepInEx6IL2CPP/**/MLVScan.BepInEx6.IL2CPP.dll

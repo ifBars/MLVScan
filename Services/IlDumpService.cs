@@ -1,21 +1,26 @@
 using System;
 using System.IO;
 using System.Linq;
-using MelonLoader;
-using MelonLoader.Utils;
+using MLVScan.Abstractions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 namespace MLVScan.Services
 {
+    /// <summary>
+    /// Service for dumping IL code from assemblies.
+    /// Uses platform environment for assembly resolution.
+    /// </summary>
     public class IlDumpService
     {
-        private readonly MelonLogger.Instance _logger;
+        private readonly IScanLogger _logger;
+        private readonly IPlatformEnvironment _environment;
         private readonly DefaultAssemblyResolver _assemblyResolver;
 
-        public IlDumpService(MelonLogger.Instance logger)
+        public IlDumpService(IScanLogger logger, IPlatformEnvironment environment)
         {
-            _logger = logger;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _environment = environment ?? throw new ArgumentNullException(nameof(environment));
             _assemblyResolver = BuildResolver();
         }
 
@@ -42,7 +47,8 @@ namespace MLVScan.Services
 
                 using var writer = new StreamWriter(outputPath);
                 writer.WriteLine($"; Full IL dump for {Path.GetFileName(assemblyPath)}");
-                writer.WriteLine($"; Generated: {System.DateTime.Now}");
+                writer.WriteLine($"; Generated: {DateTime.Now}");
+                writer.WriteLine($"; Platform: {_environment.PlatformName}");
                 writer.WriteLine();
 
                 foreach (var module in assembly.Modules)
@@ -56,12 +62,12 @@ namespace MLVScan.Services
                     }
                 }
 
-                _logger?.Msg($"Saved IL dump to: {outputPath}");
+                _logger.Info($"Saved IL dump to: {outputPath}");
                 return true;
             }
             catch (Exception ex)
             {
-                _logger?.Error($"Failed to dump IL for {Path.GetFileName(assemblyPath)}: {ex.Message}");
+                _logger.Error($"Failed to dump IL for {Path.GetFileName(assemblyPath)}: {ex.Message}");
                 return false;
             }
         }
@@ -70,37 +76,27 @@ namespace MLVScan.Services
         {
             var resolver = new DefaultAssemblyResolver();
 
-            var gameDir = MelonEnvironment.GameRootDirectory;
-            var melonDir = Path.Combine(gameDir, "MelonLoader");
-
-            resolver.AddSearchDirectory(gameDir);
-
-            if (Directory.Exists(melonDir))
+            // Add game root
+            var gameDir = _environment.GameRootDirectory;
+            if (Directory.Exists(gameDir))
             {
-                resolver.AddSearchDirectory(melonDir);
-
-                var managedDir = Path.Combine(melonDir, "Managed");
-                if (Directory.Exists(managedDir))
-                {
-                    resolver.AddSearchDirectory(managedDir);
-                }
-
-                var dependenciesDir = Path.Combine(melonDir, "Dependencies");
-                if (Directory.Exists(dependenciesDir))
-                {
-                    resolver.AddSearchDirectory(dependenciesDir);
-
-                    foreach (var dir in Directory.GetDirectories(dependenciesDir, "*", SearchOption.AllDirectories))
-                    {
-                        resolver.AddSearchDirectory(dir);
-                    }
-                }
+                resolver.AddSearchDirectory(gameDir);
             }
 
-            var gameManagedDir = Path.Combine(gameDir, "Schedule I_Data", "Managed");
-            if (Directory.Exists(gameManagedDir))
+            // Add managed assemblies directory
+            var managedDir = _environment.ManagedDirectory;
+            if (!string.IsNullOrEmpty(managedDir) && Directory.Exists(managedDir))
             {
-                resolver.AddSearchDirectory(gameManagedDir);
+                resolver.AddSearchDirectory(managedDir);
+            }
+
+            // Add plugin directories
+            foreach (var pluginDir in _environment.PluginDirectories)
+            {
+                if (Directory.Exists(pluginDir))
+                {
+                    resolver.AddSearchDirectory(pluginDir);
+                }
             }
 
             return resolver;
