@@ -38,8 +38,17 @@ namespace MLVScan.MelonLoader
             }
         }
 
+        /// <summary>
+        /// Creates the configuration manager.
+        /// </summary>
+        /// <returns>The MelonConfigManager instance.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the configuration manager is unavailable due to initialization failure.</exception>
         public MelonConfigManager CreateConfigManager()
         {
+            if (_configManager == null)
+            {
+                throw new InvalidOperationException("Configuration manager unavailable: failed to initialize during factory construction.");
+            }
             return _configManager;
         }
 
