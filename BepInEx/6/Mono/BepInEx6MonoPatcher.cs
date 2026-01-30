@@ -68,26 +68,30 @@ namespace MLVScan.BepInEx6.Mono
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
                 var reportGenerator = new BepInExReportGenerator(_logger, config);
 
-                // Scan all plugins
-                var scanResults = pluginScanner.ScanAllPlugins();
-
-                if (scanResults.Count > 0)
+                if (!config.EnableAutoScan)
                 {
-                    // Disable suspicious plugins
-                    var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
-
-                    // Generate reports for disabled plugins
-                    if (disabledPlugins.Count > 0)
-                    {
-                        reportGenerator.GenerateReports(disabledPlugins, scanResults);
-
-                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");
-                        _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
-                    }
+                    _logger.LogInfo("Auto-scan is disabled. Skipping plugin scan.");
                 }
                 else
                 {
-                    _logger.LogInfo("No suspicious plugins detected.");
+                    var scanResults = pluginScanner.ScanAllPlugins();
+
+                    if (scanResults.Count > 0)
+                    {
+                        var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
+
+                        if (disabledPlugins.Count > 0)
+                        {
+                            reportGenerator.GenerateReports(disabledPlugins, scanResults);
+
+                            _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");
+                            _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInfo("No suspicious plugins detected.");
+                    }
                 }
 
                 _logger.LogInfo("MLVScan BepInEx 6 (Mono) preloader scan complete.");
