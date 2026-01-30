@@ -131,7 +131,7 @@ namespace MLVScan.Services
 
             if (actualFindings.Count >= Config.SuspiciousThreshold)
             {
-                results.Add(filePath, actualFindings);
+                results[filePath] = actualFindings;
                 Logger.Warning($"Found {actualFindings.Count} suspicious patterns in {fileName}");
             }
         }
