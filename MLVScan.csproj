@@ -212,7 +212,7 @@
     <!-- Use NuGet package by default -->
     <PackageReference Include="MLVScan.Core" Version="*" GeneratePathProperty="true" />
 
-    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.2" />
+    <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
@@ -220,7 +220,7 @@
   <!-- ============================================ -->
   <!-- ILRepack Target (merge MLVScan.Core)        -->
   <!-- ============================================ -->
-  <Target Name="ILRepack" AfterTargets="Build">
+  <Target Name="MergeAssemblies" AfterTargets="Build">
     <ItemGroup>
       <InputAssemblies Include="$(TargetPath)" />
       <InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll" />
@@ -237,13 +237,13 @@
     </ItemGroup>
     <PropertyGroup>
       <MergedAssemblyPath>$(OutputPath)$(AssemblyName).merged.dll</MergedAssemblyPath>
+      <ILRepackExePath>$(PkgILRepack)\tools\ILRepack.exe</ILRepackExePath>
+      <!-- On non-Windows, use mono to run the .exe -->
+      <ILRepackCommand Condition="'$(OS)' == 'Windows_NT'">"$(ILRepackExePath)"</ILRepackCommand>
+      <ILRepackCommand Condition="'$(OS)' != 'Windows_NT'">mono "$(ILRepackExePath)"</ILRepackCommand>
+      <ILRepackLibArgs Condition="'@(ILRepackLib)' != ''">/lib:"@(ILRepackLib, '" /lib:"')"</ILRepackLibArgs>
     </PropertyGroup>
-    <ILRepack 
-      Parallel="true" 
-      Union="true"
-      LibraryPath="@(ILRepackLib)"
-      OutputFile="$(MergedAssemblyPath)" 
-      InputAssemblies="@(InputAssemblies)" />
+    <Exec Command="$(ILRepackCommand) /parallel /union $(ILRepackLibArgs) /out:&quot;$(MergedAssemblyPath)&quot; &quot;@(InputAssemblies, '&quot; &quot;')&quot;" />
     <Copy SourceFiles="$(MergedAssemblyPath)" DestinationFiles="$(TargetPath)" Condition="Exists('$(MergedAssemblyPath)')" />
   </Target>
 
@@ -251,7 +251,7 @@
   <!-- ============================================ -->
   <!-- Post-Build Copy (MelonLoader)               -->
   <!-- ============================================ -->
-  <Target Name="PostBuildMelonLoader" AfterTargets="ILRepack" Condition="'$(Configuration)'=='MelonLoader' and '$(MelonPluginsPath)' != ''">
+  <Target Name="PostBuildMelonLoader" AfterTargets="MergeAssemblies" Condition="'$(Configuration)'=='MelonLoader' and '$(MelonPluginsPath)' != ''">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MelonPluginsPath)" />
     <Message Text="Copied MLVScan.MelonLoader.dll to $(MelonPluginsPath)" Importance="high" />
   </Target>
@@ -259,7 +259,7 @@
   <!-- ============================================ -->
   <!-- Post-Build Copy (BepInEx)                   -->
   <!-- ============================================ -->
-  <Target Name="PostBuildBepInEx" AfterTargets="ILRepack" Condition="'$(Configuration)'=='BepInEx' and '$(BepInExPatchersPath)' != ''">
+  <Target Name="PostBuildBepInEx" AfterTargets="MergeAssemblies" Condition="'$(Configuration)'=='BepInEx' and '$(BepInExPatchersPath)' != ''">
     <MakeDir Directories="$(BepInExPatchersPath)" Condition="!Exists('$(BepInExPatchersPath)')" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExPatchersPath)" />
     <Message Text="Copied MLVScan.BepInEx.dll to $(BepInExPatchersPath)" Importance="high" />
