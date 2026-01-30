@@ -215,7 +215,7 @@ namespace MLVScan.Services
                                 CallChainNodeType.EntryPoint => "[ENTRY]",
                                 CallChainNodeType.IntermediateCall => "[CALL]",
                                 CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                                _ => "[???"
+                                _ => "[???]"
                             };
                             sb.AppendLine($"  {prefix} {node.Location}");
                             if (!string.IsNullOrEmpty(node.Description))
