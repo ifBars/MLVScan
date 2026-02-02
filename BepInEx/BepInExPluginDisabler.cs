@@ -1,3 +1,4 @@
+using System.IO;
 using MLVScan.Abstractions;
 using MLVScan.Models;
 using MLVScan.Services;
@@ -6,25 +7,25 @@ namespace MLVScan.BepInEx
 {
     /// <summary>
     /// BepInEx implementation of plugin disabler.
-    /// Uses ".blocked" extension (BepInEx convention).
+    /// Uses ".disabled" extension for consistency across platforms.
     /// </summary>
     public class BepInExPluginDisabler : PluginDisablerBase
     {
-        private const string BepInExBlockedExtension = ".blocked";
+        private const string DisabledExtension = ".disabled";
 
         public BepInExPluginDisabler(IScanLogger logger, ScanConfig config)
             : base(logger, config)
         {
         }
 
-        protected override string DisabledExtension => BepInExBlockedExtension;
+        protected override string GetDisabledExtension() => DisabledExtension;
 
         /// <summary>
-        /// BepInEx uses append style (plugin.dll -> plugin.dll.blocked).
+        /// Standard extension replacement style (plugin.dll -> plugin.disabled).
         /// </summary>
         protected override string GetDisabledPath(string originalPath)
         {
-            return originalPath + BepInExBlockedExtension;
+            return Path.ChangeExtension(originalPath, DisabledExtension);
         }
     }
 }

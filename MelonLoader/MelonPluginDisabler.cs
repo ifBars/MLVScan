@@ -7,25 +7,25 @@ namespace MLVScan.MelonLoader
 {
     /// <summary>
     /// MelonLoader implementation of plugin disabler.
-    /// Uses ".di" extension (MelonLoader convention).
+    /// Uses ".disabled" extension for consistency across platforms.
     /// </summary>
     public class MelonPluginDisabler : PluginDisablerBase
     {
-        private const string MelonDisabledExtension = ".di";
+        private const string DisabledExtension = ".disabled";
 
         public MelonPluginDisabler(IScanLogger logger, ScanConfig config)
             : base(logger, config)
         {
         }
 
-        protected override string DisabledExtension => MelonDisabledExtension;
+        protected override string GetDisabledExtension() => DisabledExtension;
 
         /// <summary>
-        /// MelonLoader uses extension replacement style (plugin.dll -> plugin.di).
+        /// Standard extension replacement style (plugin.dll -> plugin.disabled).
         /// </summary>
         protected override string GetDisabledPath(string originalPath)
         {
-            return Path.ChangeExtension(originalPath, MelonDisabledExtension);
+            return Path.ChangeExtension(originalPath, DisabledExtension);
         }
     }
 }

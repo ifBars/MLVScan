@@ -35,10 +35,10 @@ namespace MLVScan.Services
         protected readonly ScanConfig Config;
 
         /// <summary>
-        /// Extension used to disable plugins (platform-specific).
-        /// MelonLoader uses ".di", BepInEx uses ".blocked".
+        /// Gets the extension used to disable plugins.
+        /// Default is ".disabled" for consistency across platforms.
         /// </summary>
-        protected abstract string DisabledExtension { get; }
+        protected virtual string GetDisabledExtension() => ".disabled";
 
         protected PluginDisablerBase(IScanLogger logger, ScanConfig config)
         {
@@ -48,13 +48,11 @@ namespace MLVScan.Services
 
         /// <summary>
         /// Gets the disabled file path for a given plugin.
+        /// Uses extension replacement style (plugin.dll -> plugin.disabled).
         /// </summary>
         protected virtual string GetDisabledPath(string originalPath)
         {
-            // BepInEx style: append extension (plugin.dll.blocked)
-            // MelonLoader style: replace extension (plugin.di)
-            // Default to append style
-            return originalPath + DisabledExtension;
+            return Path.ChangeExtension(originalPath, GetDisabledExtension());
         }
 
         /// <summary>
