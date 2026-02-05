@@ -6,7 +6,7 @@
 
 **MLVScan** is a security-focused mod loader plugin that protects your game by scanning mods for malicious patterns *before* they execute.
 
-Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (IL2CPP/Mono).
+Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 
 ![MLVScan Example](example.png)
 
@@ -20,6 +20,16 @@ Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (IL2CPP/Mono).
 ### For BepInEx 5.x
 1. **Download** the latest `MLVScan.BepInEx.dll` from [Releases](../../releases).
 2. **Install** by dropping it into your game's `BepInEx/patchers` folder.
+3. **Play!** MLVScan automatically scans plugins before they load.
+
+### For BepInEx 6.x Mono
+1. **Download** the latest `MLVScan.BepInEx6.Mono.dll` from [Releases](../../releases).
+2. **Install** by dropping it into your game's `BepInEx/plugins` folder.
+3. **Play!** MLVScan automatically scans plugins before they load.
+
+### For BepInEx 6.x Il2Cpp
+1. **Download** the latest `MLVScan.BepInEx6.IL2CPP.dll` from [Releases](../../releases).
+2. **Install** by dropping it into your game's `BepInEx/plugins` folder.
 3. **Play!** MLVScan automatically scans plugins before they load.
 
 ## 📚 Documentation
@@ -45,12 +55,12 @@ Detailed documentation is available in the **[MLVScan Wiki](https://github.com/i
 - Reports saved to `BepInEx/MLVScan/Reports/`
 - Install via `BepInEx/patchers` folder
 
-**BepInEx 6.x (IL2CPP / Mono):**
-- Runs as a preloader patcher (scans before chainloader)
+**BepInEx 6.x (Mono / Il2Cpp):**
+- Runs as a plugin (scans during plugin initialization)
 - Configuration stored in `BepInEx/config/MLVScan.json` (same as 5.x)
 - Reports saved to `BepInEx/MLVScan/Reports/` (same as 5.x)
-- Uses `[PatcherPlugin]` attribute-based packaging instead of patchers folder
-- Plugin compatibility: BepInEx 5.x plugins may require updating for 6.x API changes
+- Uses `[BepInPlugin]` attribute-based packaging
+- Supports both Mono and Il2Cpp runtimes
 
 ## 🛡️ Powered by MLVScan.Core
 
