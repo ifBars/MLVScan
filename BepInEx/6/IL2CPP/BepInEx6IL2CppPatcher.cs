@@ -11,7 +11,7 @@ namespace MLVScan.BepInEx6.IL2CPP
     /// BepInEx 6.x (IL2CPP) preloader patcher that scans plugins for malicious patterns
     /// before the chainloader initializes them.
     /// </summary>
-    [PatcherPluginInfo("com.bars.mlvscan", "MLVScan", "1.6.1")]
+    [PatcherPluginInfo("com.bars.mlvscan", "MLVScan", PlatformConstants.PlatformVersion)]
     public class BepInEx6IL2CppPatcher : BasePatcher
     {
         private ManualLogSource _logger;

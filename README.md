@@ -18,7 +18,7 @@ Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 3. **Play!** MLVScan automatically scans mods on startup.
 
 ### For BepInEx 5.x
-1. **Download** the latest `MLVScan.BepInEx.dll` from [Releases](../../releases).
+1. **Download** the latest `MLVScan.BepInEx5.dll` from [Releases](../../releases).
 2. **Install** by dropping it into your game's `BepInEx/patchers` folder.
 3. **Play!** MLVScan automatically scans plugins before they load.
 

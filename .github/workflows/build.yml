@@ -37,17 +37,17 @@ jobs:
         path: bin/MelonLoader/**/MLVScan.MelonLoader.dll
         
     # BepInEx 5
-    - name: Restore BepInEx dependencies
-      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx
+    - name: Restore BepInEx5 dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx5
       
-    - name: Build BepInEx
-      run: dotnet build MLVScan.csproj -c BepInEx --no-restore
+    - name: Build BepInEx5
+      run: dotnet build MLVScan.csproj -c BepInEx5 --no-restore
       
-    - name: Upload BepInEx Artifact
+    - name: Upload BepInEx5 Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MLVScan.BepInEx
-        path: bin/BepInEx/**/MLVScan.BepInEx.dll
+        name: MLVScan.BepInEx5
+        path: bin/BepInEx5/**/MLVScan.BepInEx5.dll
         
     # BepInEx 6.x Mono
     - name: Restore BepInEx6Mono dependencies

@@ -9,18 +9,20 @@
     <Nullable>disable</Nullable>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
-    <AssemblyVersion>1.6.1</AssemblyVersion>
-    <FileVersion>1.6.1</FileVersion>
+    <Version>1.6.2</Version>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <Configurations>MelonLoader;BepInEx;BepInEx6Mono;BepInEx6IL2CPP</Configurations>
+    <Configurations>MelonLoader;BepInEx5;BepInEx6Mono;BepInEx6IL2CPP</Configurations>
   </PropertyGroup>
 
   <!-- ============================================ -->
   <!-- Additional NuGet Sources for BepInEx        -->
   <!-- ============================================ -->
-  <PropertyGroup Condition="'$(Configuration)'=='BepInEx' or '$(Configuration)'=='BepInEx6Mono' or '$(Configuration)'=='BepInEx6IL2CPP'">
+  <PropertyGroup Condition="'$(Configuration)'=='BepInEx5' or '$(Configuration)'=='BepInEx6Mono' or '$(Configuration)'=='BepInEx6IL2CPP'">
     <RestoreAdditionalProjectSources>
       https://api.nuget.org/v3/index.json;
       https://nuget.bepinex.dev/v3/index.json
@@ -37,11 +39,11 @@
   </PropertyGroup>
 
   <!-- ============================================ -->
-  <!-- BepInEx Configuration                       -->
+  <!-- BepInEx 5.x Configuration                   -->
   <!-- ============================================ -->
-  <PropertyGroup Condition="'$(Configuration)'=='BepInEx'">
+  <PropertyGroup Condition="'$(Configuration)'=='BepInEx5'">
     <DefineConstants>BEPINEX</DefineConstants>
-    <AssemblyName>MLVScan.BepInEx</AssemblyName>
+    <AssemblyName>MLVScan.BepInEx5</AssemblyName>
   </PropertyGroup>
 
   <!-- ============================================ -->
@@ -69,12 +71,17 @@
     <None Remove="LOCAL_DEV_GUIDE.md" />
     <None Remove="AGENTS.md" />
     <None Remove="nexuspost.bbcode" />
+    <None Remove="renovate.json" />
+    <None Remove="TS-Post.md" />
+    <None Remove="example.png" />
+    <None Remove="icon.png" />
   </ItemGroup>
 
   <!-- ============================================ -->
   <!-- Shared Source Files (both configurations)   -->
   <!-- ============================================ -->
   <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)Generated\MLVScanBuildInfo.g.cs" Visible="false" />
     <Compile Include="PlatformConstants.cs" />
     <Compile Include="Abstractions\IConfigManager.cs" />
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
@@ -103,7 +110,7 @@
   <!-- ============================================ -->
   <!-- BepInEx-Specific Source Files               -->
   <!-- ============================================ -->
-  <ItemGroup Condition="'$(Configuration)'=='BepInEx'">
+  <ItemGroup Condition="'$(Configuration)'=='BepInEx5'">
     <Compile Include="BepInEx\5\BepInEx5Patcher.cs" />
     <Compile Include="BepInEx\Adapters\BepInExScanLogger.cs" />
     <Compile Include="BepInEx\Adapters\BepInExAssemblyResolverProvider.cs" />
@@ -169,7 +176,7 @@
   <!-- ============================================ -->
   <!-- BepInEx 5.x References                      -->
   <!-- ============================================ -->
-  <ItemGroup Condition="'$(Configuration)'=='BepInEx'">
+  <ItemGroup Condition="'$(Configuration)'=='BepInEx5'">
     <!-- Use NuGet package for BepInEx 5.x (compilation only) -->
     <PackageReference Include="BepInEx.Core" Version="5.*" PrivateAssets="all" GeneratePathProperty="true"
                       Condition="'$(BepInExCorePath)' == ''" />
@@ -228,7 +235,7 @@
       <ILRepackLib Include="$(PkgLavaGang_MelonLoader)\lib\net35" Condition="'$(Configuration)' == 'MelonLoader' and '$(PkgLavaGang_MelonLoader)' != ''" />
       <ILRepackLib Include="$(MelonLoaderPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(MelonLoaderPath)' != ''" />
       <ILRepackLib Include="$(GameManagedPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(GameManagedPath)' != ''" />
-      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx'" />
+      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx5'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono_Preloader)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono_Preloader)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
@@ -247,6 +254,33 @@
     <Copy SourceFiles="$(MergedAssemblyPath)" DestinationFiles="$(TargetPath)" Condition="Exists('$(MergedAssemblyPath)')" />
   </Target>
 
+  <!-- ============================================ -->
+  <!-- Generated Version Source                    -->
+  <!-- ============================================ -->
+  <Target Name="GenerateVersionInfoSource" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <GeneratedVersionInfoFile>$(IntermediateOutputPath)Generated\MLVScanBuildInfo.g.cs</GeneratedVersionInfoFile>
+    </PropertyGroup>
+
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(GeneratedVersionInfoFile)'))" />
+
+    <ItemGroup>
+      <_VersionInfoLines Include="// &lt;auto-generated /&gt;" />
+      <_VersionInfoLines Include="namespace MLVScan" />
+      <_VersionInfoLines Include="{" />
+      <_VersionInfoLines Include="    internal static class MLVScanBuildInfo" />
+      <_VersionInfoLines Include="    {" />
+      <_VersionInfoLines Include="        public const string PlatformVersion = &quot;$(Version)&quot;%3B" />
+      <_VersionInfoLines Include="    }" />
+      <_VersionInfoLines Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(GeneratedVersionInfoFile)"
+                      Lines="@(_VersionInfoLines)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
+
 
   <!-- ============================================ -->
   <!-- Post-Build Copy (MelonLoader)               -->
@@ -257,12 +291,12 @@
   </Target>
 
   <!-- ============================================ -->
-  <!-- Post-Build Copy (BepInEx)                   -->
+  <!-- Post-Build Copy (BepInEx5)                  -->
   <!-- ============================================ -->
-  <Target Name="PostBuildBepInEx" AfterTargets="MergeAssemblies" Condition="'$(Configuration)'=='BepInEx' and '$(BepInExPatchersPath)' != ''">
+  <Target Name="PostBuildBepInEx5" AfterTargets="MergeAssemblies" Condition="'$(Configuration)'=='BepInEx5' and '$(BepInExPatchersPath)' != ''">
     <MakeDir Directories="$(BepInExPatchersPath)" Condition="!Exists('$(BepInExPatchersPath)')" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExPatchersPath)" />
-    <Message Text="Copied MLVScan.BepInEx.dll to $(BepInExPatchersPath)" Importance="high" />
+    <Message Text="Copied MLVScan.BepInEx5.dll to $(BepInExPatchersPath)" Importance="high" />
   </Target>
 
   <!-- Import local.build.props if it exists for local dev overrides -->

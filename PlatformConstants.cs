@@ -2,7 +2,6 @@ namespace MLVScan
 {
     /// <summary>
     /// Version and build constants for MLVScan platform.
-    /// Update this file when releasing new versions.
     /// Uses conditional compilation for platform-specific values.
     /// </summary>
     public static class PlatformConstants
@@ -10,7 +9,7 @@ namespace MLVScan
         /// <summary>
         /// Platform-specific version.
         /// </summary>
-        public const string PlatformVersion = "1.6.1";
+        public const string PlatformVersion = MLVScanBuildInfo.PlatformVersion;
 
 #if MELONLOADER
         /// <summary>
@@ -31,7 +30,7 @@ namespace MLVScan
         /// <summary>
         /// Platform name identifier.
         /// </summary>
-        public const string PlatformName = "MLVScan.BepInEx";
+        public const string PlatformName = "MLVScan.BepInEx5";
 #else
         /// <summary>
         /// Platform name identifier (fallback for IDE).

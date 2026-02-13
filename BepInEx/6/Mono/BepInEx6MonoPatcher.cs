@@ -11,7 +11,7 @@ namespace MLVScan.BepInEx6.Mono
     /// BepInEx 6.x (Mono) preloader patcher that scans plugins for malicious patterns
     /// before the chainloader initializes them.
     /// </summary>
-    [PatcherPluginInfo("com.bars.mlvscan", "MLVScan", "1.6.1")]
+    [PatcherPluginInfo("com.bars.mlvscan", "MLVScan", PlatformConstants.PlatformVersion)]
     public class BepInEx6MonoPatcher : BasePatcher
     {
         private ManualLogSource _logger;
