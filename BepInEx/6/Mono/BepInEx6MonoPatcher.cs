@@ -66,7 +66,7 @@ namespace MLVScan.BepInEx6.Mono
                     environment);
 
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
-                var reportGenerator = new BepInExReportGenerator(_logger, config);
+                var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl());
 
                 if (!config.EnableAutoScan)
                 {
@@ -82,6 +82,15 @@ namespace MLVScan.BepInEx6.Mono
 
                         if (disabledPlugins.Count > 0)
                         {
+                            // First-run consent: show once when we have detections
+                            if (!config.ReportUploadConsentAsked)
+                            {
+                                config.ReportUploadConsentAsked = true;
+                                configManager.SaveConfig(config);
+                                _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
+                                _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
+                            }
+
                             reportGenerator.GenerateReports(disabledPlugins, scanResults);
 
                             _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");

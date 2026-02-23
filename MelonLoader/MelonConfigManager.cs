@@ -22,6 +22,9 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
         private readonly MelonPreferences_Entry<bool> _developerMode;
+        private readonly MelonPreferences_Entry<bool> _enableReportUpload;
+        private readonly MelonPreferences_Entry<bool> _reportUploadConsentAsked;
+        private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
 
         public MelonConfigManager(MelonLogger.Instance logger)
         {
@@ -55,6 +58,15 @@ namespace MLVScan.MelonLoader
                 _developerMode = _category.CreateEntry("DeveloperMode", false,
                     description: "Developer mode: Shows remediation guidance to help mod developers fix false positives");
 
+                _enableReportUpload = _category.CreateEntry("EnableReportUpload", false,
+                    description: "When enabled (and consent given), send reports to MLVScan API for false positive analysis");
+
+                _reportUploadConsentAsked = _category.CreateEntry("ReportUploadConsentAsked", false,
+                    description: "Whether the first-run consent prompt has been shown (internal)");
+
+                _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
+                    description: "API base URL for report uploads");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -63,6 +75,9 @@ namespace MLVScan.MelonLoader
                 _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _developerMode.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _enableReportUpload.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _reportUploadConsentAsked.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _reportUploadApiBaseUrl.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -101,7 +116,9 @@ namespace MLVScan.MelonLoader
                 SuspiciousThreshold = _suspiciousThreshold.Value,
                 WhitelistedHashes = _whitelistedHashes.Value,
                 DumpFullIlReports = _dumpFullIlReports.Value,
-                DeveloperMode = _developerMode.Value
+                DeveloperMode = _developerMode.Value,
+                EnableReportUpload = _enableReportUpload.Value,
+                ReportUploadConsentAsked = _reportUploadConsentAsked.Value
             };
         }
 
@@ -117,6 +134,8 @@ namespace MLVScan.MelonLoader
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
                 _developerMode.Value = newConfig.DeveloperMode;
+                _enableReportUpload.Value = newConfig.EnableReportUpload;
+                _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
 
                 MelonPreferences.Save();
 
@@ -159,6 +178,8 @@ namespace MLVScan.MelonLoader
 
             return Config.WhitelistedHashes.Contains(hash.ToLowerInvariant(), StringComparer.OrdinalIgnoreCase);
         }
+
+        public string GetReportUploadApiBaseUrl() => _reportUploadApiBaseUrl.Value;
 
         private static Severity ParseSeverity(string severity)
         {

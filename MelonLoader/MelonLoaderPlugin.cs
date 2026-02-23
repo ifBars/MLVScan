@@ -27,6 +27,7 @@ namespace MLVScan.MelonLoader
         private MelonPluginDisabler _pluginDisabler;
         private IlDumpService _ilDumpService;
         private DeveloperReportGenerator _developerReportGenerator;
+        private ReportUploadService _reportUploadService;
         private bool _initialized = false;
 
         private static readonly string[] DefaultWhitelistedHashes =
@@ -55,6 +56,7 @@ namespace MLVScan.MelonLoader
                 _pluginDisabler = _serviceFactory.CreatePluginDisabler();
                 _ilDumpService = _serviceFactory.CreateIlDumpService();
                 _developerReportGenerator = _serviceFactory.CreateDeveloperReportGenerator();
+                _reportUploadService = _serviceFactory.CreateReportUploadService();
 
                 _initialized = true;
 
@@ -145,6 +147,16 @@ namespace MLVScan.MelonLoader
 
         private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
+            // First-run consent: show once when we have detections and user hasn't been asked
+            if (_configManager != null && !_configManager.Config.ReportUploadConsentAsked)
+            {
+                var cfg = _configManager.Config;
+                cfg.ReportUploadConsentAsked = true;
+                _configManager.SaveConfig(cfg);
+                LoggerInstance.Msg("MLVScan can optionally send reports to the API to help fix false positives.");
+                LoggerInstance.Msg("To enable: set EnableReportUpload = true under [MLVScan] in MelonPreferences.cfg");
+            }
+
             var isDeveloperMode = _configManager?.Config?.DeveloperMode ?? false;
 
             if (isDeveloperMode)
@@ -411,6 +423,24 @@ namespace MLVScan.MelonLoader
                     {
                         LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
                     }
+
+                    if (_configManager?.Config?.EnableReportUpload == true && _reportUploadService != null)
+                    {
+                        try
+                        {
+                            var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
+                            if (!string.IsNullOrWhiteSpace(apiBaseUrl) && File.Exists(accessiblePath))
+                            {
+                                var assemblyBytes = File.ReadAllBytes(accessiblePath);
+                                var metadata = BuildSubmissionMetadata(modName, actualFindings);
+                                _reportUploadService.UploadReportNonBlocking(assemblyBytes, modName, metadata, apiBaseUrl);
+                            }
+                        }
+                        catch (Exception uploadEx)
+                        {
+                            LoggerInstance.Warning($"Report upload skipped for {modName}: {uploadEx.Message}");
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -419,6 +449,31 @@ namespace MLVScan.MelonLoader
             }
 
             LoggerInstance.Warning("====== END OF SCAN REPORT ======");
+        }
+
+        private static SubmissionMetadata BuildSubmissionMetadata(string modName, List<ScanFinding> findings)
+        {
+            var summary = findings
+                .Take(20)
+                .Select(f => new FindingSummaryItem
+                {
+                    RuleId = f.RuleId,
+                    Description = f.Description,
+                    Severity = f.Severity.ToString(),
+                    Location = RedactionHelper.RedactLocation(f.Location)
+                })
+                .ToList();
+
+            return new SubmissionMetadata
+            {
+                LoaderType = "MelonLoader",
+                LoaderVersion = null,
+                PluginVersion = PlatformConstants.PlatformVersion,
+                ModName = RedactionHelper.RedactFilename(modName),
+                FindingSummary = summary,
+                ConsentVersion = "1",
+                ConsentTimestamp = DateTime.UtcNow.ToString("o")
+            };
         }
 
         private static string FormatSeverityLabel(Severity severity)

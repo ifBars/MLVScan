@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using MLVScan.Abstractions;
 using MLVScan.Models;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace MLVScan.BepInEx
@@ -16,10 +17,13 @@ namespace MLVScan.BepInEx
     /// </summary>
     public class BepInExConfigManager : IConfigManager
     {
+        private const string DefaultReportUploadApiBaseUrl = "https://api.mlvscan.com";
+
         private readonly ManualLogSource _logger;
         private readonly string[] _defaultWhitelistedHashes;
         private readonly string _configPath;
         private ScanConfig _config;
+        private string _reportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl;
 
         // JSON serialization settings
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
@@ -48,6 +52,12 @@ namespace MLVScan.BepInEx
                 if (File.Exists(_configPath))
                 {
                     var json = File.ReadAllText(_configPath);
+                    var node = JsonNode.Parse(json);
+                    if (node is JsonObject obj && obj.TryGetPropertyValue("ReportUploadApiBaseUrl", out var urlNode))
+                    {
+                        _reportUploadApiBaseUrl = urlNode?.GetValue<string>()?.Trim() ?? DefaultReportUploadApiBaseUrl;
+                    }
+
                     var loaded = JsonSerializer.Deserialize<ScanConfig>(json, JsonOptions);
 
                     if (loaded != null)
@@ -82,7 +92,9 @@ namespace MLVScan.BepInEx
                 SuspiciousThreshold = 1,
                 WhitelistedHashes = _defaultWhitelistedHashes,
                 DumpFullIlReports = false,
-                DeveloperMode = false
+                DeveloperMode = false,
+                EnableReportUpload = false,
+                ReportUploadConsentAsked = false
             };
         }
 
@@ -97,9 +109,13 @@ namespace MLVScan.BepInEx
                     Directory.CreateDirectory(configDir);
                 }
 
-                var json = JsonSerializer.Serialize(config, JsonOptions);
+                var node = JsonNode.Parse(JsonSerializer.Serialize(config, JsonOptions));
+                if (node is JsonObject obj)
+                {
+                    obj["ReportUploadApiBaseUrl"] = _reportUploadApiBaseUrl;
+                }
 
-                File.WriteAllText(_configPath, json);
+                File.WriteAllText(_configPath, node?.ToJsonString(JsonOptions) ?? "{}");
                 _config = config;
             }
             catch (Exception ex)
@@ -138,5 +154,7 @@ namespace MLVScan.BepInEx
             SaveConfig(_config);
             _logger.LogInfo($"Updated whitelist with {normalizedHashes.Length} hash(es)");
         }
+
+        public string GetReportUploadApiBaseUrl() => _reportUploadApiBaseUrl;
     }
 }

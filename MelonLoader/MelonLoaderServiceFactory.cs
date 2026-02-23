@@ -97,5 +97,13 @@ namespace MLVScan.MelonLoader
         {
             return new DeveloperReportGenerator(_scanLogger);
         }
+
+        public ReportUploadService CreateReportUploadService()
+        {
+            return new ReportUploadService(
+                msg => _melonLogger.Msg(msg),
+                msg => _melonLogger.Warning(msg),
+                msg => _melonLogger.Error(msg));
+        }
     }
 }

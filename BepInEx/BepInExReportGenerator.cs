@@ -18,12 +18,20 @@ namespace MLVScan.BepInEx
     {
         private readonly ManualLogSource _logger;
         private readonly ScanConfig _config;
+        private readonly string _reportUploadApiBaseUrl;
         private readonly string _reportDirectory;
+        private readonly ReportUploadService _reportUploadService;
 
-        public BepInExReportGenerator(ManualLogSource logger, ScanConfig config)
+        public BepInExReportGenerator(ManualLogSource logger, ScanConfig config, string reportUploadApiBaseUrl)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _reportUploadApiBaseUrl = reportUploadApiBaseUrl ?? string.Empty;
+
+            _reportUploadService = new ReportUploadService(
+                msg => logger.LogInfo(msg),
+                msg => logger.LogWarning(msg),
+                msg => logger.LogError(msg));
 
             // Reports go to BepInEx/MLVScan/Reports/
             _reportDirectory = Path.Combine(Paths.BepInExRootPath, "MLVScan", "Reports");
@@ -251,11 +259,54 @@ namespace MLVScan.BepInEx
 
                 File.WriteAllText(reportPath, sb.ToString());
                 _logger.LogInfo($"Report saved: {reportPath}");
+
+                if (_config.EnableReportUpload && !string.IsNullOrWhiteSpace(_reportUploadApiBaseUrl))
+                {
+                    try
+                    {
+                        var accessiblePath = File.Exists(pluginInfo.DisabledPath) ? pluginInfo.DisabledPath : pluginInfo.OriginalPath;
+                        if (File.Exists(accessiblePath))
+                        {
+                            var assemblyBytes = File.ReadAllBytes(accessiblePath);
+                            var metadata = BuildSubmissionMetadata(pluginName, findings);
+                            _reportUploadService.UploadReportNonBlocking(assemblyBytes, pluginName, metadata, _reportUploadApiBaseUrl);
+                        }
+                    }
+                    catch (Exception uploadEx)
+                    {
+                        _logger.LogWarning($"Report upload skipped for {pluginName}: {uploadEx.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Failed to generate report: {ex.Message}");
             }
+        }
+
+        private static SubmissionMetadata BuildSubmissionMetadata(string pluginName, List<ScanFinding> findings)
+        {
+            var summary = findings
+                .Take(20)
+                .Select(f => new FindingSummaryItem
+                {
+                    RuleId = f.RuleId,
+                    Description = f.Description,
+                    Severity = f.Severity.ToString(),
+                    Location = RedactionHelper.RedactLocation(f.Location)
+                })
+                .ToList();
+
+            return new SubmissionMetadata
+            {
+                LoaderType = PlatformConstants.PlatformName,
+                LoaderVersion = null,
+                PluginVersion = PlatformConstants.PlatformVersion,
+                ModName = RedactionHelper.RedactFilename(pluginName),
+                FindingSummary = summary,
+                ConsentVersion = "1",
+                ConsentTimestamp = DateTime.UtcNow.ToString("o")
+            };
         }
 
         private void EnsureReportDirectoryExists()

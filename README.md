@@ -32,6 +32,15 @@ Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 2. **Install** by dropping it into your game's `BepInEx/plugins` folder.
 3. **Play!** MLVScan automatically scans plugins before they load.
 
+## Optional Report Upload
+
+MLVScan can optionally send scan reports to the MLVScan API to help fix false positives. This is **off by default** and requires your explicit consent.
+
+- **MelonLoader:** Set `EnableReportUpload = true` in `MelonPreferences.cfg` under `[MLVScan]`
+- **BepInEx:** Set `"EnableReportUpload": true` in `BepInEx/config/MLVScan.json`
+
+The first time a suspicious mod is detected, MLVScan shows a one-time message. Local reports are always generated regardless of upload settings.
+
 ## 📚 Documentation
 
 Detailed documentation is available in the **[MLVScan Wiki](https://github.com/ifBars/MLVScan/wiki)**:

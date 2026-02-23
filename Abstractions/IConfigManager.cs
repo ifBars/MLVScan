@@ -38,5 +38,10 @@ namespace MLVScan.Abstractions
         /// Sets the whitelisted hashes (normalizes and deduplicates).
         /// </summary>
         void SetWhitelistedHashes(string[] hashes);
+
+        /// <summary>
+        /// Gets the API base URL for report uploads (mod loader implementation-specific).
+        /// </summary>
+        string GetReportUploadApiBaseUrl();
     }
 }
