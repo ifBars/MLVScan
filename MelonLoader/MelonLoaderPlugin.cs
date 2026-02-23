@@ -157,7 +157,7 @@ namespace MLVScan.MelonLoader
                 LoggerInstance.Msg("To enable: set EnableReportUpload = true under [MLVScan] in MelonPreferences.cfg");
             }
 
-            var isDeveloperMode = _configManager?.Config?.DeveloperMode ?? false;
+            var isDeveloperMode = _configManager?.Config?.Scan?.DeveloperMode ?? false;
 
             if (isDeveloperMode)
             {

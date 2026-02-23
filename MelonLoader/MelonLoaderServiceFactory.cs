@@ -85,7 +85,7 @@ namespace MLVScan.MelonLoader
         public PromptGeneratorService CreatePromptGenerator()
         {
             var config = _configManager?.Config ?? _fallbackConfig;
-            return new PromptGeneratorService(config, _scanLogger);
+            return new PromptGeneratorService(config.Scan, _scanLogger);
         }
 
         public IlDumpService CreateIlDumpService()
