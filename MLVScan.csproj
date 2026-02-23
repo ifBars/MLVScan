@@ -81,14 +81,14 @@
   </ItemGroup>
 
   <!-- ============================================ -->
-  <!-- Shared Source Files (both configurations)   -->
+  <!-- Shared Source Files (both configurations)     -->
   <!-- ============================================ -->
   <ItemGroup>
     <Compile Include="$(IntermediateOutputPath)Generated\MLVScanBuildInfo.g.cs" Visible="false" />
     <Compile Include="PlatformConstants.cs" />
     <Compile Include="Abstractions\IConfigManager.cs" />
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
-    <Compile Include="Models\ScanScopeConfig.cs" />
+    <Compile Include="Models\MLVScanConfig.cs" />
     <Compile Include="Services\PluginScannerBase.cs" />
     <Compile Include="Services\Scope\TargetAssemblyScopeFilter.cs" />
     <Compile Include="Services\PluginDisablerBase.cs" />

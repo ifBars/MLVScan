@@ -17,7 +17,7 @@ namespace MLVScan.MelonLoader
         private readonly IAssemblyResolverProvider _resolverProvider;
         private readonly MelonConfigManager _configManager;
         private readonly MelonPlatformEnvironment _environment;
-        private readonly ScanConfig _fallbackConfig;
+        private readonly MLVScanConfig _fallbackConfig;
 
         public MelonLoaderServiceFactory(MelonLogger.Instance logger)
         {
@@ -25,7 +25,7 @@ namespace MLVScan.MelonLoader
             _scanLogger = new MelonScanLogger(logger);
             _resolverProvider = new GameAssemblyResolverProvider();
             _environment = new MelonPlatformEnvironment();
-            _fallbackConfig = new ScanConfig();
+            _fallbackConfig = new MLVScanConfig();
 
             try
             {
@@ -62,7 +62,7 @@ namespace MLVScan.MelonLoader
             var config = _configManager?.Config ?? _fallbackConfig;
             var rules = RuleFactory.CreateDefaultRules();
 
-            return new AssemblyScanner(rules, config, _resolverProvider);
+            return new AssemblyScanner(rules, config.Scan, _resolverProvider);
         }
 
         public MelonPluginScanner CreatePluginScanner()

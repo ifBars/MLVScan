@@ -13,7 +13,7 @@ namespace MLVScan.BepInEx
     {
         private const string DisabledExtension = ".disabled";
 
-        public BepInExPluginDisabler(IScanLogger logger, ScanConfig config)
+        public BepInExPluginDisabler(IScanLogger logger, MLVScanConfig config)
             : base(logger, config)
         {
         }

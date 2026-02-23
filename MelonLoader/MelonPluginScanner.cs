@@ -19,7 +19,7 @@ namespace MLVScan.MelonLoader
         public MelonPluginScanner(
             IScanLogger logger,
             IAssemblyResolverProvider resolverProvider,
-            ScanConfig config,
+            MLVScanConfig config,
             IConfigManager configManager,
             MelonPlatformEnvironment environment)
             : base(logger, resolverProvider, config, configManager)

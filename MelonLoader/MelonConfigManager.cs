@@ -87,13 +87,13 @@ namespace MLVScan.MelonLoader
             {
                 _logger.Error($"Failed to initialize config system: {ex.Message}");
                 _logger.Msg("Using fallback in-memory configuration");
-                Config = new ScanConfig();
+                Config = new MLVScanConfig();
             }
         }
 
-        public ScanConfig Config { get; private set; }
+        public MLVScanConfig Config { get; private set; }
 
-        public ScanConfig LoadConfig()
+        public MLVScanConfig LoadConfig()
         {
             UpdateConfigFromPreferences();
             return Config;
@@ -107,7 +107,7 @@ namespace MLVScan.MelonLoader
 
         private void UpdateConfigFromPreferences()
         {
-            Config = new ScanConfig
+            Config = new MLVScanConfig
             {
                 EnableAutoScan = _enableAutoScan.Value,
                 EnableAutoDisable = _enableAutoDisable.Value,
@@ -116,13 +116,17 @@ namespace MLVScan.MelonLoader
                 SuspiciousThreshold = _suspiciousThreshold.Value,
                 WhitelistedHashes = _whitelistedHashes.Value,
                 DumpFullIlReports = _dumpFullIlReports.Value,
-                DeveloperMode = _developerMode.Value,
+                Scan = new ScanConfig
+                {
+                    DeveloperMode = _developerMode.Value
+                },
                 EnableReportUpload = _enableReportUpload.Value,
-                ReportUploadConsentAsked = _reportUploadConsentAsked.Value
+                ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
+                ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value
             };
         }
 
-        public void SaveConfig(ScanConfig newConfig)
+        public void SaveConfig(MLVScanConfig newConfig)
         {
             try
             {
@@ -133,9 +137,10 @@ namespace MLVScan.MelonLoader
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
-                _developerMode.Value = newConfig.DeveloperMode;
+                _developerMode.Value = newConfig.Scan?.DeveloperMode ?? false;
                 _enableReportUpload.Value = newConfig.EnableReportUpload;
                 _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
+                _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
 
                 MelonPreferences.Save();
 

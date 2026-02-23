@@ -21,11 +21,11 @@ public sealed class TargetAssemblyScopeFilter
         "dotnet\\shared"
     ];
 
-    public IReadOnlyList<string> BuildEffectiveRoots(IEnumerable<string> candidateRoots, ScanScopeConfig scope)
+    public IReadOnlyList<string> BuildEffectiveRoots(IEnumerable<string> candidateRoots, MLVScanConfig config)
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var root in candidateRoots.Concat(scope.AdditionalTargetRoots))
+        foreach (var root in candidateRoots.Concat(config.AdditionalTargetRoots))
         {
             if (string.IsNullOrWhiteSpace(root))
             {
@@ -38,7 +38,7 @@ public sealed class TargetAssemblyScopeFilter
                 continue;
             }
 
-            if (IsResolverOnlyPath(normalized) || IsUnderAny(normalized, scope.ExcludedTargetRoots))
+            if (IsResolverOnlyPath(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
             {
                 continue;
             }
@@ -49,7 +49,7 @@ public sealed class TargetAssemblyScopeFilter
         return roots.OrderBy(root => root, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public bool IsTargetAssembly(string assemblyPath, IReadOnlyCollection<string> effectiveRoots, ScanScopeConfig scope)
+    public bool IsTargetAssembly(string assemblyPath, IReadOnlyCollection<string> effectiveRoots, MLVScanConfig config)
     {
         if (string.IsNullOrWhiteSpace(assemblyPath))
         {
@@ -67,7 +67,7 @@ public sealed class TargetAssemblyScopeFilter
             return false;
         }
 
-        if (IsResolverOnlyPath(fullPath) || IsUnderAny(fullPath, scope.ExcludedTargetRoots))
+        if (IsResolverOnlyPath(fullPath) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
         {
             return false;
         }

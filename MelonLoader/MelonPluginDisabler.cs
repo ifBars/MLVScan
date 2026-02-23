@@ -13,7 +13,7 @@ namespace MLVScan.MelonLoader
     {
         private const string DisabledExtension = ".disabled";
 
-        public MelonPluginDisabler(IScanLogger logger, ScanConfig config)
+        public MelonPluginDisabler(IScanLogger logger, MLVScanConfig config)
             : base(logger, config)
         {
         }

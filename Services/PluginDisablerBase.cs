@@ -32,7 +32,7 @@ namespace MLVScan.Services
     public abstract class PluginDisablerBase
     {
         protected readonly IScanLogger Logger;
-        protected readonly ScanConfig Config;
+        protected readonly MLVScanConfig Config;
 
         /// <summary>
         /// Gets the extension used to disable plugins.
@@ -40,7 +40,7 @@ namespace MLVScan.Services
         /// </summary>
         protected virtual string GetDisabledExtension() => ".disabled";
 
-        protected PluginDisablerBase(IScanLogger logger, ScanConfig config)
+        protected PluginDisablerBase(IScanLogger logger, MLVScanConfig config)
         {
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             Config = config ?? throw new ArgumentNullException(nameof(config));

@@ -19,7 +19,7 @@ namespace MLVScan.BepInEx
         public BepInExPluginScanner(
             IScanLogger logger,
             IAssemblyResolverProvider resolverProvider,
-            ScanConfig config,
+            MLVScanConfig config,
             IConfigManager configManager,
             BepInExPlatformEnvironment environment)
             : base(logger, resolverProvider, config, configManager)

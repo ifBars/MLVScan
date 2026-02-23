@@ -17,12 +17,12 @@ namespace MLVScan.BepInEx
     public class BepInExReportGenerator
     {
         private readonly ManualLogSource _logger;
-        private readonly ScanConfig _config;
+        private readonly MLVScanConfig _config;
         private readonly string _reportUploadApiBaseUrl;
         private readonly string _reportDirectory;
         private readonly ReportUploadService _reportUploadService;
 
-        public BepInExReportGenerator(ManualLogSource logger, ScanConfig config, string reportUploadApiBaseUrl)
+        public BepInExReportGenerator(ManualLogSource logger, MLVScanConfig config, string reportUploadApiBaseUrl)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -180,7 +180,7 @@ namespace MLVScan.BepInEx
                     sb.AppendLine($"[{first.Severity}] {first.Description}");
                     sb.AppendLine($"Occurrences: {group.Count()}");
 
-                    if (_config.DeveloperMode && first.DeveloperGuidance != null)
+                    if (_config.Scan?.DeveloperMode == true && first.DeveloperGuidance != null)
                     {
                         sb.AppendLine();
                         sb.AppendLine("Developer Guidance:");

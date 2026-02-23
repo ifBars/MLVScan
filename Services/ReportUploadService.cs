@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -112,14 +114,29 @@ namespace MLVScan.Services
             using var client = CreateHttpClient();
             using var content = new MultipartFormDataContent();
 
+            // Explicitly set Content-Disposition on each part so Cloudflare's FormData parser
+            // receives the required 'name' parameter (RFC 7578). MultipartFormDataContent.Add
+            // can behave differently across .NET runtimes (Unity/Mono); manual setup guarantees
+            // RFC-compliant output that workerd expects.
+            var safeFilename = RedactionHelper.RedactFilename(filename);
             var fileContent = new ByteArrayContent(assemblyBytes);
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            content.Add(fileContent, "file", RedactionHelper.RedactFilename(filename));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            fileContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+            {
+                Name = "\"file\"",
+                FileName = $"\"{safeFilename}\""
+            };
+            content.Add(fileContent);
 
             var metadataJson = SerializeMetadata(metadata);
             if (!string.IsNullOrEmpty(metadataJson))
             {
-                content.Add(new StringContent(metadataJson, Encoding.UTF8, "application/json"), "metadata");
+                var metaContent = new StringContent(metadataJson, Encoding.UTF8, "application/json");
+                metaContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+                {
+                    Name = "\"metadata\""
+                };
+                content.Add(metaContent);
             }
 
             var url = $"{baseUrl}/files";
@@ -185,6 +202,18 @@ namespace MLVScan.Services
 
         private static HttpClient CreateHttpClient()
         {
+            // Enable TLS 1.2 on older runtimes (Unity/Mono); otherwise "TLS Support not available" occurs.
+            try
+            {
+                const SecurityProtocolType Tls12 = (SecurityProtocolType)3072;
+                if ((ServicePointManager.SecurityProtocol & Tls12) == 0)
+                    ServicePointManager.SecurityProtocol |= Tls12;
+            }
+            catch
+            {
+                // Ignore if ServicePointManager is unavailable (e.g. some mobile runtimes)
+            }
+
             return new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds),

@@ -22,7 +22,7 @@ namespace MLVScan.BepInEx
         private readonly ManualLogSource _logger;
         private readonly string[] _defaultWhitelistedHashes;
         private readonly string _configPath;
-        private ScanConfig _config;
+        private MLVScanConfig _config;
         private string _reportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl;
 
         // JSON serialization settings
@@ -40,12 +40,12 @@ namespace MLVScan.BepInEx
 
             // Config stored alongside other BepInEx configs
             _configPath = Path.Combine(Paths.ConfigPath, "MLVScan.json");
-            _config = new ScanConfig();
+            _config = new MLVScanConfig();
         }
 
-        public ScanConfig Config => _config;
+        public MLVScanConfig Config => _config;
 
-        public ScanConfig LoadConfig()
+        public MLVScanConfig LoadConfig()
         {
             try
             {
@@ -58,7 +58,7 @@ namespace MLVScan.BepInEx
                         _reportUploadApiBaseUrl = urlNode?.GetValue<string>()?.Trim() ?? DefaultReportUploadApiBaseUrl;
                     }
 
-                    var loaded = JsonSerializer.Deserialize<ScanConfig>(json, JsonOptions);
+                    var loaded = JsonSerializer.Deserialize<MLVScanConfig>(json, JsonOptions);
 
                     if (loaded != null)
                     {
@@ -81,9 +81,9 @@ namespace MLVScan.BepInEx
             return _config;
         }
 
-        private ScanConfig CreateDefaultConfig()
+        private MLVScanConfig CreateDefaultConfig()
         {
-            return new ScanConfig
+            return new MLVScanConfig
             {
                 EnableAutoScan = true,
                 EnableAutoDisable = true,
@@ -92,13 +92,17 @@ namespace MLVScan.BepInEx
                 SuspiciousThreshold = 1,
                 WhitelistedHashes = _defaultWhitelistedHashes,
                 DumpFullIlReports = false,
-                DeveloperMode = false,
+                Scan = new ScanConfig
+                {
+                    DeveloperMode = false
+                },
                 EnableReportUpload = false,
-                ReportUploadConsentAsked = false
+                ReportUploadConsentAsked = false,
+                ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl
             };
         }
 
-        public void SaveConfig(ScanConfig config)
+        public void SaveConfig(MLVScanConfig config)
         {
             try
             {

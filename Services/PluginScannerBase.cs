@@ -16,14 +16,14 @@ namespace MLVScan.Services
     {
         protected readonly IScanLogger Logger;
         protected readonly IAssemblyResolverProvider ResolverProvider;
-        protected readonly ScanConfig Config;
+        protected readonly MLVScanConfig Config;
         protected readonly IConfigManager ConfigManager;
         protected readonly AssemblyScanner AssemblyScanner;
 
         protected PluginScannerBase(
             IScanLogger logger,
             IAssemblyResolverProvider resolverProvider,
-            ScanConfig config,
+            MLVScanConfig config,
             IConfigManager configManager)
         {
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -32,7 +32,7 @@ namespace MLVScan.Services
             ConfigManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
 
             var rules = RuleFactory.CreateDefaultRules();
-            AssemblyScanner = new AssemblyScanner(rules, Config, ResolverProvider);
+            AssemblyScanner = new AssemblyScanner(rules, Config.Scan, ResolverProvider);
         }
 
         /// <summary>

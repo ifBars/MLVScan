@@ -11,18 +11,18 @@ namespace MLVScan.Abstractions
         /// <summary>
         /// Gets the current configuration.
         /// </summary>
-        ScanConfig Config { get; }
+        MLVScanConfig Config { get; }
 
         /// <summary>
         /// Loads configuration from persistent storage.
         /// Creates default configuration if none exists.
         /// </summary>
-        ScanConfig LoadConfig();
+        MLVScanConfig LoadConfig();
 
         /// <summary>
         /// Saves configuration to persistent storage.
         /// </summary>
-        void SaveConfig(ScanConfig config);
+        void SaveConfig(MLVScanConfig config);
 
         /// <summary>
         /// Checks if a file hash is in the whitelist.
