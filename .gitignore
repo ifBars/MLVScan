@@ -4,7 +4,7 @@
 /.idea/
 local.build.props
 AGENTS.md
-CLAUDE.md
 LOCAL_DEV_GUIDE.md
 nexuspost.bbcode
 TS-Post.md
+ENVIRONMENT_INTEGRATION_GUIDE.md

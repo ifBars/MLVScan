@@ -229,16 +229,20 @@ namespace MLVScan.MelonLoader
 
                         LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
 
-                        var maxDetailsToShow = Math.Min(categoryFindings.Count, 3);
+                        var maxDetailsToShow = categoryFindings.Count;
                         for (var i = 0; i < maxDetailsToShow; i++)
                         {
                             var finding = categoryFindings[i];
                             LoggerInstance.Msg($"  * At: {finding.Location}");
+                            if (!string.IsNullOrEmpty(finding.RuleId))
+                            {
+                                LoggerInstance.Msg($"    Rule: {finding.RuleId}");
+                            }
 
                             if (finding.HasCallChain && finding.CallChain != null)
                             {
                                 LoggerInstance.Msg("    Call Chain Analysis:");
-                                foreach (var node in finding.CallChain.Nodes.Take(4))
+                                foreach (var node in finding.CallChain.Nodes)
                                 {
                                     var prefix = node.NodeType switch
                                     {
@@ -248,19 +252,37 @@ namespace MLVScan.MelonLoader
                                         _ => "[???]"
                                     };
                                     LoggerInstance.Msg($"      {prefix} {node.Location}");
-                                }
-                                if (finding.CallChain.Nodes.Count > 4)
-                                {
-                                    LoggerInstance.Msg($"      ... and {finding.CallChain.Nodes.Count - 4} more");
+                                    if (!string.IsNullOrWhiteSpace(node.Description))
+                                    {
+                                        LoggerInstance.Msg($"           {node.Description}");
+                                    }
                                 }
                             }
 
                             if (finding.HasDataFlow && finding.DataFlowChain != null)
                             {
-                                LoggerInstance.Msg($"    Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
+                                LoggerInstance.Msg($"    Data Flow Analysis: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
                                 if (finding.DataFlowChain.IsCrossMethod)
                                 {
                                     LoggerInstance.Msg($"    Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                                }
+
+                                LoggerInstance.Msg("    Data Flow Chain:");
+                                for (var nodeIndex = 0; nodeIndex < finding.DataFlowChain.Nodes.Count; nodeIndex++)
+                                {
+                                    var node = finding.DataFlowChain.Nodes[nodeIndex];
+                                    var nodePrefix = node.NodeType switch
+                                    {
+                                        DataFlowNodeType.Source => "[SOURCE]",
+                                        DataFlowNodeType.Transform => "[TRANSFORM]",
+                                        DataFlowNodeType.Sink => "[SINK]",
+                                        DataFlowNodeType.Intermediate => "[PASS]",
+                                        _ => "[???]"
+                                    };
+
+                                    var connector = nodeIndex > 0 ? "-> " : "   ";
+                                    LoggerInstance.Msg(
+                                        $"      {connector}{nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
                                 }
                             }
 
@@ -272,11 +294,6 @@ namespace MLVScan.MelonLoader
                                     LoggerInstance.Msg($"      {line}");
                                 }
                             }
-                        }
-
-                        if (categoryFindings.Count > maxDetailsToShow)
-                        {
-                            LoggerInstance.Msg($"  * And {categoryFindings.Count - maxDetailsToShow} more instances...");
                         }
 
                         LoggerInstance.Msg("");
@@ -388,6 +405,21 @@ namespace MLVScan.MelonLoader
                                         if (finding.DataFlowChain.IsCrossMethod)
                                         {
                                             writer.WriteLine($"  Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                                        }
+
+                                        writer.WriteLine("  Data Flow Chain:");
+                                        foreach (var node in finding.DataFlowChain.Nodes)
+                                        {
+                                            var prefix = node.NodeType switch
+                                            {
+                                                DataFlowNodeType.Source => "[SOURCE]",
+                                                DataFlowNodeType.Transform => "[TRANSFORM]",
+                                                DataFlowNodeType.Sink => "[SINK]",
+                                                DataFlowNodeType.Intermediate => "[PASS]",
+                                                _ => "[???]"
+                                            };
+                                            writer.WriteLine(
+                                                $"    {prefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
                                         }
                                     }
 

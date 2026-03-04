@@ -80,15 +80,15 @@ namespace MLVScan.Services
 
                 // Show sample locations
                 _logger.Info("");
-                _logger.Info("  Sample locations:");
-                foreach (var finding in ruleGroup.Take(3))
+                _logger.Info("  Findings:");
+                foreach (var finding in ruleGroup.OrderByDescending(f => f.Severity).ThenBy(f => f.Location))
                 {
                     _logger.Info($"    - {finding.Location}");
 
                     if (finding.HasCallChain && finding.CallChain != null)
                     {
                         _logger.Info("      Call Chain:");
-                        foreach (var node in finding.CallChain.Nodes.Take(3))
+                        foreach (var node in finding.CallChain.Nodes)
                         {
                             var prefix = node.NodeType switch
                             {
@@ -98,10 +98,10 @@ namespace MLVScan.Services
                                 _ => "[???]"
                             };
                             _logger.Info($"        {prefix} {node.Location}");
-                        }
-                        if (finding.CallChain.Nodes.Count > 3)
-                        {
-                            _logger.Info($"        ... and {finding.CallChain.Nodes.Count - 3} more");
+                            if (!string.IsNullOrWhiteSpace(node.Description))
+                            {
+                                _logger.Info($"             {node.Description}");
+                            }
                         }
                     }
 
@@ -112,11 +112,22 @@ namespace MLVScan.Services
                         {
                             _logger.Info($"        Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods");
                         }
+
+                        _logger.Info("      Data Flow Chain:");
+                        foreach (var node in finding.DataFlowChain.Nodes)
+                        {
+                            var nodePrefix = node.NodeType switch
+                            {
+                                DataFlowNodeType.Source => "[SOURCE]",
+                                DataFlowNodeType.Transform => "[TRANSFORM]",
+                                DataFlowNodeType.Sink => "[SINK]",
+                                DataFlowNodeType.Intermediate => "[PASS]",
+                                _ => "[???]"
+                            };
+                            _logger.Info(
+                                $"        {nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
+                        }
                     }
-                }
-                if (count > 3)
-                {
-                    _logger.Info($"    ... and {count - 3} more");
                 }
 
                 _logger.Info("--------------------------------------");

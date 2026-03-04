@@ -74,33 +74,36 @@ namespace MLVScan.BepInEx
                 _logger.LogInfo($"  {group.Key}: {group.Count()} issue(s)");
             }
 
-            // Show top 3 findings
-            var topFindings = findings
+            var orderedFindings = findings
                 .OrderByDescending(f => f.Severity)
-                .Take(3);
+                .ThenBy(f => f.Location);
 
-            foreach (var finding in topFindings)
+            foreach (var finding in orderedFindings)
             {
                 _logger.LogWarning($"[{finding.Severity}] {finding.Description}");
+                if (!string.IsNullOrEmpty(finding.RuleId))
+                {
+                    _logger.LogInfo($"  Rule: {finding.RuleId}");
+                }
                 _logger.LogInfo($"  Location: {finding.Location}");
 
                 if (finding.HasCallChain && finding.CallChain != null)
                 {
                     _logger.LogInfo("  Call Chain:");
-                    foreach (var node in finding.CallChain.Nodes.Take(5))
+                    foreach (var node in finding.CallChain.Nodes)
                     {
                         var prefix = node.NodeType switch
                         {
                             CallChainNodeType.EntryPoint => "[ENTRY]",
                             CallChainNodeType.IntermediateCall => "[CALL]",
                             CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                            _ => "[???"
+                            _ => "[???]"
                         };
                         _logger.LogInfo($"    {prefix} {node.Location}");
-                    }
-                    if (finding.CallChain.Nodes.Count > 5)
-                    {
-                        _logger.LogInfo($"    ... and {finding.CallChain.Nodes.Count - 5} more");
+                        if (!string.IsNullOrWhiteSpace(node.Description))
+                        {
+                            _logger.LogInfo($"         {node.Description}");
+                        }
                     }
                 }
 
@@ -111,12 +114,25 @@ namespace MLVScan.BepInEx
                     {
                         _logger.LogInfo($"    Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods involved");
                     }
-                }
-            }
 
-            if (findings.Count > 3)
-            {
-                _logger.LogInfo($"  ... and {findings.Count - 3} more findings");
+                    _logger.LogInfo("  Data Flow Chain:");
+                    foreach (var node in finding.DataFlowChain.Nodes)
+                    {
+                        var nodePrefix = node.NodeType switch
+                        {
+                            DataFlowNodeType.Source => "[SOURCE]",
+                            DataFlowNodeType.Transform => "[TRANSFORM]",
+                            DataFlowNodeType.Sink => "[SINK]",
+                            DataFlowNodeType.Intermediate => "[PASS]",
+                            _ => "[???]"
+                        };
+
+                        _logger.LogInfo(
+                            $"    {nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
+                    }
+                }
+
+                _logger.LogInfo(string.Empty);
             }
 
             DisplaySecurityNotice(pluginName);
@@ -208,7 +224,7 @@ namespace MLVScan.BepInEx
                                     CallChainNodeType.EntryPoint => "[ENTRY]",
                                     CallChainNodeType.IntermediateCall => "[CALL]",
                                     CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                                    _ => "[???"
+                                    _ => "[???]"
                                 };
                                 sb.AppendLine($"      {prefix} {node.Location}");
                                 if (!string.IsNullOrEmpty(node.Description))
@@ -226,6 +242,22 @@ namespace MLVScan.BepInEx
                             if (finding.DataFlowChain.IsCrossMethod)
                             {
                                 sb.AppendLine($"      Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
+                            }
+
+                            sb.AppendLine("      Data Flow Chain:");
+                            foreach (var node in finding.DataFlowChain.Nodes)
+                            {
+                                var nodePrefix = node.NodeType switch
+                                {
+                                    DataFlowNodeType.Source => "[SOURCE]",
+                                    DataFlowNodeType.Transform => "[TRANSFORM]",
+                                    DataFlowNodeType.Sink => "[SINK]",
+                                    DataFlowNodeType.Intermediate => "[PASS]",
+                                    _ => "[???]"
+                                };
+
+                                sb.AppendLine(
+                                    $"        {nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
                             }
                         }
 

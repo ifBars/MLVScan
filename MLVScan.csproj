@@ -70,7 +70,6 @@
   <!-- Excluded files from default compilation     -->
   <!-- ============================================ -->
   <ItemGroup>
-    <None Remove="CLAUDE.md" />
     <None Remove="LOCAL_DEV_GUIDE.md" />
     <None Remove="AGENTS.md" />
     <None Remove="nexuspost.bbcode" />
@@ -78,6 +77,7 @@
     <None Remove="TS-Post.md" />
     <None Remove="example.png" />
     <None Remove="icon.png" />
+    <None Remove="ENVIRONMENT_INTEGRATION_GUIDE.md" />
   </ItemGroup>
 
   <!-- ============================================ -->
