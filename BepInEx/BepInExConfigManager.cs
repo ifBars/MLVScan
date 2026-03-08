@@ -98,6 +98,8 @@ namespace MLVScan.BepInEx
                 },
                 EnableReportUpload = false,
                 ReportUploadConsentAsked = false,
+                ReportUploadConsentPending = false,
+                PendingReportUploadPath = string.Empty,
                 ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl
             };
         }

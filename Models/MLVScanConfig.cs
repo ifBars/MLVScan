@@ -61,6 +61,16 @@ public class MLVScanConfig
     public bool ReportUploadConsentAsked { get; set; } = false;
 
     /// <summary>
+    /// Whether a consent decision is pending and should be shown in a GUI popup.
+    /// </summary>
+    public bool ReportUploadConsentPending { get; set; } = false;
+
+    /// <summary>
+    /// Path to the first suspicious mod awaiting consent for upload.
+    /// </summary>
+    public string PendingReportUploadPath { get; set; } = string.Empty;
+
+    /// <summary>
     /// API base URL for report uploads.
     /// </summary>
     public string ReportUploadApiBaseUrl { get; set; } = "https://api.mlvscan.com";

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Preloader.Core.Patching;
@@ -46,6 +47,8 @@ namespace MLVScan.BepInEx6.IL2CPP
                 _logger.LogInfo("MLVScan BepInEx 6 (IL2CPP) patcher initializing...");
                 _logger.LogInfo($"Plugin directory: {Paths.PluginPath}");
 
+                EnsureRuntimeConsentPluginPresent();
+
                 // Create platform environment
                 var environment = new BepInExPlatformEnvironment();
 
@@ -79,13 +82,15 @@ namespace MLVScan.BepInEx6.IL2CPP
                     // Generate reports for disabled plugins
                     if (disabledPlugins.Count > 0)
                     {
-                        // First-run consent: show once when we have detections
+                        // Queue first-run GUI consent for runtime plugin.
                         if (!config.ReportUploadConsentAsked)
                         {
-                            config.ReportUploadConsentAsked = true;
+                            var firstDisabled = disabledPlugins[0];
+                            config.ReportUploadConsentPending = true;
+                            config.PendingReportUploadPath =
+                                File.Exists(firstDisabled.DisabledPath) ? firstDisabled.DisabledPath : firstDisabled.OriginalPath;
                             configManager.SaveConfig(config);
-                            _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
-                            _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
+                            _logger.LogInfo("MLVScan will show an in-game upload consent popup.");
                         }
 
                         reportGenerator.GenerateReports(disabledPlugins, scanResults);
@@ -117,6 +122,27 @@ namespace MLVScan.BepInEx6.IL2CPP
         public override void Finalizer()
         {
             _logger?.LogDebug("MLVScan patcher finished.");
+        }
+
+        private void EnsureRuntimeConsentPluginPresent()
+        {
+            try
+            {
+                var sourcePath = GetType().Assembly.Location;
+                if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+                {
+                    return;
+                }
+
+                Directory.CreateDirectory(Paths.PluginPath);
+                var destinationPath = Path.Combine(Paths.PluginPath, Path.GetFileName(sourcePath));
+                File.Copy(sourcePath, destinationPath, true);
+                _logger.LogDebug($"Ensured runtime consent plugin at: {destinationPath}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning($"Failed to stage runtime consent plugin: {ex.Message}");
+            }
         }
     }
 }

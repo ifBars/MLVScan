@@ -7,6 +7,7 @@ using MelonLoader.Utils;
 using MLVScan.Models;
 using MLVScan.Models.Rules;
 using MLVScan.Services;
+using UnityEngine;
 
 [assembly: MelonInfo(typeof(MLVScan.MelonLoader.MelonLoaderPlugin), "MLVScan", MLVScan.PlatformConstants.PlatformVersion, "Bars")]
 [assembly: MelonPriority(Int32.MinValue)]
@@ -29,6 +30,10 @@ namespace MLVScan.MelonLoader
         private DeveloperReportGenerator _developerReportGenerator;
         private ReportUploadService _reportUploadService;
         private bool _initialized = false;
+        private bool _showUploadConsentPopup;
+        private string _pendingUploadPath = string.Empty;
+        private string _pendingUploadModName = string.Empty;
+        private List<ScanFinding> _pendingUploadFindings;
 
         private static readonly string[] DefaultWhitelistedHashes =
         [
@@ -85,6 +90,38 @@ namespace MLVScan.MelonLoader
             {
                 LoggerInstance.Error($"Error initializing MLVScan: {ex.Message}");
                 LoggerInstance.Error(ex.StackTrace);
+            }
+        }
+
+        public override void OnGUI()
+        {
+            if (!_showUploadConsentPopup)
+            {
+                return;
+            }
+
+            var width = Math.Min(620f, Screen.width - 40f);
+            var height = 280f;
+            var x = (Screen.width - width) / 2f;
+            var y = (Screen.height - height) / 2f;
+
+            GUI.Box(new Rect(0f, 0f, Screen.width, Screen.height), string.Empty);
+
+            GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
+            GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
+                $"MLVScan flagged {_pendingUploadModName} as suspicious and disabled it.\n\n" +
+                "Would you like to upload this file to the MLVScan API for human review?\n\n" +
+                "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
+                "No: do not upload and do not show this prompt again.");
+
+            if (GUI.Button(new Rect(x + 20f, y + height - 60f, (width - 60f) / 2f, 36f), "Yes, upload"))
+            {
+                HandleUploadConsentDecision(true);
+            }
+
+            if (GUI.Button(new Rect(x + 40f + (width - 60f) / 2f, y + height - 60f, (width - 60f) / 2f, 36f), "No thanks"))
+            {
+                HandleUploadConsentDecision(false);
             }
         }
 
@@ -147,16 +184,6 @@ namespace MLVScan.MelonLoader
 
         private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
         {
-            // First-run consent: show once when we have detections and user hasn't been asked
-            if (_configManager != null && !_configManager.Config.ReportUploadConsentAsked)
-            {
-                var cfg = _configManager.Config;
-                cfg.ReportUploadConsentAsked = true;
-                _configManager.SaveConfig(cfg);
-                LoggerInstance.Msg("MLVScan can optionally send reports to the API to help fix false positives.");
-                LoggerInstance.Msg("To enable: set EnableReportUpload = true under [MLVScan] in MelonPreferences.cfg");
-            }
-
             var isDeveloperMode = _configManager?.Config?.Scan?.DeveloperMode ?? false;
 
             if (isDeveloperMode)
@@ -192,6 +219,8 @@ namespace MLVScan.MelonLoader
                     LoggerInstance.Msg("No specific suspicious patterns were identified.");
                     continue;
                 }
+
+                QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings);
 
                 var groupedFindings = actualFindings
                     .GroupBy(f => f.Description)
@@ -481,6 +510,83 @@ namespace MLVScan.MelonLoader
             }
 
             LoggerInstance.Warning("====== END OF SCAN REPORT ======");
+        }
+
+        private void QueueConsentPromptIfNeeded(string accessiblePath, string modName, List<ScanFinding> findings)
+        {
+            if (_configManager == null || _showUploadConsentPopup)
+            {
+                return;
+            }
+
+            var config = _configManager.Config;
+            if (config.ReportUploadConsentAsked)
+            {
+                return;
+            }
+
+            _showUploadConsentPopup = true;
+            _pendingUploadPath = accessiblePath;
+            _pendingUploadModName = modName;
+            _pendingUploadFindings = findings;
+
+            config.ReportUploadConsentPending = true;
+            config.PendingReportUploadPath = accessiblePath ?? string.Empty;
+            _configManager.SaveConfig(config);
+
+            LoggerInstance.Warning("MLVScan is waiting for your upload consent decision in the in-game popup.");
+        }
+
+        private void HandleUploadConsentDecision(bool approved)
+        {
+            _showUploadConsentPopup = false;
+
+            if (_configManager == null)
+            {
+                return;
+            }
+
+            var config = _configManager.Config;
+            config.ReportUploadConsentAsked = true;
+            config.ReportUploadConsentPending = false;
+            config.PendingReportUploadPath = string.Empty;
+            config.EnableReportUpload = approved;
+            _configManager.SaveConfig(config);
+
+            if (!approved)
+            {
+                LoggerInstance.Msg("MLVScan report upload declined. You will not be prompted again.");
+                _pendingUploadPath = string.Empty;
+                _pendingUploadModName = string.Empty;
+                _pendingUploadFindings = null;
+                return;
+            }
+
+            LoggerInstance.Msg("MLVScan report upload enabled. Uploading the flagged mod now.");
+
+            try
+            {
+                if (_reportUploadService != null && !string.IsNullOrWhiteSpace(_pendingUploadPath) && File.Exists(_pendingUploadPath))
+                {
+                    var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
+                    if (!string.IsNullOrWhiteSpace(apiBaseUrl))
+                    {
+                        var assemblyBytes = File.ReadAllBytes(_pendingUploadPath);
+                        var metadata = BuildSubmissionMetadata(_pendingUploadModName, _pendingUploadFindings ?? new List<ScanFinding>());
+                        _reportUploadService.UploadReportNonBlocking(assemblyBytes, _pendingUploadModName, metadata, apiBaseUrl);
+                    }
+                }
+            }
+            catch (Exception uploadEx)
+            {
+                LoggerInstance.Warning($"Report upload skipped for {_pendingUploadModName}: {uploadEx.Message}");
+            }
+            finally
+            {
+                _pendingUploadPath = string.Empty;
+                _pendingUploadModName = string.Empty;
+                _pendingUploadFindings = null;
+            }
         }
 
         private static SubmissionMetadata BuildSubmissionMetadata(string modName, List<ScanFinding> findings)

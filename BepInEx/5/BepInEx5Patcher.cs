@@ -90,7 +90,7 @@ namespace MLVScan.BepInEx5
                     // Generate reports for disabled plugins
                     if (disabledPlugins.Count > 0)
                     {
-                        // First-run consent: show once when we have detections
+                        // First-run consent fallback for BepInEx 5.
                         if (!config.ReportUploadConsentAsked)
                         {
                             config.ReportUploadConsentAsked = true;

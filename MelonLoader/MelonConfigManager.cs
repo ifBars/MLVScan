@@ -24,6 +24,8 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _developerMode;
         private readonly MelonPreferences_Entry<bool> _enableReportUpload;
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentAsked;
+        private readonly MelonPreferences_Entry<bool> _reportUploadConsentPending;
+        private readonly MelonPreferences_Entry<string> _pendingReportUploadPath;
         private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
 
         public MelonConfigManager(MelonLogger.Instance logger)
@@ -64,6 +66,12 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentAsked = _category.CreateEntry("ReportUploadConsentAsked", false,
                     description: "Whether the first-run consent prompt has been shown (internal)");
 
+                _reportUploadConsentPending = _category.CreateEntry("ReportUploadConsentPending", false,
+                    description: "Whether an upload consent popup is pending (internal)");
+
+                _pendingReportUploadPath = _category.CreateEntry("PendingReportUploadPath", string.Empty,
+                    description: "Suspicious mod path waiting for upload consent (internal)");
+
                 _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
                     description: "API base URL for report uploads");
 
@@ -77,6 +85,8 @@ namespace MLVScan.MelonLoader
                 _developerMode.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableReportUpload.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadConsentAsked.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _reportUploadConsentPending.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _pendingReportUploadPath.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadApiBaseUrl.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
@@ -122,6 +132,8 @@ namespace MLVScan.MelonLoader
                 },
                 EnableReportUpload = _enableReportUpload.Value,
                 ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
+                ReportUploadConsentPending = _reportUploadConsentPending.Value,
+                PendingReportUploadPath = _pendingReportUploadPath.Value,
                 ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value
             };
         }
@@ -140,6 +152,8 @@ namespace MLVScan.MelonLoader
                 _developerMode.Value = newConfig.Scan?.DeveloperMode ?? false;
                 _enableReportUpload.Value = newConfig.EnableReportUpload;
                 _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
+                _reportUploadConsentPending.Value = newConfig.ReportUploadConsentPending;
+                _pendingReportUploadPath.Value = newConfig.PendingReportUploadPath ?? string.Empty;
                 _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
 
                 MelonPreferences.Save();

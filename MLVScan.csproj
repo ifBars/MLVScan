@@ -12,7 +12,7 @@
     <Nullable>disable</Nullable>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
-    <Version>1.6.3</Version>
+    <Version>1.6.4</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
@@ -134,6 +134,7 @@
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6Mono'">
     <Compile Include="BepInEx\6\Mono\BepInEx6MonoPatcher.cs" />
+    <Compile Include="BepInEx\BepInExConsentPlugin.cs" />
     <Compile Include="BepInEx\Adapters\BepInExScanLogger.cs" />
     <Compile Include="BepInEx\Adapters\BepInExAssemblyResolverProvider.cs" />
     <Compile Include="BepInEx\BepInExConfigManager.cs" />
@@ -148,6 +149,7 @@
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
     <Compile Include="BepInEx\6\IL2CPP\BepInEx6IL2CppPatcher.cs" />
+    <Compile Include="BepInEx\BepInExIl2CppConsentPlugin.cs" />
     <Compile Include="BepInEx\Adapters\BepInExScanLogger.cs" />
     <Compile Include="BepInEx\Adapters\BepInExAssemblyResolverProvider.cs" />
     <Compile Include="BepInEx\BepInExConfigManager.cs" />
@@ -165,6 +167,7 @@
     <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" GeneratePathProperty="true" Condition="'$(MelonLoaderPath)' == ''" />
 
     <PackageReference Include="UnityEngine.CoreModule" Version="0.0.1" Condition="'$(GameManagedPath)' == ''" />
+    <PackageReference Include="UnityEngine.IMGUIModule" Version="0.0.1" Condition="'$(GameManagedPath)' == ''" />
 
     <!-- Use local references when paths are set -->
     <Reference Include="MelonLoader" Condition="'$(MelonLoaderPath)' != ''">
@@ -179,6 +182,10 @@
       <HintPath>$(GameManagedPath)\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.IMGUIModule" Condition="'$(GameManagedPath)' != ''">
+      <HintPath>$(GameManagedPath)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- ============================================ -->
@@ -187,6 +194,8 @@
   <ItemGroup Condition="'$(Configuration)'=='BepInEx5'">
     <!-- Use NuGet package for BepInEx 5.x (compilation only) -->
     <PackageReference Include="BepInEx.Core" Version="5.*" PrivateAssets="all" GeneratePathProperty="true"
+                      Condition="'$(BepInExCorePath)' == ''" />
+    <PackageReference Include="BepInEx.BaseLib" Version="5.4.20" PrivateAssets="all" GeneratePathProperty="true"
                       Condition="'$(BepInExCorePath)' == ''" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" PrivateAssets="all"
                       Condition="'$(BepInExCorePath)' == ''" />
@@ -203,9 +212,13 @@
   <!-- BepInEx 6.x Mono References                 -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6Mono'">
+    <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.Mono" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.Mono.Preloader" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="UnityEngine" Version="5.6.1" />
+    <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
+    <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
   </ItemGroup>
@@ -214,8 +227,12 @@
   <!-- BepInEx 6.x IL2CPP References               -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
+    <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="UnityEngine" Version="5.6.1" />
+    <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
+    <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
   </ItemGroup>
@@ -252,11 +269,13 @@
       <ILRepackLib Include="$(PkgLavaGang_MelonLoader)\lib\net35" Condition="'$(Configuration)' == 'MelonLoader' and '$(PkgLavaGang_MelonLoader)' != ''" />
       <ILRepackLib Include="$(MelonLoaderPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(MelonLoaderPath)' != ''" />
       <ILRepackLib Include="$(GameManagedPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(GameManagedPath)' != ''" />
-      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx5'" />
+      <ILRepackLib Include="$(PkgBepInEx_BaseLib)\lib\netstandard2.0" Condition="'$(PkgBepInEx_BaseLib)' != '' and '$(Configuration)' == 'BepInEx5'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_Mono_Preloader)\lib\netstandard2.1" Condition="'$(PkgBepInEx_Unity_Mono_Preloader)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
+      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6Mono'" />
       <ILRepackLib Include="$(PkgBepInEx_Unity_IL2CPP)\lib\net6.0" Condition="'$(PkgBepInEx_Unity_IL2CPP)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
+      <ILRepackLib Include="$(PkgBepInEx_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Core)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
       <ILRepackLib Include="$(PkgBepInEx_Preloader_Core)\lib\netstandard2.0" Condition="'$(PkgBepInEx_Preloader_Core)' != '' and '$(Configuration)' == 'BepInEx6IL2CPP'" />
     </ItemGroup>
     <PropertyGroup>
