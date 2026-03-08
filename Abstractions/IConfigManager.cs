@@ -43,5 +43,15 @@ namespace MLVScan.Abstractions
         /// Gets the API base URL for report uploads (mod loader implementation-specific).
         /// </summary>
         string GetReportUploadApiBaseUrl();
+
+        /// <summary>
+        /// Checks whether a report for the given SHA256 hash was already uploaded.
+        /// </summary>
+        bool IsReportHashUploaded(string hash);
+
+        /// <summary>
+        /// Persists a SHA256 hash after a successful report upload.
+        /// </summary>
+        void MarkReportHashUploaded(string hash);
     }
 }

@@ -28,6 +28,7 @@ namespace MLVScan.BepInEx
                 var config = _configManager.LoadConfig();
 
                 _reportUploadService = new ReportUploadService(
+                    _configManager,
                     msg => Logger.LogInfo(msg),
                     msg => Logger.LogWarning(msg),
                     msg => Logger.LogError(msg));

@@ -42,6 +42,28 @@ namespace MLVScan.Services
         }
 
         /// <summary>
+        /// Calculates the SHA256 hash of a byte array.
+        /// </summary>
+        /// <param name="bytes">Bytes to hash.</param>
+        /// <returns>Lowercase hex string of the hash, or empty string on failure.</returns>
+        public static string CalculateBytesHash(byte[] bytes)
+        {
+            try
+            {
+                if (bytes == null || bytes.Length == 0)
+                    return string.Empty;
+
+                using var sha256 = SHA256.Create();
+                var hash = sha256.ComputeHash(bytes);
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
         /// Validates that a string looks like a valid SHA256 hash.
         /// </summary>
         public static bool IsValidHash(string hash)

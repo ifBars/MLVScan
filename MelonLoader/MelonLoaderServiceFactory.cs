@@ -101,6 +101,7 @@ namespace MLVScan.MelonLoader
         public ReportUploadService CreateReportUploadService()
         {
             return new ReportUploadService(
+                _configManager,
                 msg => _melonLogger.Msg(msg),
                 msg => _melonLogger.Warning(msg),
                 msg => _melonLogger.Error(msg));

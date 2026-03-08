@@ -77,7 +77,7 @@ namespace MLVScan.BepInEx5
                     environment);
 
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
-                var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl());
+                var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl(), configManager);
 
                 // Scan all plugins
                 var scanResults = pluginScanner.ScanAllPlugins();

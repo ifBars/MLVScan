@@ -69,7 +69,7 @@ namespace MLVScan.BepInEx6.Mono
                     environment);
 
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
-                var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl());
+                var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl(), configManager);
 
                 if (!config.EnableAutoScan)
                 {

@@ -22,13 +22,14 @@ namespace MLVScan.BepInEx
         private readonly string _reportDirectory;
         private readonly ReportUploadService _reportUploadService;
 
-        public BepInExReportGenerator(ManualLogSource logger, MLVScanConfig config, string reportUploadApiBaseUrl)
+        public BepInExReportGenerator(ManualLogSource logger, MLVScanConfig config, string reportUploadApiBaseUrl, BepInExConfigManager configManager)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _reportUploadApiBaseUrl = reportUploadApiBaseUrl ?? string.Empty;
 
             _reportUploadService = new ReportUploadService(
+                configManager,
                 msg => logger.LogInfo(msg),
                 msg => logger.LogWarning(msg),
                 msg => logger.LogError(msg));

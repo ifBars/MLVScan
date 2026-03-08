@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using MLVScan.Abstractions;
 using MLVScan.Models;
 
 namespace MLVScan.Services
@@ -22,13 +23,17 @@ namespace MLVScan.Services
         private const int SmallFileLimitBytes = 32 * 1024 * 1024; // 32 MB
         private const int DefaultTimeoutSeconds = 30;
         private const int MaxRetries = 2;
+        private static readonly object InFlightUploadsLock = new object();
+        private static readonly HashSet<string> InFlightUploads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly IConfigManager _configManager;
         private readonly Action<string> _logInfo;
         private readonly Action<string> _logWarn;
         private readonly Action<string> _logError;
 
-        public ReportUploadService(Action<string> logInfo, Action<string> logWarn, Action<string> logError)
+        public ReportUploadService(IConfigManager configManager, Action<string> logInfo, Action<string> logWarn, Action<string> logError)
         {
+            _configManager = configManager;
             _logInfo = logInfo ?? (_ => { });
             _logWarn = logWarn ?? (_ => { });
             _logError = logError ?? (_ => { });
@@ -78,33 +83,72 @@ namespace MLVScan.Services
                 return;
             }
 
+            var assemblyHash = HashUtility.CalculateBytesHash(assemblyBytes);
+            if (HashUtility.IsValidHash(assemblyHash))
+            {
+                if (_configManager?.IsReportHashUploaded(assemblyHash) == true)
+                {
+                    _logInfo($"ReportUploadService: Skipping duplicate upload for {filename} ({assemblyHash})");
+                    return;
+                }
+
+                lock (InFlightUploadsLock)
+                {
+                    if (InFlightUploads.Contains(assemblyHash))
+                    {
+                        _logInfo($"ReportUploadService: Upload already queued for {filename} ({assemblyHash})");
+                        return;
+                    }
+
+                    InFlightUploads.Add(assemblyHash);
+                }
+            }
+
             var baseUrl = apiBaseUrl.TrimEnd('/');
             var useDirectUpload = assemblyBytes.Length <= SmallFileLimitBytes;
 
-            for (var attempt = 0; attempt <= MaxRetries; attempt++)
+            try
             {
-                try
+                for (var attempt = 0; attempt <= MaxRetries; attempt++)
                 {
-                    if (useDirectUpload)
+                    try
                     {
-                        await UploadViaPostFilesAsync(assemblyBytes, filename, metadata, baseUrl);
-                    }
-                    else
-                    {
-                        await UploadViaPresignedUrlAsync(assemblyBytes, filename, metadata, baseUrl);
-                    }
+                        if (useDirectUpload)
+                        {
+                            await UploadViaPostFilesAsync(assemblyBytes, filename, metadata, baseUrl);
+                        }
+                        else
+                        {
+                            await UploadViaPresignedUrlAsync(assemblyBytes, filename, metadata, baseUrl);
+                        }
 
-                    _logInfo($"ReportUploadService: Successfully uploaded {filename}");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    _logWarn($"ReportUploadService: Attempt {attempt + 1} failed: {ex.Message}");
-                    if (attempt == MaxRetries)
-                    {
-                        throw;
+                        if (HashUtility.IsValidHash(assemblyHash))
+                        {
+                            _configManager?.MarkReportHashUploaded(assemblyHash);
+                        }
+
+                        _logInfo($"ReportUploadService: Successfully uploaded {filename}");
+                        return;
                     }
-                    await Task.Delay(1000 * (attempt + 1));
+                    catch (Exception ex)
+                    {
+                        _logWarn($"ReportUploadService: Attempt {attempt + 1} failed: {ex.Message}");
+                        if (attempt == MaxRetries)
+                        {
+                            throw;
+                        }
+                        await Task.Delay(1000 * (attempt + 1));
+                    }
+                }
+            }
+            finally
+            {
+                if (HashUtility.IsValidHash(assemblyHash))
+                {
+                    lock (InFlightUploadsLock)
+                    {
+                        InFlightUploads.Remove(assemblyHash);
+                    }
                 }
             }
         }

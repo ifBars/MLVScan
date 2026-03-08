@@ -75,6 +75,11 @@ public class MLVScanConfig
     /// </summary>
     public string ReportUploadApiBaseUrl { get; set; } = "https://api.mlvscan.com";
 
+    /// <summary>
+    /// SHA256 hashes of assemblies already uploaded to the API.
+    /// </summary>
+    public string[] UploadedReportHashes { get; set; } = [];
+
     // Scan scope settings
 
     /// <summary>

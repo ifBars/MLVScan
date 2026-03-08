@@ -63,6 +63,8 @@ namespace MLVScan.BepInEx
                     if (loaded != null)
                     {
                         _config = loaded;
+                        _config.WhitelistedHashes = NormalizeHashes(_config.WhitelistedHashes);
+                        _config.UploadedReportHashes = NormalizeHashes(_config.UploadedReportHashes);
                         _logger.LogInfo("Configuration loaded from MLVScan.json");
                         return _config;
                     }
@@ -100,7 +102,8 @@ namespace MLVScan.BepInEx
                 ReportUploadConsentAsked = false,
                 ReportUploadConsentPending = false,
                 PendingReportUploadPath = string.Empty,
-                ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl
+                ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl,
+                UploadedReportHashes = Array.Empty<string>()
             };
         }
 
@@ -162,5 +165,37 @@ namespace MLVScan.BepInEx
         }
 
         public string GetReportUploadApiBaseUrl() => _reportUploadApiBaseUrl;
+
+        public bool IsReportHashUploaded(string hash)
+        {
+            if (string.IsNullOrWhiteSpace(hash))
+                return false;
+
+            return NormalizeHashes(_config.UploadedReportHashes)
+                .Contains(hash.ToLowerInvariant(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public void MarkReportHashUploaded(string hash)
+        {
+            if (!HashUtility.IsValidHash(hash))
+                return;
+
+            var normalizedHashes = NormalizeHashes((_config.UploadedReportHashes ?? Array.Empty<string>()).Append(hash));
+            if (normalizedHashes.Length == (_config.UploadedReportHashes?.Length ?? 0) && IsReportHashUploaded(hash))
+                return;
+
+            _config.UploadedReportHashes = normalizedHashes;
+            SaveConfig(_config);
+            _logger.LogInfo($"Recorded uploaded report hash: {hash}");
+        }
+
+        private static string[] NormalizeHashes(System.Collections.Generic.IEnumerable<string> hashes)
+        {
+            return (hashes ?? Array.Empty<string>())
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
     }
 }

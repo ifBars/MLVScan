@@ -27,6 +27,7 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentPending;
         private readonly MelonPreferences_Entry<string> _pendingReportUploadPath;
         private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
+        private readonly MelonPreferences_Entry<string[]> _uploadedReportHashes;
 
         public MelonConfigManager(MelonLogger.Instance logger)
         {
@@ -75,6 +76,9 @@ namespace MLVScan.MelonLoader
                 _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
                     description: "API base URL for report uploads");
 
+                _uploadedReportHashes = _category.CreateEntry("UploadedReportHashes", Array.Empty<string>(),
+                    description: "List of assembly SHA256 hashes already uploaded to the MLVScan API (internal)");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -88,6 +92,7 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentPending.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _pendingReportUploadPath.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadApiBaseUrl.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _uploadedReportHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -134,7 +139,8 @@ namespace MLVScan.MelonLoader
                 ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
                 ReportUploadConsentPending = _reportUploadConsentPending.Value,
                 PendingReportUploadPath = _pendingReportUploadPath.Value,
-                ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value
+                ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value,
+                UploadedReportHashes = NormalizeHashes(_uploadedReportHashes.Value)
             };
         }
 
@@ -155,6 +161,7 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentPending.Value = newConfig.ReportUploadConsentPending;
                 _pendingReportUploadPath.Value = newConfig.PendingReportUploadPath ?? string.Empty;
                 _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
+                _uploadedReportHashes.Value = NormalizeHashes(newConfig.UploadedReportHashes);
 
                 MelonPreferences.Save();
 
@@ -200,6 +207,31 @@ namespace MLVScan.MelonLoader
 
         public string GetReportUploadApiBaseUrl() => _reportUploadApiBaseUrl.Value;
 
+        public bool IsReportHashUploaded(string hash)
+        {
+            if (string.IsNullOrWhiteSpace(hash))
+                return false;
+
+            return NormalizeHashes(_uploadedReportHashes.Value)
+                .Contains(hash.ToLowerInvariant(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public void MarkReportHashUploaded(string hash)
+        {
+            if (!Services.HashUtility.IsValidHash(hash))
+                return;
+
+            var updatedHashes = NormalizeHashes((_uploadedReportHashes.Value ?? Array.Empty<string>()).Append(hash));
+            if (updatedHashes.Length == (_uploadedReportHashes.Value?.Length ?? 0) && IsReportHashUploaded(hash))
+                return;
+
+            _uploadedReportHashes.Value = updatedHashes;
+            MelonPreferences.Save();
+
+            UpdateConfigFromPreferences();
+            _logger.Msg($"Recorded uploaded report hash: {hash}");
+        }
+
         private static Severity ParseSeverity(string severity)
         {
             if (string.IsNullOrWhiteSpace(severity))
@@ -225,6 +257,15 @@ namespace MLVScan.MelonLoader
                 Severity.Low => "Low",
                 _ => "Medium"
             };
+        }
+
+        private static string[] NormalizeHashes(System.Collections.Generic.IEnumerable<string> hashes)
+        {
+            return (hashes ?? Array.Empty<string>())
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .Select(h => h.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
     }
 }
