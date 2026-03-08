@@ -39,30 +39,48 @@ namespace MLVScan.BepInEx
 
         public void GenerateReports(
             List<DisabledPluginInfo> disabledPlugins,
-            Dictionary<string, List<ScanFinding>> scanResults)
+            Dictionary<string, ScannedPluginResult> scanResults)
         {
             EnsureReportDirectoryExists();
 
             foreach (var pluginInfo in disabledPlugins)
             {
-                if (!scanResults.TryGetValue(pluginInfo.OriginalPath, out var findings))
+                if (!scanResults.TryGetValue(pluginInfo.OriginalPath, out var scanResult))
                     continue;
 
                 var pluginName = Path.GetFileName(pluginInfo.OriginalPath);
 
                 // Log to console
-                LogConsoleReport(pluginName, pluginInfo.FileHash, findings);
+                LogConsoleReport(pluginName, pluginInfo, scanResult);
 
                 // Generate file report
-                GenerateFileReport(pluginName, pluginInfo, findings);
+                GenerateFileReport(pluginName, pluginInfo, scanResult);
             }
         }
 
-        private void LogConsoleReport(string pluginName, string hash, List<ScanFinding> findings)
+        private void LogConsoleReport(string pluginName, DisabledPluginInfo pluginInfo, ScannedPluginResult scanResult)
         {
+            var findings = scanResult?.Findings ?? new List<ScanFinding>();
+            var threatVerdict = pluginInfo?.ThreatVerdict ?? scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
+
             _logger.LogWarning(new string('=', 50));
             _logger.LogWarning($"BLOCKED PLUGIN: {pluginName}");
-            _logger.LogInfo($"SHA256: {hash}");
+            _logger.LogInfo($"SHA256: {pluginInfo.FileHash}");
+            _logger.LogWarning($"Verdict: {ThreatVerdictTextFormatter.GetVerdictLabel(threatVerdict)}");
+            _logger.LogInfo(threatVerdict.Summary);
+
+            var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
+            if (!string.IsNullOrWhiteSpace(familyName))
+            {
+                _logger.LogInfo($"Family: {familyName}");
+            }
+
+            var confidenceLabel = ThreatVerdictTextFormatter.GetConfidenceLabel(threatVerdict);
+            if (!string.IsNullOrWhiteSpace(confidenceLabel))
+            {
+                _logger.LogInfo($"Confidence: {confidenceLabel}");
+            }
+
             _logger.LogInfo($"Suspicious patterns: {findings.Count}");
 
             var grouped = findings
@@ -74,76 +92,37 @@ namespace MLVScan.BepInEx
                 _logger.LogInfo($"  {group.Key}: {group.Count()} issue(s)");
             }
 
-            var orderedFindings = findings
-                .OrderByDescending(f => f.Severity)
-                .ThenBy(f => f.Location);
-
-            foreach (var finding in orderedFindings)
+            var topSignals = ThreatVerdictTextFormatter.GetTopFindingSummaries(findings, 3);
+            if (topSignals.Count > 0)
             {
-                _logger.LogWarning($"[{finding.Severity}] {finding.Description}");
-                if (!string.IsNullOrEmpty(finding.RuleId))
+                _logger.LogInfo("Top signals:");
+                foreach (var signal in topSignals)
                 {
-                    _logger.LogInfo($"  Rule: {finding.RuleId}");
+                    _logger.LogInfo($"  - {signal}");
                 }
-                _logger.LogInfo($"  Location: {finding.Location}");
-
-                if (finding.HasCallChain && finding.CallChain != null)
-                {
-                    _logger.LogInfo("  Call Chain:");
-                    foreach (var node in finding.CallChain.Nodes)
-                    {
-                        var prefix = node.NodeType switch
-                        {
-                            CallChainNodeType.EntryPoint => "[ENTRY]",
-                            CallChainNodeType.IntermediateCall => "[CALL]",
-                            CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                            _ => "[???]"
-                        };
-                        _logger.LogInfo($"    {prefix} {node.Location}");
-                        if (!string.IsNullOrWhiteSpace(node.Description))
-                        {
-                            _logger.LogInfo($"         {node.Description}");
-                        }
-                    }
-                }
-
-                if (finding.HasDataFlow && finding.DataFlowChain != null)
-                {
-                    _logger.LogInfo($"  Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
-                    if (finding.DataFlowChain.IsCrossMethod)
-                    {
-                        _logger.LogInfo($"    Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods involved");
-                    }
-
-                    _logger.LogInfo("  Data Flow Chain:");
-                    foreach (var node in finding.DataFlowChain.Nodes)
-                    {
-                        var nodePrefix = node.NodeType switch
-                        {
-                            DataFlowNodeType.Source => "[SOURCE]",
-                            DataFlowNodeType.Transform => "[TRANSFORM]",
-                            DataFlowNodeType.Sink => "[SINK]",
-                            DataFlowNodeType.Intermediate => "[PASS]",
-                            _ => "[???]"
-                        };
-
-                        _logger.LogInfo(
-                            $"    {nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
-                    }
-                }
-
-                _logger.LogInfo(string.Empty);
             }
 
-            DisplaySecurityNotice(pluginName);
+            _logger.LogInfo("Full technical details were written to the saved report file for human review.");
+
+            DisplaySecurityNotice(pluginName, threatVerdict);
         }
 
-        private void DisplaySecurityNotice(string pluginName)
+        private void DisplaySecurityNotice(string pluginName, ThreatVerdictInfo threatVerdict)
         {
             _logger.LogWarning("--- SECURITY NOTICE ---");
             _logger.LogInfo($"MLVScan blocked {pluginName} before it could execute.");
-            _logger.LogInfo("If this is your first time with this plugin, you are likely safe.");
-            _logger.LogInfo("If you've used it before, consider running a malware scan.");
+            if (threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily)
+            {
+                _logger.LogInfo("This block was reinforced by a match to previously analyzed malware.");
+                _logger.LogInfo("If this is your first time with this plugin, you are likely safe.");
+                _logger.LogInfo("If you've used it before, run a malware scan and review the report immediately.");
+            }
+            else
+            {
+                _logger.LogInfo("This plugin was blocked as a precaution based on suspicious behavior patterns.");
+                _logger.LogInfo("It may still be a false positive, so use the saved report for human review before assuming infection.");
+            }
             _logger.LogInfo("");
             _logger.LogInfo("To whitelist a false positive:");
             _logger.LogInfo("  Add the SHA256 hash to BepInEx/config/MLVScan.json");
@@ -156,10 +135,11 @@ namespace MLVScan.BepInEx
         private void GenerateFileReport(
             string pluginName,
             DisabledPluginInfo pluginInfo,
-            List<ScanFinding> findings)
+            ScannedPluginResult scanResult)
         {
             try
             {
+                var findings = scanResult?.Findings ?? new List<ScanFinding>();
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 var reportPath = Path.Combine(_reportDirectory, $"{pluginName}_{timestamp}.report.txt");
 
@@ -174,6 +154,11 @@ namespace MLVScan.BepInEx
                 sb.AppendLine($"Blocked Path: {pluginInfo.DisabledPath}");
                 sb.AppendLine($"Total Findings: {findings.Count}");
                 sb.AppendLine();
+
+                using (var verdictWriter = new StringWriter(sb))
+                {
+                    ThreatVerdictTextFormatter.WriteThreatVerdictSection(verdictWriter, pluginInfo.ThreatVerdict ?? scanResult?.ThreatVerdict);
+                }
 
                 // Severity breakdown
                 sb.AppendLine("Severity Breakdown:");

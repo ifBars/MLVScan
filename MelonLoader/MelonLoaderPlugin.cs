@@ -139,21 +139,21 @@ namespace MLVScan.MelonLoader
             }
         }
 
-        public Dictionary<string, List<ScanFinding>> ScanAndDisableMods(bool force = false)
+        public Dictionary<string, ScannedPluginResult> ScanAndDisableMods(bool force = false)
         {
             try
             {
                 if (!_initialized)
                 {
                     LoggerInstance.Error("Cannot scan mods - MLVScan not properly initialized");
-                    return new Dictionary<string, List<ScanFinding>>();
+                    return new Dictionary<string, ScannedPluginResult>();
                 }
 
                 LoggerInstance.Msg("Scanning for suspicious mods...");
                 var scanResults = _pluginScanner.ScanAllPlugins(force);
 
                 var filteredResults = scanResults
-                    .Where(kv => kv.Value.Count > 0 && kv.Value.Any(f => f.Location != "Assembly scanning"))
+                    .Where(kv => kv.Value != null && kv.Value.Findings.Count > 0)
                     .ToDictionary(kv => kv.Key, kv => kv.Value);
 
                 if (filteredResults.Count > 0)
@@ -178,11 +178,11 @@ namespace MLVScan.MelonLoader
             catch (Exception ex)
             {
                 LoggerInstance.Error($"Error scanning mods: {ex.Message}");
-                return new Dictionary<string, List<ScanFinding>>();
+                return new Dictionary<string, ScannedPluginResult>();
             }
         }
 
-        private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, List<ScanFinding>> scanResults)
+        private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, ScannedPluginResult> scanResults)
         {
             var isDeveloperMode = _configManager?.Config?.Scan?.DeveloperMode ?? false;
 
@@ -200,24 +200,23 @@ namespace MLVScan.MelonLoader
                 var fileHash = modInfo.FileHash;
                 var accessiblePath = File.Exists(modInfo.DisabledPath) ? modInfo.DisabledPath : modInfo.OriginalPath;
 
-                LoggerInstance.Warning($"SUSPICIOUS MOD: {modName}");
-                LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
-                LoggerInstance.Msg("-------------------------------");
+                    LoggerInstance.Warning($"BLOCKED MOD: {modName}");
+                    LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
+                    LoggerInstance.Msg("-------------------------------");
 
-                if (!scanResults.TryGetValue(modInfo.OriginalPath, out var findings))
-                {
-                    LoggerInstance.Error("Could not find scan results for disabled mod");
-                    continue;
-                }
+                    if (!scanResults.TryGetValue(modInfo.OriginalPath, out var scanResult))
+                    {
+                        LoggerInstance.Error("Could not find scan results for disabled mod");
+                        continue;
+                    }
 
-                var actualFindings = findings
-                    .Where(f => f.Location != "Assembly scanning")
-                    .ToList();
+                    var actualFindings = scanResult?.Findings ?? new List<ScanFinding>();
+                    var threatVerdict = modInfo.ThreatVerdict ?? scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
 
-                if (actualFindings.Count == 0)
-                {
-                    LoggerInstance.Msg("No specific suspicious patterns were identified.");
-                    continue;
+                    if (actualFindings.Count == 0)
+                    {
+                        LoggerInstance.Msg("No specific suspicious patterns were identified.");
+                        continue;
                 }
 
                 QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings);
@@ -226,10 +225,24 @@ namespace MLVScan.MelonLoader
                     .GroupBy(f => f.Description)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
-                LoggerInstance.Warning($"Total suspicious patterns found: {actualFindings.Count}");
+                    LoggerInstance.Warning($"Total suspicious patterns found: {actualFindings.Count}");
+                    LoggerInstance.Warning($"Verdict: {ThreatVerdictTextFormatter.GetVerdictLabel(threatVerdict)}");
+                    LoggerInstance.Msg(threatVerdict.Summary);
 
-                var severityCounts = actualFindings
-                    .GroupBy(f => f.Severity)
+                    var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
+                    if (!string.IsNullOrWhiteSpace(familyName))
+                    {
+                        LoggerInstance.Msg($"Family: {familyName}");
+                    }
+
+                    var confidenceLabel = ThreatVerdictTextFormatter.GetConfidenceLabel(threatVerdict);
+                    if (!string.IsNullOrWhiteSpace(confidenceLabel))
+                    {
+                        LoggerInstance.Msg($"Confidence: {confidenceLabel}");
+                    }
+
+                    var severityCounts = actualFindings
+                        .GroupBy(f => f.Severity)
                     .OrderByDescending(g => (int)g.Key)
                     .ToDictionary(g => g.Key, g => g.Count());
 
@@ -240,97 +253,26 @@ namespace MLVScan.MelonLoader
                     LoggerInstance.Msg($"  {severityLabel}: {severityCount.Value} issue(s)");
                 }
 
-                LoggerInstance.Msg("-------------------------------");
+                    LoggerInstance.Msg("-------------------------------");
 
-                // Use developer-friendly reporting if developer mode is enabled
-                if (isDeveloperMode && _developerReportGenerator != null)
-                {
-                    _developerReportGenerator.GenerateConsoleReport(modName, actualFindings);
-                }
-                    else
-                {
-                    // Standard reporting
-                    LoggerInstance.Warning("Suspicious patterns found:");
-
-                    foreach (var (category, categoryFindings) in groupedFindings)
+                    var topSignals = ThreatVerdictTextFormatter.GetTopFindingSummaries(actualFindings, 3);
+                    if (topSignals.Count > 0)
                     {
-                        var severity = FormatSeverityLabel(categoryFindings[0].Severity);
-
-                        LoggerInstance.Warning($"[{severity}] {category} ({categoryFindings.Count} instances)");
-
-                        var maxDetailsToShow = categoryFindings.Count;
-                        for (var i = 0; i < maxDetailsToShow; i++)
+                        LoggerInstance.Warning("Top signals:");
+                        foreach (var signal in topSignals)
                         {
-                            var finding = categoryFindings[i];
-                            LoggerInstance.Msg($"  * At: {finding.Location}");
-                            if (!string.IsNullOrEmpty(finding.RuleId))
-                            {
-                                LoggerInstance.Msg($"    Rule: {finding.RuleId}");
-                            }
-
-                            if (finding.HasCallChain && finding.CallChain != null)
-                            {
-                                LoggerInstance.Msg("    Call Chain Analysis:");
-                                foreach (var node in finding.CallChain.Nodes)
-                                {
-                                    var prefix = node.NodeType switch
-                                    {
-                                        CallChainNodeType.EntryPoint => "[ENTRY]",
-                                        CallChainNodeType.IntermediateCall => "[CALL]",
-                                        CallChainNodeType.SuspiciousDeclaration => "[DECL]",
-                                        _ => "[???]"
-                                    };
-                                    LoggerInstance.Msg($"      {prefix} {node.Location}");
-                                    if (!string.IsNullOrWhiteSpace(node.Description))
-                                    {
-                                        LoggerInstance.Msg($"           {node.Description}");
-                                    }
-                                }
-                            }
-
-                            if (finding.HasDataFlow && finding.DataFlowChain != null)
-                            {
-                                LoggerInstance.Msg($"    Data Flow Analysis: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}% confidence)");
-                                if (finding.DataFlowChain.IsCrossMethod)
-                                {
-                                    LoggerInstance.Msg($"    Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
-                                }
-
-                                LoggerInstance.Msg("    Data Flow Chain:");
-                                for (var nodeIndex = 0; nodeIndex < finding.DataFlowChain.Nodes.Count; nodeIndex++)
-                                {
-                                    var node = finding.DataFlowChain.Nodes[nodeIndex];
-                                    var nodePrefix = node.NodeType switch
-                                    {
-                                        DataFlowNodeType.Source => "[SOURCE]",
-                                        DataFlowNodeType.Transform => "[TRANSFORM]",
-                                        DataFlowNodeType.Sink => "[SINK]",
-                                        DataFlowNodeType.Intermediate => "[PASS]",
-                                        _ => "[???]"
-                                    };
-
-                                    var connector = nodeIndex > 0 ? "-> " : "   ";
-                                    LoggerInstance.Msg(
-                                        $"      {connector}{nodePrefix} {node.Operation} ({node.DataDescription}) @ {node.Location}");
-                                }
-                            }
-
-                            if (!string.IsNullOrEmpty(finding.CodeSnippet))
-                            {
-                                LoggerInstance.Msg("    Code Snippet (IL):");
-                                foreach (var line in finding.CodeSnippet.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                                {
-                                    LoggerInstance.Msg($"      {line}");
-                                }
-                            }
+                            LoggerInstance.Msg($"  - {signal}");
                         }
-
-                        LoggerInstance.Msg("");
                     }
 
+                    if (isDeveloperMode)
+                    {
+                        LoggerInstance.Msg("Developer mode is enabled. Full remediation guidance is included in the report file.");
+                    }
+
+                    LoggerInstance.Msg("Full technical details were written to the saved report file for human review.");
                     LoggerInstance.Msg("-------------------------------");
-                }
-                DisplaySecurityNotice(modName);
+                    DisplaySecurityNotice(modName, threatVerdict);
 
                 try
                 {
@@ -371,7 +313,7 @@ namespace MLVScan.MelonLoader
                         if (isDeveloperMode && _developerReportGenerator != null)
                         {
                             // Developer-friendly report
-                            var devReport = _developerReportGenerator.GenerateFileReport(modName, fileHash, actualFindings);
+                            var devReport = _developerReportGenerator.GenerateFileReport(modName, fileHash, actualFindings, threatVerdict);
                             writer.Write(devReport);
                         }
                         else
@@ -386,6 +328,8 @@ namespace MLVScan.MelonLoader
                             writer.WriteLine($"Disabled Path: {modInfo.DisabledPath}");
                             writer.WriteLine($"Path Used For Analysis: {accessiblePath}");
                             writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
+                            writer.WriteLine();
+                            ThreatVerdictTextFormatter.WriteThreatVerdictSection(writer, threatVerdict);
                             writer.WriteLine("\nSeverity Breakdown:");
                             foreach (var severityCount in severityCounts)
                             {
@@ -626,13 +570,22 @@ namespace MLVScan.MelonLoader
             };
         }
 
-        private void DisplaySecurityNotice(string modName)
+        private void DisplaySecurityNotice(string modName, ThreatVerdictInfo threatVerdict)
         {
             LoggerInstance.Warning("IMPORTANT SECURITY NOTICE");
             LoggerInstance.Msg($"MLVScan has detected and disabled {modName} before it was loaded.");
-            LoggerInstance.Msg("If this is your first time running the game with this mod, your PC is likely safe.");
-            LoggerInstance.Msg("However, if you've previously run the game with this mod, your system MAY be infected.");
-            LoggerInstance.Msg("Keep in mind that no detection system is perfect, and this mod may be falsely flagged.");
+            if (threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily)
+            {
+                LoggerInstance.Msg("This block was reinforced by a match to previously analyzed malware.");
+                LoggerInstance.Msg("If this is your first time running the game with this mod, your PC is likely safe.");
+                LoggerInstance.Msg("However, if you've previously run the game with this mod, your system MAY be infected.");
+            }
+            else
+            {
+                LoggerInstance.Msg("This mod was blocked as a precaution based on suspicious behavior patterns.");
+                LoggerInstance.Msg("Keep in mind that no detection system is perfect, and this mod may still be falsely flagged.");
+            }
             LoggerInstance.Warning("Recommended security steps:");
             LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
             LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");

@@ -19,6 +19,7 @@ namespace MLVScan.Services
         protected readonly MLVScanConfig Config;
         protected readonly IConfigManager ConfigManager;
         protected readonly AssemblyScanner AssemblyScanner;
+        protected readonly ThreatVerdictBuilder ThreatVerdictBuilder;
 
         protected PluginScannerBase(
             IScanLogger logger,
@@ -33,6 +34,7 @@ namespace MLVScan.Services
 
             var rules = RuleFactory.CreateDefaultRules();
             AssemblyScanner = new AssemblyScanner(rules, Config.Scan, ResolverProvider);
+            ThreatVerdictBuilder = new ThreatVerdictBuilder();
         }
 
         /// <summary>
@@ -48,15 +50,15 @@ namespace MLVScan.Services
         /// <summary>
         /// Performs any platform-specific post-scan processing.
         /// </summary>
-        protected virtual void OnScanComplete(Dictionary<string, List<ScanFinding>> results) { }
+        protected virtual void OnScanComplete(Dictionary<string, ScannedPluginResult> results) { }
 
         /// <summary>
         /// Scans all plugins in configured directories.
         /// </summary>
         /// <param name="forceScanning">If true, scans even if auto-scan is disabled.</param>
-        public Dictionary<string, List<ScanFinding>> ScanAllPlugins(bool forceScanning = false)
+        public Dictionary<string, ScannedPluginResult> ScanAllPlugins(bool forceScanning = false)
         {
-            var results = new Dictionary<string, List<ScanFinding>>();
+            var results = new Dictionary<string, ScannedPluginResult>();
 
             if (!forceScanning && !Config.EnableAutoScan)
             {
@@ -82,7 +84,7 @@ namespace MLVScan.Services
         /// <summary>
         /// Scans a single directory for malicious plugins.
         /// </summary>
-        protected virtual void ScanDirectory(string directoryPath, Dictionary<string, List<ScanFinding>> results)
+        protected virtual void ScanDirectory(string directoryPath, Dictionary<string, ScannedPluginResult> results)
         {
             var pluginFiles = Directory.GetFiles(directoryPath, "*.dll", SearchOption.AllDirectories);
             Logger.Info($"Found {pluginFiles.Length} plugin files in {directoryPath}");
@@ -103,7 +105,7 @@ namespace MLVScan.Services
         /// <summary>
         /// Scans a single file and adds results if suspicious.
         /// </summary>
-        protected virtual void ScanSingleFile(string filePath, Dictionary<string, List<ScanFinding>> results)
+        protected virtual void ScanSingleFile(string filePath, Dictionary<string, ScannedPluginResult> results)
         {
             var fileName = Path.GetFileName(filePath);
             var hash = HashUtility.CalculateFileHash(filePath);
@@ -129,10 +131,29 @@ namespace MLVScan.Services
                 .Where(f => f.Location != "Assembly scanning")
                 .ToList();
 
-            if (actualFindings.Count >= Config.SuspiciousThreshold)
+            var scannedResult = ThreatVerdictBuilder.Build(filePath, hash, actualFindings);
+
+            if (actualFindings.Count >= Config.SuspiciousThreshold || scannedResult.ThreatVerdict.ShouldBypassThreshold)
             {
-                results[filePath] = actualFindings;
-                Logger.Warning($"Found {actualFindings.Count} suspicious patterns in {fileName}");
+                results[filePath] = scannedResult;
+
+                if (scannedResult.ThreatVerdict.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                    scannedResult.ThreatVerdict.Kind == ThreatVerdictKind.KnownMalwareFamily)
+                {
+                    var familyName = scannedResult.ThreatVerdict.PrimaryFamily?.DisplayName;
+                    if (!string.IsNullOrWhiteSpace(familyName))
+                    {
+                        Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName} - {scannedResult.ThreatVerdict.Title}: {familyName}");
+                    }
+                    else
+                    {
+                        Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName} - {scannedResult.ThreatVerdict.Title}");
+                    }
+                }
+                else
+                {
+                    Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName}");
+                }
             }
         }
     }

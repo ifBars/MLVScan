@@ -53,13 +53,13 @@ namespace MLVScan.MelonLoader
             }
         }
 
-        protected override void OnScanComplete(Dictionary<string, List<ScanFinding>> results)
+        protected override void OnScanComplete(Dictionary<string, ScannedPluginResult> results)
         {
             // Also scan Thunderstore Mod Manager directories
             ScanThunderstoreModManager(results);
         }
 
-        private void ScanThunderstoreModManager(Dictionary<string, List<ScanFinding>> results)
+        private void ScanThunderstoreModManager(Dictionary<string, ScannedPluginResult> results)
         {
             try
             {

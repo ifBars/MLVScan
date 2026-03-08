@@ -141,7 +141,7 @@ namespace MLVScan.Services
         /// <summary>
         /// Generates a developer-friendly file report with remediation guidance.
         /// </summary>
-        public string GenerateFileReport(string modName, string hash, List<ScanFinding> findings)
+        public string GenerateFileReport(string modName, string hash, List<ScanFinding> findings, ThreatVerdictInfo threatVerdict = null)
         {
             var sb = new StringBuilder();
             sb.AppendLine("======= MLVScan Developer Report =======");
@@ -151,6 +151,11 @@ namespace MLVScan.Services
             sb.AppendLine($"Scan Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             sb.AppendLine($"Total Findings: {findings.Count}");
             sb.AppendLine("");
+
+            using (var verdictWriter = new StringWriter(sb))
+            {
+                ThreatVerdictTextFormatter.WriteThreatVerdictSection(verdictWriter, threatVerdict);
+            }
 
             var groupedByRule = findings
                 .Where(f => f.RuleId != null)

@@ -98,7 +98,11 @@
     <Compile Include="Services\HashUtility.cs" />
     <Compile Include="Services\ReportUploadService.cs" />
     <Compile Include="Services\RedactionHelper.cs" />
+    <Compile Include="Services\ThreatVerdictBuilder.cs" />
+    <Compile Include="Services\ThreatVerdictTextFormatter.cs" />
     <Compile Include="Models\SubmissionMetadata.cs" />
+    <Compile Include="Models\ThreatVerdictKind.cs" />
+    <Compile Include="Models\ThreatVerdictInfo.cs" />
   </ItemGroup>
 
   <!-- ============================================ -->

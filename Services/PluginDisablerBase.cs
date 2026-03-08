@@ -15,12 +15,14 @@ namespace MLVScan.Services
         public string OriginalPath { get; }
         public string DisabledPath { get; }
         public string FileHash { get; }
+        public ThreatVerdictInfo ThreatVerdict { get; }
 
-        public DisabledPluginInfo(string originalPath, string disabledPath, string fileHash)
+        public DisabledPluginInfo(string originalPath, string disabledPath, string fileHash, ThreatVerdictInfo threatVerdict)
         {
             OriginalPath = originalPath;
             DisabledPath = disabledPath;
             FileHash = fileHash;
+            ThreatVerdict = threatVerdict ?? new ThreatVerdictInfo();
         }
     }
 
@@ -66,7 +68,7 @@ namespace MLVScan.Services
         /// <param name="scanResults">Dictionary of file paths to their findings.</param>
         /// <param name="forceDisable">If true, disables even if auto-disable is off.</param>
         public List<DisabledPluginInfo> DisableSuspiciousPlugins(
-            Dictionary<string, List<ScanFinding>> scanResults,
+            Dictionary<string, ScannedPluginResult> scanResults,
             bool forceDisable = false)
         {
             if (!forceDisable && !Config.EnableAutoDisable)
@@ -77,19 +79,21 @@ namespace MLVScan.Services
 
             var disabledPlugins = new List<DisabledPluginInfo>();
 
-            foreach (var (pluginPath, findings) in scanResults)
+            foreach (var (pluginPath, scanResult) in scanResults)
             {
+                var findings = scanResult?.Findings ?? new List<ScanFinding>();
                 var severeFindings = findings
                     .Where(f => (int)f.Severity >= (int)Config.MinSeverityForDisable)
                     .ToList();
+                var shouldBypassThreshold = scanResult?.ThreatVerdict?.ShouldBypassThreshold == true;
 
-                if (severeFindings.Count == 0)
+                if (!shouldBypassThreshold && severeFindings.Count == 0)
                 {
                     Logger.Info($"Plugin {Path.GetFileName(pluginPath)} has findings but none meet severity threshold ({Config.MinSeverityForDisable})");
                     continue;
                 }
 
-                if (!forceDisable && severeFindings.Count < Config.SuspiciousThreshold)
+                if (!forceDisable && !shouldBypassThreshold && severeFindings.Count < Config.SuspiciousThreshold)
                 {
                     Logger.Info($"Plugin {Path.GetFileName(pluginPath)} below suspicious threshold");
                     continue;
@@ -97,7 +101,7 @@ namespace MLVScan.Services
 
                 try
                 {
-                    var info = DisablePlugin(pluginPath);
+                    var info = DisablePlugin(pluginPath, scanResult?.ThreatVerdict);
                     if (info != null)
                     {
                         disabledPlugins.Add(info);
@@ -116,7 +120,7 @@ namespace MLVScan.Services
         /// <summary>
         /// Disables a single plugin by renaming it.
         /// </summary>
-        protected virtual DisabledPluginInfo DisablePlugin(string pluginPath)
+        protected virtual DisabledPluginInfo DisablePlugin(string pluginPath, ThreatVerdictInfo threatVerdict)
         {
             var fileHash = HashUtility.CalculateFileHash(pluginPath);
             var disabledPath = GetDisabledPath(pluginPath);
@@ -131,7 +135,7 @@ namespace MLVScan.Services
             File.Move(pluginPath, disabledPath);
 
             Logger.Warning($"BLOCKED: {Path.GetFileName(pluginPath)}");
-            return new DisabledPluginInfo(pluginPath, disabledPath, fileHash);
+            return new DisabledPluginInfo(pluginPath, disabledPath, fileHash, threatVerdict);
         }
     }
 }
