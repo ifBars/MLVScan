@@ -170,7 +170,6 @@
     <!-- Use NuGet packages when local paths are not set -->
     <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" GeneratePathProperty="true" Condition="'$(MelonLoaderPath)' == ''" />
 
-    <PackageReference Include="UnityEngine" Version="*" Condition="'$(GameManagedPath)' == ''" />
     <PackageReference Include="UnityEngine.CoreModule" Version="*" Condition="'$(GameManagedPath)' == ''" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="*" Condition="'$(GameManagedPath)' == ''" />
 
