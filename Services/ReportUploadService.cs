@@ -47,7 +47,7 @@ namespace MLVScan.Services
         {
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
-                _logWarn("ReportUploadService: No assembly bytes to upload");
+                _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
                 return;
             }
 
@@ -79,7 +79,7 @@ namespace MLVScan.Services
         {
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
-                _logWarn("ReportUploadService: No assembly bytes to upload");
+                _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
                 return;
             }
 
@@ -106,6 +106,8 @@ namespace MLVScan.Services
 
             var baseUrl = apiBaseUrl.TrimEnd('/');
             var useDirectUpload = assemblyBytes.Length <= SmallFileLimitBytes;
+
+            _logInfo($"ReportUploadService: Uploading {filename} ({assemblyBytes.Length} bytes) via {(useDirectUpload ? "POST /files" : "presigned upload")}");
 
             try
             {

@@ -1,0 +1,200 @@
+name: Auto Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'MLVScan.csproj'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (leave empty to use version from .csproj)'
+        required: false
+        type: string
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.check.outputs.changed }}
+      new-version: ${{ steps.check.outputs.version }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 2
+        
+    - name: Check if version changed
+      id: check
+      run: |
+        # If manually triggered with a version, use that
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+          echo "Manual trigger with version: ${{ inputs.version }}"
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Get current version from MLVScan.csproj
+        CURRENT_VERSION=$(grep -oP '<Version>\K[^<]+' MLVScan.csproj)
+        echo "Current version: $CURRENT_VERSION"
+        
+        # If manually triggered without version, always use current version
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "Manual trigger, using current version: $CURRENT_VERSION"
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Get previous version from git
+        git checkout HEAD~1 -- MLVScan.csproj 2>/dev/null || echo "First commit"
+        PREVIOUS_VERSION=$(grep -oP '<Version>\K[^<]+' MLVScan.csproj 2>/dev/null || echo "0.0.0")
+        echo "Previous version: $PREVIOUS_VERSION"
+        
+        # Restore current version
+        git checkout HEAD -- MLVScan.csproj
+        
+        # Compare versions
+        if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+          echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "Version unchanged"
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        fi
+
+  create-release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Install Mono (for ILRepack)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mono-complete
+    
+    - name: Restore MelonLoader dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=MelonLoader
+      
+    - name: Build MelonLoader
+      run: dotnet build MLVScan.csproj -c MelonLoader --no-restore
+      
+    - name: Restore BepInEx5 dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx5
+      
+    - name: Build BepInEx5
+      run: dotnet build MLVScan.csproj -c BepInEx5 --no-restore
+      
+    - name: Restore BepInEx6Mono dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx6Mono
+      
+    - name: Build BepInEx6Mono
+      run: dotnet build MLVScan.csproj -c BepInEx6Mono --no-restore
+      
+    - name: Restore BepInEx6IL2CPP dependencies
+      run: dotnet restore MLVScan.csproj -p:Configuration=BepInEx6IL2CPP
+      
+    - name: Build BepInEx6IL2CPP
+      run: dotnet build MLVScan.csproj -c BepInEx6IL2CPP --no-restore
+    
+    - name: Prepare Release Artifacts
+      run: |
+        mkdir -p release
+        
+        cp bin/MelonLoader/**/MLVScan.MelonLoader.dll release/
+        cp bin/BepInEx5/**/MLVScan.BepInEx5.dll release/
+        cp bin/BepInEx6Mono/**/MLVScan.BepInEx6.Mono.dll release/
+        cp bin/BepInEx6IL2CPP/**/MLVScan.BepInEx6.IL2CPP.dll release/
+        
+        ls -la release/
+        
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        VERSION="${{ needs.check-version.outputs.new-version }}"
+        
+        # Get commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        
+        if [ -n "$LAST_TAG" ]; then
+          COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        else
+          COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges -n 10)
+        fi
+        
+        # Create release notes
+        cat > release_notes.md << EOF
+        ## MLVScan v$VERSION
+        
+        ### Changes
+        
+        $COMMITS
+        
+        ### Downloads
+        
+        - **MelonLoader**: `MLVScan.MelonLoader.dll`
+        - **BepInEx 5**: `MLVScan.BepInEx5.dll`
+        - **BepInEx 6.x Mono**: `MLVScan.BepInEx6.Mono.dll`
+        - **BepInEx 6.x IL2CPP**: `MLVScan.BepInEx6.IL2CPP.dll`
+        
+        ### Installation
+        
+        Drop the appropriate DLL into your game's plugins folder:
+        - MelonLoader: `Mods/` or `Plugins/`
+        - BepInEx: `BepInEx/plugins/`
+        
+        ---
+        
+        **Full Changelog**: https://github.com/${{ github.repository }}/compare/$LAST_TAG...v$VERSION
+        EOF
+        
+        echo "Release notes generated"
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.check-version.outputs.new-version }}
+        name: MLVScan v${{ needs.check-version.outputs.new-version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        make_latest: true
+        files: |
+          release/MLVScan.MelonLoader.dll
+          release/MLVScan.BepInEx5.dll
+          release/MLVScan.BepInEx6.Mono.dll
+          release/MLVScan.BepInEx6.IL2CPP.dll
+        
+    - name: Summary
+      run: |
+        echo "### ✅ Release Created Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** v${{ needs.check-version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Tag:** v${{ needs.check-version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+        echo "- MLVScan.MelonLoader.dll" >> $GITHUB_STEP_SUMMARY
+        echo "- MLVScan.BepInEx5.dll" >> $GITHUB_STEP_SUMMARY
+        echo "- MLVScan.BepInEx6.Mono.dll" >> $GITHUB_STEP_SUMMARY
+        echo "- MLVScan.BepInEx6.IL2CPP.dll" >> $GITHUB_STEP_SUMMARY
