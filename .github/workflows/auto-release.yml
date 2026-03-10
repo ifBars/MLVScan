@@ -25,16 +25,27 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v6
       with:
-        fetch-depth: 2
+        fetch-depth: 0
+        fetch-tags: true
         
-    - name: Check if version changed
+    - name: Check if version needs release
       id: check
       run: |
+        # Fetch all tags to check for existing releases
+        git fetch --tags
+        
         # If manually triggered with a version, use that
         if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
           echo "Manual trigger with version: ${{ inputs.version }}"
-          echo "changed=true" >> $GITHUB_OUTPUT
-          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          # Check if tag already exists
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ inputs.version }} already exists, skipping release"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
           exit 0
         fi
         
@@ -42,30 +53,29 @@ jobs:
         CURRENT_VERSION=$(grep -oP '<Version>\K[^<]+' MLVScan.csproj)
         echo "Current version: $CURRENT_VERSION"
         
-        # If manually triggered without version, always use current version
+        # If manually triggered without version, use current version
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           echo "Manual trigger, using current version: $CURRENT_VERSION"
-          echo "changed=true" >> $GITHUB_OUTPUT
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          # Check if tag already exists
+          if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$CURRENT_VERSION already exists, skipping release"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          fi
           exit 0
         fi
         
-        # Get previous version from git
-        git checkout HEAD~1 -- MLVScan.csproj 2>/dev/null || echo "First commit"
-        PREVIOUS_VERSION=$(grep -oP '<Version>\K[^<]+' MLVScan.csproj 2>/dev/null || echo "0.0.0")
-        echo "Previous version: $PREVIOUS_VERSION"
-        
-        # Restore current version
-        git checkout HEAD -- MLVScan.csproj
-        
-        # Compare versions
-        if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-          echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
-          echo "changed=true" >> $GITHUB_OUTPUT
+        # Check if tag for current version already exists
+        if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+          echo "Tag v$CURRENT_VERSION already exists, no release needed"
+          echo "changed=false" >> $GITHUB_OUTPUT
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
         else
-          echo "Version unchanged"
-          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "Tag v$CURRENT_VERSION does not exist, creating release"
+          echo "changed=true" >> $GITHUB_OUTPUT
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
         fi
 
