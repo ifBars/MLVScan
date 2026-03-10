@@ -161,19 +161,6 @@ jobs:
         
         $COMMITS
         
-        ### Downloads
-        
-        - **MelonLoader**: `MLVScan.MelonLoader.dll`
-        - **BepInEx 5**: `MLVScan.BepInEx5.dll`
-        - **BepInEx 6.x Mono**: `MLVScan.BepInEx6.Mono.dll`
-        - **BepInEx 6.x IL2CPP**: `MLVScan.BepInEx6.IL2CPP.dll`
-        
-        ### Installation
-        
-        Drop the appropriate DLL into your game's plugins folder:
-        - MelonLoader: `Mods/` or `Plugins/`
-        - BepInEx: `BepInEx/plugins/`
-        
         ---
         
         **Full Changelog**: https://github.com/${{ github.repository }}/compare/$LAST_TAG...v$VERSION
