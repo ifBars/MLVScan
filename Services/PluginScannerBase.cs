@@ -20,6 +20,7 @@ namespace MLVScan.Services
         protected readonly IConfigManager ConfigManager;
         protected readonly AssemblyScanner AssemblyScanner;
         protected readonly ThreatVerdictBuilder ThreatVerdictBuilder;
+        private readonly string _selfAssemblyHash;
 
         protected PluginScannerBase(
             IScanLogger logger,
@@ -35,6 +36,7 @@ namespace MLVScan.Services
             var rules = RuleFactory.CreateDefaultRules();
             AssemblyScanner = new AssemblyScanner(rules, Config.Scan, ResolverProvider);
             ThreatVerdictBuilder = new ThreatVerdictBuilder();
+            _selfAssemblyHash = GetSelfAssemblyHash();
         }
 
         /// <summary>
@@ -111,7 +113,7 @@ namespace MLVScan.Services
             var hash = HashUtility.CalculateFileHash(filePath);
 
             // Skip ourselves
-            if (IsSelfAssembly(filePath))
+            if (IsSelfAssembly(filePath) || IsExactSelfCopy(hash))
             {
                 Logger.Debug($"Skipping self: {fileName}");
                 return;
@@ -154,6 +156,30 @@ namespace MLVScan.Services
                 {
                     Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName}");
                 }
+            }
+        }
+
+        private bool IsExactSelfCopy(string hash)
+        {
+            return !string.IsNullOrWhiteSpace(_selfAssemblyHash) &&
+                   _selfAssemblyHash.Equals(hash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetSelfAssemblyHash()
+        {
+            try
+            {
+                var selfPath = typeof(PluginScannerBase).Assembly.Location;
+                if (string.IsNullOrWhiteSpace(selfPath) || !File.Exists(selfPath))
+                {
+                    return string.Empty;
+                }
+
+                return HashUtility.CalculateFileHash(selfPath);
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
     }
