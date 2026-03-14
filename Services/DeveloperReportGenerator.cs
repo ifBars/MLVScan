@@ -107,7 +107,7 @@ namespace MLVScan.Services
 
                     if (finding.HasDataFlow && finding.DataFlowChain != null)
                     {
-                        _logger.Info($"      Data Flow: {finding.DataFlowChain.Pattern} ({finding.DataFlowChain.Confidence * 100:F0}%)");
+                        _logger.Info($"      Data Flow: {finding.DataFlowChain.Pattern}");
                         if (finding.DataFlowChain.IsCrossMethod)
                         {
                             _logger.Info($"        Cross-method: {finding.DataFlowChain.InvolvedMethods.Count} methods");
@@ -247,7 +247,6 @@ namespace MLVScan.Services
                         sb.AppendLine();
                         sb.AppendLine("--- DATA FLOW ANALYSIS ---");
                         sb.AppendLine($"Pattern: {finding.DataFlowChain.Pattern}");
-                        sb.AppendLine($"Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
                         sb.AppendLine(finding.DataFlowChain.Summary);
 
                         if (finding.DataFlowChain.IsCrossMethod)

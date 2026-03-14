@@ -78,6 +78,7 @@
     <None Remove="example.png" />
     <None Remove="icon.png" />
     <None Remove="ENVIRONMENT_INTEGRATION_GUIDE.md" />
+    <None Remove="bump-version.ps1" />
   </ItemGroup>
 
   <!-- ============================================ -->

@@ -373,7 +373,6 @@ namespace MLVScan.MelonLoader
                                     {
                                         writer.WriteLine("  Data Flow Analysis:");
                                         writer.WriteLine($"  Pattern: {finding.DataFlowChain.Pattern}");
-                                        writer.WriteLine($"  Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
                                         writer.WriteLine($"  {finding.DataFlowChain.Summary}");
                                         if (finding.DataFlowChain.IsCrossMethod)
                                         {

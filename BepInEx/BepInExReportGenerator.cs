@@ -224,7 +224,6 @@ namespace MLVScan.BepInEx
                         {
                             sb.AppendLine("    Data Flow Analysis:");
                             sb.AppendLine($"      Pattern: {finding.DataFlowChain.Pattern}");
-                            sb.AppendLine($"      Confidence: {finding.DataFlowChain.Confidence * 100:F0}%");
                             if (finding.DataFlowChain.IsCrossMethod)
                             {
                                 sb.AppendLine($"      Cross-method flow through {finding.DataFlowChain.InvolvedMethods.Count} methods");
