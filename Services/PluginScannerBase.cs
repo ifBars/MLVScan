@@ -135,7 +135,7 @@ namespace MLVScan.Services
 
             var scannedResult = ThreatVerdictBuilder.Build(filePath, hash, actualFindings);
 
-            if (actualFindings.Count >= Config.SuspiciousThreshold || scannedResult.ThreatVerdict.ShouldBypassThreshold)
+            if (scannedResult.ThreatVerdict.Kind != ThreatVerdictKind.None)
             {
                 results[filePath] = scannedResult;
 
@@ -145,16 +145,16 @@ namespace MLVScan.Services
                     var familyName = scannedResult.ThreatVerdict.PrimaryFamily?.DisplayName;
                     if (!string.IsNullOrWhiteSpace(familyName))
                     {
-                        Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName} - {scannedResult.ThreatVerdict.Title}: {familyName}");
+                        Logger.Warning($"Detected likely malware in {fileName} - {scannedResult.ThreatVerdict.Title}: {familyName}");
                     }
                     else
                     {
-                        Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName} - {scannedResult.ThreatVerdict.Title}");
+                        Logger.Warning($"Detected likely malware in {fileName} - {scannedResult.ThreatVerdict.Title}");
                     }
                 }
                 else
                 {
-                    Logger.Warning($"Found {actualFindings.Count} suspicious pattern(s) in {fileName}");
+                    Logger.Warning($"Detected suspicious behavior in {fileName} - {scannedResult.ThreatVerdict.Title}");
                 }
             }
         }

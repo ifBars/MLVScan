@@ -8,3 +8,4 @@ LOCAL_DEV_GUIDE.md
 nexuspost.bbcode
 TS-Post.md
 ENVIRONMENT_INTEGRATION_GUIDE.md
+bump-version.ps1

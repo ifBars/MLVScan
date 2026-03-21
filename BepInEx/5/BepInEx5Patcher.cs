@@ -94,6 +94,7 @@ namespace MLVScan.BepInEx5
                         if (!config.ReportUploadConsentAsked)
                         {
                             config.ReportUploadConsentAsked = true;
+                            config.PendingReportUploadVerdictKind = disabledPlugins[0].ThreatVerdict?.Kind.ToString() ?? string.Empty;
                             configManager.SaveConfig(config);
                             _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
                             _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
@@ -101,7 +102,7 @@ namespace MLVScan.BepInEx5
 
                         reportGenerator.GenerateReports(disabledPlugins, scanResults);
 
-                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");
+                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} flagged plugin(s).");
                         _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
                 }
@@ -111,7 +112,7 @@ namespace MLVScan.BepInEx5
                 }
                 else
                 {
-                    _logger.LogInfo("No suspicious plugins detected.");
+                    _logger.LogInfo("No flagged plugins detected.");
                 }
 
                 _logger.LogInfo("MLVScan preloader scan complete.");

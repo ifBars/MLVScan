@@ -63,7 +63,7 @@ namespace MLVScan.Services
         protected virtual void OnPluginDisabled(string originalPath, string disabledPath, string hash) { }
 
         /// <summary>
-        /// Disables plugins that meet severity and threshold criteria.
+        /// Disables plugins that meet the configured verdict policy.
         /// </summary>
         /// <param name="scanResults">Dictionary of file paths to their findings.</param>
         /// <param name="forceDisable">If true, disables even if auto-disable is off.</param>
@@ -81,27 +81,23 @@ namespace MLVScan.Services
 
             foreach (var (pluginPath, scanResult) in scanResults)
             {
-                var findings = scanResult?.Findings ?? new List<ScanFinding>();
-                var severeFindings = findings
-                    .Where(f => (int)f.Severity >= (int)Config.MinSeverityForDisable)
-                    .ToList();
-                var shouldBypassThreshold = scanResult?.ThreatVerdict?.ShouldBypassThreshold == true;
+                var verdict = scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
 
-                if (!shouldBypassThreshold && severeFindings.Count == 0)
+                if (verdict.Kind == ThreatVerdictKind.None)
                 {
-                    Logger.Info($"Plugin {Path.GetFileName(pluginPath)} has findings but none meet severity threshold ({Config.MinSeverityForDisable})");
                     continue;
                 }
 
-                if (!forceDisable && !shouldBypassThreshold && severeFindings.Count < Config.SuspiciousThreshold)
+                if (!forceDisable && !ShouldDisable(verdict))
                 {
-                    Logger.Info($"Plugin {Path.GetFileName(pluginPath)} below suspicious threshold");
+                    Logger.Info(
+                        $"Plugin {Path.GetFileName(pluginPath)} matched \"{verdict.Title}\" but blocking for this verdict is disabled in configuration");
                     continue;
                 }
 
                 try
                 {
-                    var info = DisablePlugin(pluginPath, scanResult?.ThreatVerdict);
+                    var info = DisablePlugin(pluginPath, verdict);
                     if (info != null)
                     {
                         disabledPlugins.Add(info);
@@ -115,6 +111,17 @@ namespace MLVScan.Services
             }
 
             return disabledPlugins;
+        }
+
+        private bool ShouldDisable(ThreatVerdictInfo verdict)
+        {
+            return verdict.Kind switch
+            {
+                ThreatVerdictKind.KnownMaliciousSample => Config.BlockKnownThreats,
+                ThreatVerdictKind.KnownMalwareFamily => Config.BlockKnownThreats,
+                ThreatVerdictKind.Suspicious => Config.BlockSuspicious,
+                _ => false
+            };
         }
 
         /// <summary>

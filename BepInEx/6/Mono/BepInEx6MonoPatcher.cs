@@ -92,19 +92,20 @@ namespace MLVScan.BepInEx6.Mono
                                 config.ReportUploadConsentPending = true;
                                 config.PendingReportUploadPath =
                                     File.Exists(firstDisabled.DisabledPath) ? firstDisabled.DisabledPath : firstDisabled.OriginalPath;
+                                config.PendingReportUploadVerdictKind = firstDisabled.ThreatVerdict?.Kind.ToString() ?? string.Empty;
                                 configManager.SaveConfig(config);
                                 _logger.LogInfo("MLVScan will show an in-game upload consent popup.");
                             }
 
                             reportGenerator.GenerateReports(disabledPlugins, scanResults);
 
-                            _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");
+                            _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} flagged plugin(s).");
                             _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                         }
                     }
                     else
                     {
-                        _logger.LogInfo("No suspicious plugins detected.");
+                        _logger.LogInfo("No flagged plugins detected.");
                     }
                 }
 

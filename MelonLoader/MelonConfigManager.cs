@@ -16,6 +16,8 @@ namespace MLVScan.MelonLoader
 
         private readonly MelonPreferences_Entry<bool> _enableAutoScan;
         private readonly MelonPreferences_Entry<bool> _enableAutoDisable;
+        private readonly MelonPreferences_Entry<bool> _blockKnownThreats;
+        private readonly MelonPreferences_Entry<bool> _blockSuspicious;
         private readonly MelonPreferences_Entry<string> _minSeverityForDisable;
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
@@ -26,6 +28,7 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentAsked;
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentPending;
         private readonly MelonPreferences_Entry<string> _pendingReportUploadPath;
+        private readonly MelonPreferences_Entry<string> _pendingReportUploadVerdictKind;
         private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
         private readonly MelonPreferences_Entry<string[]> _uploadedReportHashes;
 
@@ -43,14 +46,20 @@ namespace MLVScan.MelonLoader
                 _enableAutoDisable = _category.CreateEntry("EnableAutoDisable", true,
                     description: "Whether to disable suspicious mods");
 
+                _blockKnownThreats = _category.CreateEntry("BlockKnownThreats", true,
+                    description: "Whether to block mods that match a known threat family or exact malicious sample");
+
+                _blockSuspicious = _category.CreateEntry("BlockSuspicious", true,
+                    description: "Whether to block suspicious unknown behavior that may still be a false positive");
+
                 _minSeverityForDisable = _category.CreateEntry("MinSeverityForDisable", "Medium",
-                    description: "Minimum severity level to trigger disabling (Low, Medium, High, Critical)");
+                    description: "Legacy setting from the old severity-based blocking model (no longer used for blocking)");
 
                 _scanDirectories = _category.CreateEntry("ScanDirectories", new[] { "Mods", "Plugins" },
                     description: "Directories to scan for mods");
 
                 _suspiciousThreshold = _category.CreateEntry("SuspiciousThreshold", 1,
-                    description: "How many suspicious findings required before disabling a mod");
+                    description: "Legacy setting from the old threshold-based blocking model (no longer used for blocking)");
 
                 _whitelistedHashes = _category.CreateEntry("WhitelistedHashes", Array.Empty<string>(),
                     description: "List of mod SHA256 hashes to skip when scanning");
@@ -73,6 +82,9 @@ namespace MLVScan.MelonLoader
                 _pendingReportUploadPath = _category.CreateEntry("PendingReportUploadPath", string.Empty,
                     description: "Suspicious mod path waiting for upload consent (internal)");
 
+                _pendingReportUploadVerdictKind = _category.CreateEntry("PendingReportUploadVerdictKind", string.Empty,
+                    description: "Threat verdict kind for the pending upload consent item (internal)");
+
                 _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
                     description: "API base URL for report uploads");
 
@@ -81,6 +93,8 @@ namespace MLVScan.MelonLoader
 
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockKnownThreats.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockSuspicious.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -91,6 +105,7 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentAsked.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadConsentPending.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _pendingReportUploadPath.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _pendingReportUploadVerdictKind.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadApiBaseUrl.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _uploadedReportHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
@@ -126,6 +141,8 @@ namespace MLVScan.MelonLoader
             {
                 EnableAutoScan = _enableAutoScan.Value,
                 EnableAutoDisable = _enableAutoDisable.Value,
+                BlockKnownThreats = _blockKnownThreats.Value,
+                BlockSuspicious = _blockSuspicious.Value,
                 MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
@@ -139,6 +156,7 @@ namespace MLVScan.MelonLoader
                 ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
                 ReportUploadConsentPending = _reportUploadConsentPending.Value,
                 PendingReportUploadPath = _pendingReportUploadPath.Value,
+                PendingReportUploadVerdictKind = _pendingReportUploadVerdictKind.Value,
                 ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value,
                 UploadedReportHashes = NormalizeHashes(_uploadedReportHashes.Value)
             };
@@ -150,6 +168,8 @@ namespace MLVScan.MelonLoader
             {
                 _enableAutoScan.Value = newConfig.EnableAutoScan;
                 _enableAutoDisable.Value = newConfig.EnableAutoDisable;
+                _blockKnownThreats.Value = newConfig.BlockKnownThreats;
+                _blockSuspicious.Value = newConfig.BlockSuspicious;
                 _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
@@ -160,6 +180,7 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
                 _reportUploadConsentPending.Value = newConfig.ReportUploadConsentPending;
                 _pendingReportUploadPath.Value = newConfig.PendingReportUploadPath ?? string.Empty;
+                _pendingReportUploadVerdictKind.Value = newConfig.PendingReportUploadVerdictKind ?? string.Empty;
                 _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
                 _uploadedReportHashes.Value = NormalizeHashes(newConfig.UploadedReportHashes);
 
