@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using BepInEx;
-using MLVScan.Abstractions;
-using Mono.Cecil;
+using MLVScan.Services.Diagnostics;
+using MLVScan.Services.Resolution;
 
 namespace MLVScan.BepInEx.Adapters
 {
@@ -10,36 +11,40 @@ namespace MLVScan.BepInEx.Adapters
     /// Provides assembly resolution for scanning in BepInEx context.
     /// Adds all relevant BepInEx and game directories to search paths.
     /// </summary>
-    public class BepInExAssemblyResolverProvider : IAssemblyResolverProvider
+    public class BepInExAssemblyResolverProvider : CatalogingAssemblyResolverProviderBase
     {
-        public IAssemblyResolver CreateResolver()
+        public BepInExAssemblyResolverProvider()
+            : base()
         {
-            var resolver = new DefaultAssemblyResolver();
+        }
+
+        protected override IEnumerable<ResolverRoot> GetStableRoots()
+        {
+            var roots = new List<ResolverRoot>();
 
             try
             {
-                // Game's managed assemblies (Unity DLLs, game code)
                 if (Directory.Exists(Paths.ManagedPath))
-                    resolver.AddSearchDirectory(Paths.ManagedPath);
+                {
+                    roots.Add(new ResolverRoot(Paths.ManagedPath, 0));
+                }
 
-                // BepInEx core assemblies
                 if (Directory.Exists(Paths.BepInExAssemblyDirectory))
-                    resolver.AddSearchDirectory(Paths.BepInExAssemblyDirectory);
+                {
+                    roots.Add(new ResolverRoot(Paths.BepInExAssemblyDirectory, 5));
+                }
 
-                // Plugin directory (for plugin-to-plugin references)
-                if (Directory.Exists(Paths.PluginPath))
-                    resolver.AddSearchDirectory(Paths.PluginPath);
-
-                // Patcher directory (where we are running from)
                 if (Directory.Exists(Paths.PatcherPluginPath))
-                    resolver.AddSearchDirectory(Paths.PatcherPluginPath);
+                {
+                    roots.Add(new ResolverRoot(Paths.PatcherPluginPath, 10));
+                }
             }
             catch (Exception)
             {
-                // If path resolution fails, use default resolver behavior
+                return roots;
             }
 
-            return resolver;
+            return roots;
         }
     }
 }

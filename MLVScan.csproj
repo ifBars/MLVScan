@@ -10,6 +10,7 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <EnableMlvScanProfiling>false</EnableMlvScanProfiling>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
     <Version>1.6.6</Version>
@@ -18,8 +19,13 @@
     <InformationalVersion>$(Version)</InformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <Configurations>MelonLoader;BepInEx5;BepInEx6Mono;BepInEx6IL2CPP</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMlvScanProfiling)' == 'true'">
+    <DefineConstants>$(DefineConstants);MLVSCAN_PROFILING</DefineConstants>
   </PropertyGroup>
 
   <!-- ============================================ -->
@@ -91,6 +97,21 @@
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
     <Compile Include="Models\MLVScanConfig.cs" />
     <Compile Include="Services\PluginScannerBase.cs" />
+    <Compile Include="Services\Caching\AtomicFileStorage.cs" />
+    <Compile Include="Services\Caching\CrossPlatformFileIdentityProvider.cs" />
+    <Compile Include="Services\Caching\IFileIdentityProvider.cs" />
+    <Compile Include="Services\Caching\IScanCacheSigner.cs" />
+    <Compile Include="Services\Caching\IScanCacheStore.cs" />
+    <Compile Include="Services\Caching\RuntimeInformationHelper.cs" />
+    <Compile Include="Services\Caching\ScanCacheModels.cs" />
+    <Compile Include="Services\Caching\ScanCacheSigner.cs" />
+    <Compile Include="Services\Caching\SecureScanCacheStore.cs" />
+    <Compile Include="Services\Diagnostics\LoaderScanTelemetryHub.cs" />
+    <Compile Include="Services\Resolution\AssemblyResolverCatalogBuilder.cs" />
+    <Compile Include="Services\Resolution\CatalogingAssemblyResolverProviderBase.cs" />
+    <Compile Include="Services\Resolution\IResolverCatalogProvider.cs" />
+    <Compile Include="Services\Resolution\IndexedAssemblyResolver.cs" />
+    <Compile Include="Services\Resolution\ResolverCatalogModels.cs" />
     <Compile Include="Services\Scope\TargetAssemblyScopeFilter.cs" />
     <Compile Include="Services\PluginDisablerBase.cs" />
     <Compile Include="Services\DeveloperReportGenerator.cs" />
@@ -255,7 +276,9 @@
                        Condition="'$(UseLocalMLVScanCore)' == 'true'" />
 
     <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
+    <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.6" />
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
 

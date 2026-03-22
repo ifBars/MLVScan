@@ -112,17 +112,17 @@ namespace MLVScan.BepInEx
         {
             _logger.LogWarning("--- SECURITY NOTICE ---");
             _logger.LogInfo($"MLVScan blocked {pluginName} before it could execute.");
-            if (threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
-                threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily)
+            if (IsKnownThreatVerdict(threatVerdict))
             {
-                _logger.LogInfo("This block was reinforced by a match to previously analyzed malware.");
+                _logger.LogInfo("This plugin is likely malware because it matched previously analyzed malware intelligence.");
                 _logger.LogInfo("If this is your first time with this plugin, you are likely safe.");
                 _logger.LogInfo("If you've used it before, run a malware scan and review the report immediately.");
             }
             else
             {
-                _logger.LogInfo("This plugin was blocked as a precaution based on suspicious behavior patterns.");
+                _logger.LogInfo("This plugin was blocked because it triggered suspicious correlated behavior.");
                 _logger.LogInfo("It may still be a false positive, so use the saved report for human review before assuming infection.");
+                _logger.LogInfo("Review the detailed report before deciding whether to whitelist it.");
             }
             _logger.LogInfo("");
             _logger.LogInfo("To whitelist a false positive:");
@@ -266,9 +266,19 @@ namespace MLVScan.BepInEx
                 sb.AppendLine(new string('=', 60));
                 sb.AppendLine("SECURITY RECOMMENDATIONS");
                 sb.AppendLine(new string('=', 60));
-                sb.AppendLine("1. Verify with the modding community if this is a known mod");
-                sb.AppendLine("2. Run a full system scan with Malwarebytes or similar");
-                sb.AppendLine("3. Check the Discord for guidance: https://discord.gg/UD4K4chKak");
+                if (IsKnownThreatVerdict(pluginInfo.ThreatVerdict))
+                {
+                    sb.AppendLine("1. Verify with the modding community if this is a known mod");
+                    sb.AppendLine("2. Run a full system scan with Malwarebytes or similar");
+                    sb.AppendLine("3. Check the Discord for guidance: https://discord.gg/UD4K4chKak");
+                }
+                else
+                {
+                    sb.AppendLine("1. Verify with the modding community if this is a known mod");
+                    sb.AppendLine("2. Review the detailed report before assuming infection");
+                    sb.AppendLine("3. Only run a full system scan if you have already executed this plugin");
+                    sb.AppendLine("4. Check the Discord for guidance: https://discord.gg/UD4K4chKak");
+                }
                 sb.AppendLine();
                 sb.AppendLine("To whitelist (if false positive):");
                 sb.AppendLine($"  Add this hash to BepInEx/config/MLVScan.json:");
@@ -339,6 +349,12 @@ namespace MLVScan.BepInEx
             {
                 _logger.LogError($"Failed to create report directory: {ex.Message}");
             }
+        }
+
+        private static bool IsKnownThreatVerdict(ThreatVerdictInfo threatVerdict)
+        {
+            return threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                   threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily;
         }
     }
 }

@@ -22,17 +22,55 @@ namespace MLVScan.BepInEx
             MLVScanConfig config,
             IConfigManager configManager,
             BepInExPlatformEnvironment environment)
-            : base(logger, resolverProvider, config, configManager)
+            : base(logger, resolverProvider, config, configManager, environment)
         {
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         }
 
         protected override IEnumerable<string> GetScanDirectories()
         {
-            // BepInEx plugins directory
-            if (Directory.Exists(Paths.PluginPath))
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (Config.IncludePlugins)
             {
-                yield return Paths.PluginPath;
+                AddIfPresent(Paths.PluginPath);
+            }
+
+            if (Config.IncludePatchers)
+            {
+                AddIfPresent(Paths.PatcherPluginPath);
+            }
+
+            if (Config.IncludeUserLibs)
+            {
+                AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
+            }
+
+            if (Config.IncludeMods)
+            {
+                AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Mods"));
+            }
+
+            foreach (var scanDir in Config.ScanDirectories)
+            {
+                AddIfPresent(Path.IsPathRooted(scanDir)
+                    ? scanDir
+                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+            }
+
+            foreach (var path in emitted)
+            {
+                yield return path;
+            }
+
+            void AddIfPresent(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                {
+                    return;
+                }
+
+                emitted.Add(Path.GetFullPath(path));
             }
         }
 

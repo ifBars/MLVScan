@@ -22,16 +22,58 @@ namespace MLVScan.MelonLoader
             MLVScanConfig config,
             IConfigManager configManager,
             MelonPlatformEnvironment environment)
-            : base(logger, resolverProvider, config, configManager)
+            : base(logger, resolverProvider, config, configManager, environment)
         {
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         }
 
         protected override IEnumerable<string> GetScanDirectories()
         {
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (Config.IncludeMods)
+            {
+                AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Mods"));
+            }
+
+            if (Config.IncludePlugins)
+            {
+                AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Plugins"));
+            }
+
+            if (Config.IncludeUserLibs)
+            {
+                AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
+            }
+
             foreach (var scanDir in Config.ScanDirectories)
             {
-                yield return Path.Combine(_environment.GameRootDirectory, scanDir);
+                AddIfPresent(Path.IsPathRooted(scanDir)
+                    ? scanDir
+                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+            }
+
+            if (Config.IncludeThunderstoreProfiles)
+            {
+                foreach (var thunderstoreRoot in GetThunderstoreDirectories())
+                {
+                    AddIfPresent(thunderstoreRoot);
+                }
+            }
+
+            foreach (var path in emitted)
+            {
+                yield return path;
+            }
+
+            void AddIfPresent(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                {
+                    return;
+                }
+
+                emitted.Add(Path.GetFullPath(path));
             }
         }
 
@@ -53,53 +95,38 @@ namespace MLVScan.MelonLoader
             }
         }
 
-        protected override void OnScanComplete(Dictionary<string, ScannedPluginResult> results)
+        private static IEnumerable<string> GetThunderstoreDirectories()
         {
-            // Also scan Thunderstore Mod Manager directories
-            ScanThunderstoreModManager(results);
-        }
+            string appDataPath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
+            string thunderstoreBasePath = Path.Combine(appDataPath, "Thunderstore Mod Manager", "DataFolder");
 
-        private void ScanThunderstoreModManager(Dictionary<string, ScannedPluginResult> results)
-        {
-            try
+            if (!Directory.Exists(thunderstoreBasePath))
             {
-                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string thunderstoreBasePath = Path.Combine(appDataPath, "Thunderstore Mod Manager", "DataFolder");
+                yield break;
+            }
 
-                if (!Directory.Exists(thunderstoreBasePath))
-                    return;
-
-                // Find game folders
-                foreach (var gameFolder in Directory.GetDirectories(thunderstoreBasePath))
+            foreach (var gameFolder in Directory.GetDirectories(thunderstoreBasePath))
+            {
+                string profilesPath = Path.Combine(gameFolder, "profiles");
+                if (!Directory.Exists(profilesPath))
                 {
-                    // Scan profiles
-                    string profilesPath = Path.Combine(gameFolder, "profiles");
-                    if (!Directory.Exists(profilesPath))
-                        continue;
+                    continue;
+                }
 
-                    foreach (var profileFolder in Directory.GetDirectories(profilesPath))
+                foreach (var profileFolder in Directory.GetDirectories(profilesPath))
+                {
+                    var modsPath = Path.Combine(profileFolder, "Mods");
+                    if (Directory.Exists(modsPath))
                     {
-                        // Scan Mods directory
-                        string modsPath = Path.Combine(profileFolder, "Mods");
-                        if (Directory.Exists(modsPath))
-                        {
-                            Logger.Info($"Scanning Thunderstore profile mods: {modsPath}");
-                            ScanDirectory(modsPath, results);
-                        }
+                        yield return modsPath;
+                    }
 
-                        // Scan Plugins directory
-                        string pluginsPath = Path.Combine(profileFolder, "Plugins");
-                        if (Directory.Exists(pluginsPath))
-                        {
-                            Logger.Info($"Scanning Thunderstore profile plugins: {pluginsPath}");
-                            ScanDirectory(pluginsPath, results);
-                        }
+                    var pluginsPath = Path.Combine(profileFolder, "Plugins");
+                    if (Directory.Exists(pluginsPath))
+                    {
+                        yield return pluginsPath;
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error scanning Thunderstore Mod Manager directories: {ex.Message}");
             }
         }
     }

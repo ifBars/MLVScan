@@ -12,9 +12,8 @@ namespace MLVScan.Services
     /// </summary>
     public class ThreatVerdictBuilder
     {
-        private const double KnownFamilyBypassThreshold = 0.95d;
-
         private readonly ThreatFamilyClassifier _classifier = new ThreatFamilyClassifier();
+        private readonly ThreatDispositionClassifier _dispositionClassifier = new ThreatDispositionClassifier();
 
         public ScannedPluginResult Build(string filePath, string fileHash, List<ScanFinding> findings)
         {
@@ -35,6 +34,7 @@ namespace MLVScan.Services
         private ThreatVerdictInfo BuildVerdict(List<ScanFinding> findings, string fileHash)
         {
             var matches = _classifier.Classify(findings, fileHash).ToList();
+            var disposition = _dispositionClassifier.Classify(findings, matches);
             var families = matches.Select(MapFamily).ToList();
             var primaryFamily = families
                 .OrderByDescending(f => f.ExactHashMatch)
@@ -42,41 +42,42 @@ namespace MLVScan.Services
                 .ThenBy(f => f.DisplayName, StringComparer.Ordinal)
                 .FirstOrDefault();
 
-            if (primaryFamily?.ExactHashMatch == true)
+            if (disposition.Classification == ThreatDispositionClassification.KnownThreat &&
+                primaryFamily?.ExactHashMatch == true)
             {
                 return new ThreatVerdictInfo
                 {
                     Kind = ThreatVerdictKind.KnownMaliciousSample,
                     Title = "Known malicious sample match",
-                    Summary = "This file exactly matches a previously confirmed malicious sample and was blocked before execution.",
+                    Summary = "This mod is likely malware because it exactly matches a previously confirmed malicious sample and was blocked before execution.",
                     Confidence = 1.0d,
-                    ShouldBypassThreshold = true,
+                    ShouldBypassThreshold = false,
                     PrimaryFamily = primaryFamily,
                     Families = families
                 };
             }
 
-            if (primaryFamily != null && primaryFamily.Confidence >= KnownFamilyBypassThreshold)
+            if (disposition.Classification == ThreatDispositionClassification.KnownThreat && primaryFamily != null)
             {
                 return new ThreatVerdictInfo
                 {
                     Kind = ThreatVerdictKind.KnownMalwareFamily,
                     Title = "Known malware family match",
-                    Summary = $"This mod matches the previously analyzed malware family \"{primaryFamily.DisplayName}\" and was blocked before execution.",
+                    Summary = $"This mod is likely malware because it matches the previously analyzed malware family \"{primaryFamily.DisplayName}\" and was blocked before execution.",
                     Confidence = primaryFamily.Confidence,
-                    ShouldBypassThreshold = true,
+                    ShouldBypassThreshold = false,
                     PrimaryFamily = primaryFamily,
                     Families = families
                 };
             }
 
-            if (findings.Count > 0)
+            if (disposition.Classification == ThreatDispositionClassification.Suspicious)
             {
                 return new ThreatVerdictInfo
                 {
                     Kind = ThreatVerdictKind.Suspicious,
                     Title = "Suspicious mod",
-                    Summary = "This mod triggered suspicious behavior patterns and was blocked as a precaution. It may still require human review.",
+                    Summary = "This mod triggered correlated suspicious behavior and was blocked as a precaution. It may still be a false positive and should be reviewed before assuming infection.",
                     Confidence = 0d,
                     ShouldBypassThreshold = false,
                     PrimaryFamily = primaryFamily,

@@ -64,8 +64,18 @@ namespace MLVScan.BepInEx
                     if (loaded != null)
                     {
                         _config = loaded;
-                        _config.WhitelistedHashes = NormalizeHashes(_config.WhitelistedHashes);
+                        var normalizedWhitelist = NormalizeHashes(_config.WhitelistedHashes);
+                        var mergedWhitelist = MergeWithDefaultWhitelistedHashes(normalizedWhitelist);
+
+                        _config.WhitelistedHashes = mergedWhitelist;
                         _config.UploadedReportHashes = NormalizeHashes(_config.UploadedReportHashes);
+
+                        if (!mergedWhitelist.SequenceEqual(normalizedWhitelist, StringComparer.OrdinalIgnoreCase))
+                        {
+                            SaveConfig(_config);
+                            _logger.LogInfo($"Added {mergedWhitelist.Length - normalizedWhitelist.Length} new default whitelist hash(es)");
+                        }
+
                         _logger.LogInfo("Configuration loaded from MLVScan.json");
                         return _config;
                     }
@@ -90,10 +100,13 @@ namespace MLVScan.BepInEx
             {
                 EnableAutoScan = true,
                 EnableAutoDisable = true,
+                EnableScanCache = true,
+                BlockKnownThreats = true,
+                BlockSuspicious = true,
                 MinSeverityForDisable = Severity.Medium,
                 ScanDirectories = new[] { "plugins" },
                 SuspiciousThreshold = 1,
-                WhitelistedHashes = _defaultWhitelistedHashes,
+                WhitelistedHashes = MergeWithDefaultWhitelistedHashes(Array.Empty<string>()),
                 DumpFullIlReports = false,
                 Scan = new ScanConfig
                 {
@@ -103,8 +116,16 @@ namespace MLVScan.BepInEx
                 ReportUploadConsentAsked = false,
                 ReportUploadConsentPending = false,
                 PendingReportUploadPath = string.Empty,
+                PendingReportUploadVerdictKind = string.Empty,
                 ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl,
-                UploadedReportHashes = Array.Empty<string>()
+                UploadedReportHashes = Array.Empty<string>(),
+                IncludeMods = true,
+                IncludePlugins = true,
+                IncludeUserLibs = true,
+                IncludePatchers = true,
+                IncludeThunderstoreProfiles = true,
+                AdditionalTargetRoots = Array.Empty<string>(),
+                ExcludedTargetRoots = Array.Empty<string>()
             };
         }
 
@@ -197,6 +218,11 @@ namespace MLVScan.BepInEx
                 .Select(h => h.ToLowerInvariant())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private string[] MergeWithDefaultWhitelistedHashes(System.Collections.Generic.IEnumerable<string> hashes)
+        {
+            return NormalizeHashes((hashes ?? Array.Empty<string>()).Concat(_defaultWhitelistedHashes ?? Array.Empty<string>()));
         }
     }
 }
