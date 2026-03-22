@@ -100,6 +100,7 @@ namespace MLVScan.BepInEx
             {
                 EnableAutoScan = true,
                 EnableAutoDisable = true,
+                EnableScanCache = true,
                 BlockKnownThreats = true,
                 BlockSuspicious = true,
                 MinSeverityForDisable = Severity.Medium,
@@ -117,7 +118,14 @@ namespace MLVScan.BepInEx
                 PendingReportUploadPath = string.Empty,
                 PendingReportUploadVerdictKind = string.Empty,
                 ReportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl,
-                UploadedReportHashes = Array.Empty<string>()
+                UploadedReportHashes = Array.Empty<string>(),
+                IncludeMods = true,
+                IncludePlugins = true,
+                IncludeUserLibs = true,
+                IncludePatchers = true,
+                IncludeThunderstoreProfiles = true,
+                AdditionalTargetRoots = Array.Empty<string>(),
+                ExcludedTargetRoots = Array.Empty<string>()
             };
         }
 

@@ -26,6 +26,11 @@ public class MLVScanConfig
     public bool EnableAutoDisable { get; set; } = true;
 
     /// <summary>
+    /// Enable/disable persistent local scan result reuse for unchanged files.
+    /// </summary>
+    public bool EnableScanCache { get; set; } = true;
+
+    /// <summary>
     /// Whether to block mods that match a known threat family or exact malicious sample.
     /// </summary>
     public bool BlockKnownThreats { get; set; } = true;
