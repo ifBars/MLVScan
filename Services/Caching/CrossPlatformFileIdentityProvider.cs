@@ -3,8 +3,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
-using Mono.Unix;
-using Mono.Unix.Native;
 
 namespace MLVScan.Services.Caching
 {
@@ -39,57 +37,44 @@ namespace MLVScan.Services.Caching
 
         private static bool IsSymlinkOrReparsePoint(string path)
         {
-            if (RuntimeInformationHelper.IsWindows)
+            try
             {
                 return File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
             }
-
-            if (Syscall.lstat(path, out var stat) != 0)
+            catch
             {
                 return false;
             }
-
-            return (stat.st_mode & FilePermissions.S_IFMT) == FilePermissions.S_IFLNK;
         }
 
         private static string GetCanonicalPath(string path, SafeFileHandle handle)
         {
-            if (RuntimeInformationHelper.IsWindows)
+            if (!RuntimeInformationHelper.IsWindows)
             {
-                var builder = new StringBuilder(1024);
-                while (true)
+                return path;
+            }
+
+            var builder = new StringBuilder(1024);
+            while (true)
+            {
+                var result = GetFinalPathNameByHandle(handle, builder, builder.Capacity, 0);
+                if (result == 0)
                 {
-                    var result = GetFinalPathNameByHandle(handle, builder, builder.Capacity, 0);
-                    if (result == 0)
+                    return path;
+                }
+
+                if (result >= builder.Capacity)
+                {
+                    if (result >= int.MaxValue)
                     {
                         return path;
                     }
 
-                    if (result >= builder.Capacity)
-                    {
-                        if (result >= int.MaxValue)
-                        {
-                            return path;
-                        }
-
-                        builder = new StringBuilder((int)result + 1);
-                        continue;
-                    }
-
-                    return NormalizeWindowsDevicePath(builder.ToString(0, (int)result));
+                    builder = new StringBuilder((int)result + 1);
+                    continue;
                 }
-            }
 
-            try
-            {
-                var realPath = GetUnixCanonicalPath(handle, path);
-                return string.IsNullOrWhiteSpace(realPath)
-                    ? path
-                    : Path.GetFullPath(realPath);
-            }
-            catch
-            {
-                return path;
+                return NormalizeWindowsDevicePath(builder.ToString(0, (int)result));
             }
         }
 
@@ -119,53 +104,23 @@ namespace MLVScan.Services.Caching
 
         private static FileIdentitySnapshot CreateUnixIdentity(string path, SafeFileHandle handle, bool isLink)
         {
-            var fd = GetUnixFileDescriptor(handle, path);
-            if (Syscall.fstat(fd, out var stat) != 0)
-            {
-                throw new IOException($"fstat failed for {path}");
-            }
+            _ = handle;
+
+            var info = new FileInfo(path);
+            var lastWriteUtcTicks = info.LastWriteTimeUtc.Ticks;
 
             return new FileIdentitySnapshot
             {
                 Platform = RuntimeInformationHelper.IsMacOs ? "macos" : "linux",
-                HasStrongIdentity = true,
-                IdentityKey = $"{stat.st_dev}:{stat.st_ino}",
-                Size = stat.st_size,
-                LastWriteUtcTicks = ConvertUnixTimeToUtcTicks(stat.st_mtime, stat.st_mtime_nsec),
-                ChangeUtcTicks = ConvertUnixTimeToUtcTicks(stat.st_ctime, stat.st_ctime_nsec),
+                // Keep Unix cache reuse on the hash path only so shared loader builds
+                // do not need native helper assemblies just to read inode metadata.
+                HasStrongIdentity = false,
+                IdentityKey = Path.GetFullPath(path),
+                Size = info.Exists ? info.Length : 0L,
+                LastWriteUtcTicks = lastWriteUtcTicks,
+                ChangeUtcTicks = lastWriteUtcTicks,
                 IsSymlinkOrReparsePoint = isLink
             };
-        }
-
-        private static long ConvertUnixTimeToUtcTicks(long seconds, long nanoseconds)
-        {
-            return checked(DateTime.UnixEpoch.Ticks +
-                (seconds * TimeSpan.TicksPerSecond) +
-                (nanoseconds / 100));
-        }
-
-        private static int GetUnixFileDescriptor(SafeFileHandle handle, string path)
-        {
-            var rawHandle = handle.DangerousGetHandle().ToInt64();
-            if (rawHandle < 0 || rawHandle > int.MaxValue)
-            {
-                throw new IOException($"File descriptor out of range for {path}");
-            }
-
-            return (int)rawHandle;
-        }
-
-        private static string GetUnixCanonicalPath(SafeFileHandle handle, string path)
-        {
-            var fd = GetUnixFileDescriptor(handle, path);
-            var descriptorPath = RuntimeInformationHelper.IsLinux
-                ? $"/proc/self/fd/{fd}"
-                : $"/dev/fd/{fd}";
-
-            var realPath = UnixPath.GetRealPath(descriptorPath);
-            return string.IsNullOrWhiteSpace(realPath)
-                ? path
-                : realPath;
         }
 
         private static string NormalizeWindowsDevicePath(string path)

@@ -4,8 +4,8 @@ namespace MLVScan.Services.Caching
     {
         bool CanTrustCleanEntries { get; }
 
-        string Sign(string payloadJson);
+        string Sign(byte[] payloadBytes);
 
-        bool Verify(string payloadJson, string signature);
+        bool Verify(byte[] payloadBytes, string signature);
     }
 }

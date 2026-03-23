@@ -104,6 +104,7 @@
     <Compile Include="Services\Caching\IScanCacheSigner.cs" />
     <Compile Include="Services\Caching\IScanCacheStore.cs" />
     <Compile Include="Services\Caching\RuntimeInformationHelper.cs" />
+    <Compile Include="Services\Caching\ScanCacheEnvelopeCodec.cs" />
     <Compile Include="Services\Caching\ScanCacheModels.cs" />
     <Compile Include="Services\Caching\ScanCacheSigner.cs" />
     <Compile Include="Services\Caching\SecureScanCacheStore.cs" />
@@ -277,9 +278,7 @@
                        Condition="'$(UseLocalMLVScanCore)' == 'true'" />
 
     <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
-    <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.6" />
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
 

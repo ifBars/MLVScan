@@ -3,17 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 
 namespace MLVScan.Services.Caching
 {
     internal sealed class SecureScanCacheStore : IScanCacheStore
     {
-        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = false
-        };
-
         private readonly Dictionary<string, ScanCacheEntry> _entriesByPath = new Dictionary<string, ScanCacheEntry>(GetPathComparer());
         private readonly Dictionary<string, ScanCacheEntry> _entriesByHash = new Dictionary<string, ScanCacheEntry>(StringComparer.OrdinalIgnoreCase);
         private readonly IScanCacheSigner _signer;
@@ -62,15 +56,9 @@ namespace MLVScan.Services.Caching
             entry.VerifiedUtc = DateTime.UtcNow;
 
             var payload = ScanCacheEntryPayload.FromEntry(entry);
-            var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
-            var envelope = new ScanCacheEnvelope
-            {
-                Signature = _signer.Sign(payloadJson),
-                Payload = payload
-            };
-
-            var envelopeJson = JsonSerializer.Serialize(envelope, JsonOptions);
-            AtomicFileStorage.WriteAllText(GetEntryFilePath(entry.CanonicalPath), envelopeJson);
+            var payloadBytes = ScanCacheEnvelopeCodec.SerializePayload(payload);
+            var envelopeBytes = ScanCacheEnvelopeCodec.SerializeEnvelope(_signer.Sign(payloadBytes), payloadBytes);
+            AtomicFileStorage.WriteAllBytes(GetEntryFilePath(entry.CanonicalPath), envelopeBytes);
 
             var normalizedPath = NormalizePathKey(entry.CanonicalPath);
             _entriesByPath[normalizedPath] = entry;
@@ -101,10 +89,12 @@ namespace MLVScan.Services.Caching
 
             try
             {
-                var path = GetEntryFilePath(canonicalPath);
-                if (File.Exists(path))
+                foreach (var path in GetEntryFilePaths(canonicalPath))
                 {
-                    File.Delete(path);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
                 }
             }
             catch
@@ -132,26 +122,30 @@ namespace MLVScan.Services.Caching
 
         private void LoadEntries()
         {
-            foreach (var path in Directory.EnumerateFiles(_entriesDirectory, "*.json", SearchOption.TopDirectoryOnly))
+            if (!Directory.Exists(_entriesDirectory))
+            {
+                return;
+            }
+
+            foreach (var path in EnumerateEntryFiles())
             {
                 try
                 {
-                    var json = File.ReadAllText(path);
-                    var envelope = JsonSerializer.Deserialize<ScanCacheEnvelope>(json, JsonOptions);
-                    if (envelope?.Payload == null || envelope.SchemaVersion != 1)
+                    var envelopeBytes = File.ReadAllBytes(path);
+                    if (!ScanCacheEnvelopeCodec.TryDeserializeEnvelope(envelopeBytes, out var signature, out var payloadBytes, out var payload) ||
+                        payload == null)
                     {
                         DeleteCorruptEntry(path);
                         continue;
                     }
 
-                    var payloadJson = JsonSerializer.Serialize(envelope.Payload, JsonOptions);
-                    if (!_signer.Verify(payloadJson, envelope.Signature))
+                    if (!_signer.Verify(payloadBytes, signature))
                     {
                         DeleteCorruptEntry(path);
                         continue;
                     }
 
-                    var entry = envelope.Payload.ToEntry();
+                    var entry = payload.ToEntry();
                     var normalizedPath = NormalizePathKey(entry.CanonicalPath);
                     _entriesByPath[normalizedPath] = entry;
                     if (!string.IsNullOrWhiteSpace(entry.Sha256))
@@ -181,7 +175,27 @@ namespace MLVScan.Services.Caching
         private string GetEntryFilePath(string canonicalPath)
         {
             var key = HashUtility.CalculateBytesHash(Encoding.UTF8.GetBytes(NormalizePathKey(canonicalPath)));
-            return Path.Combine(_entriesDirectory, $"{key}.json");
+            return Path.Combine(_entriesDirectory, $"{key}.cache");
+        }
+
+        private IEnumerable<string> GetEntryFilePaths(string canonicalPath)
+        {
+            var key = HashUtility.CalculateBytesHash(Encoding.UTF8.GetBytes(NormalizePathKey(canonicalPath)));
+            yield return Path.Combine(_entriesDirectory, $"{key}.cache");
+            yield return Path.Combine(_entriesDirectory, $"{key}.json");
+        }
+
+        private IEnumerable<string> EnumerateEntryFiles()
+        {
+            foreach (var path in Directory.EnumerateFiles(_entriesDirectory, "*.cache", SearchOption.TopDirectoryOnly))
+            {
+                yield return path;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(_entriesDirectory, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                yield return path;
+            }
         }
 
         private static string NormalizePathKey(string path)

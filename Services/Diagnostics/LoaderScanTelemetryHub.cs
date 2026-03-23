@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+#if MLVSCAN_PROFILING
 using System.Text.Json;
+#endif
 
 namespace MLVScan.Services.Diagnostics
 {

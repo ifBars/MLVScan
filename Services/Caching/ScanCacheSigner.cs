@@ -1,14 +1,15 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Win32.SafeHandles;
-using Mono.Unix.Native;
 
 namespace MLVScan.Services.Caching
 {
     internal sealed class ScanCacheSigner : IScanCacheSigner
     {
+        private const int CryptProtectUiForbidden = 0x1;
+
         private readonly byte[] _secret;
 
         public ScanCacheSigner(string cacheDirectory)
@@ -20,31 +21,31 @@ namespace MLVScan.Services.Caching
 
         public bool CanTrustCleanEntries { get; }
 
-        public string Sign(string payloadJson)
+        public string Sign(byte[] payloadBytes)
         {
-            if (string.IsNullOrEmpty(payloadJson) || _secret.Length == 0)
+            if (payloadBytes == null || payloadBytes.Length == 0 || _secret.Length == 0)
             {
                 return string.Empty;
             }
 
             using var hmac = new HMACSHA256(_secret);
-            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payloadJson));
-            return Convert.ToBase64String(hash);
+            return Convert.ToBase64String(hmac.ComputeHash(payloadBytes));
         }
 
-        public bool Verify(string payloadJson, string signature)
+        public bool Verify(byte[] payloadBytes, string signature)
         {
-            if (string.IsNullOrEmpty(payloadJson) ||
+            if (payloadBytes == null ||
+                payloadBytes.Length == 0 ||
                 string.IsNullOrEmpty(signature) ||
                 _secret.Length == 0)
             {
                 return false;
             }
 
-            var expected = Sign(payloadJson);
-            return CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(expected),
-                Encoding.UTF8.GetBytes(signature));
+            var expectedBytes = Encoding.UTF8.GetBytes(Sign(payloadBytes));
+            var actualBytes = Encoding.UTF8.GetBytes(signature);
+            return expectedBytes.Length == actualBytes.Length &&
+                   CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
         }
 
         private static byte[] LoadOrCreateSecret(string secretPath, out bool canTrustCleanEntries)
@@ -53,12 +54,9 @@ namespace MLVScan.Services.Caching
 
             try
             {
-                if (RuntimeInformationHelper.IsWindows)
-                {
-                    return LoadOrCreateWindowsSecret(secretPath, out canTrustCleanEntries);
-                }
-
-                return LoadOrCreateUnixSecret(secretPath, out canTrustCleanEntries);
+                return RuntimeInformationHelper.IsWindows
+                    ? LoadOrCreateWindowsSecret(secretPath, out canTrustCleanEntries)
+                    : LoadOrCreatePortableSecret(secretPath, out canTrustCleanEntries);
             }
             catch
             {
@@ -70,13 +68,13 @@ namespace MLVScan.Services.Caching
         private static byte[] LoadOrCreateWindowsSecret(string secretPath, out bool canTrustCleanEntries)
         {
             canTrustCleanEntries = true;
-#pragma warning disable CA1416
+
             if (File.Exists(secretPath))
             {
                 var existingSecret = File.ReadAllBytes(secretPath);
                 try
                 {
-                    return ProtectedData.Unprotect(existingSecret, null, DataProtectionScope.CurrentUser);
+                    return UnprotectForCurrentUser(existingSecret);
                 }
                 catch
                 {
@@ -94,7 +92,7 @@ namespace MLVScan.Services.Caching
             var secret = CreateRandomSecret();
             try
             {
-                var protectedSecret = ProtectedData.Protect(secret, null, DataProtectionScope.CurrentUser);
+                var protectedSecret = ProtectForCurrentUser(secret);
                 AtomicFileStorage.WriteAllBytes(secretPath, protectedSecret);
             }
             catch
@@ -104,84 +102,108 @@ namespace MLVScan.Services.Caching
             }
 
             return secret;
-#pragma warning restore CA1416
         }
 
-        private static byte[] LoadOrCreateUnixSecret(string secretPath, out bool canTrustCleanEntries)
+        private static byte[] LoadOrCreatePortableSecret(string secretPath, out bool canTrustCleanEntries)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(secretPath)!);
-            if (!File.Exists(secretPath))
+            canTrustCleanEntries = false;
+
+            if (File.Exists(secretPath))
             {
-                CreateUnixSecret(secretPath, CreateRandomSecret());
+                return File.ReadAllBytes(secretPath);
             }
 
-            canTrustCleanEntries = HasOwnerOnlyPermissions(secretPath);
-            return File.ReadAllBytes(secretPath);
+            var secret = CreateRandomSecret();
+            AtomicFileStorage.WriteAllBytes(secretPath, secret);
+            return secret;
         }
 
-        private static void CreateUnixSecret(string secretPath, byte[] secret)
+        private static byte[] ProtectForCurrentUser(byte[] data)
         {
-            const FilePermissions OwnerOnlyPermissions = FilePermissions.S_IRUSR | FilePermissions.S_IWUSR;
-            var fd = Syscall.open(secretPath, OpenFlags.O_CREAT | OpenFlags.O_EXCL | OpenFlags.O_WRONLY, OwnerOnlyPermissions);
-            if (fd < 0)
-            {
-                var errno = Stdlib.GetLastError();
-                if (errno == Errno.EEXIST)
-                {
-                    return;
-                }
-
-                throw CreateUnixIoException("open", secretPath, errno);
-            }
-
-            var success = false;
+            var inputHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
-                if (Syscall.fchmod(fd, OwnerOnlyPermissions) != 0)
+                var input = new DataBlob
                 {
-                    throw CreateUnixIoException("fchmod", secretPath);
+                    cbData = data.Length,
+                    pbData = inputHandle.AddrOfPinnedObject()
+                };
+
+                if (!CryptProtectData(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CryptProtectUiForbidden, out var output))
+                {
+                    throw new CryptographicException(Marshal.GetLastWin32Error());
                 }
 
-                using (var stream = new FileStream(new SafeFileHandle((IntPtr)fd, ownsHandle: false), FileAccess.Write))
+                try
                 {
-                    stream.Write(secret, 0, secret.Length);
-                    stream.Flush(true);
+                    return CopyOutputBlob(output);
                 }
-
-                if (Syscall.fsync(fd) != 0)
+                finally
                 {
-                    throw CreateUnixIoException("fsync", secretPath);
+                    FreeOutputBlob(output);
                 }
-
-                success = true;
             }
             finally
             {
-                Syscall.close(fd);
-
-                if (!success && File.Exists(secretPath))
-                {
-                    try
-                    {
-                        File.Delete(secretPath);
-                    }
-                    catch
-                    {
-                        // Preserve the original failure if cleanup also fails.
-                    }
-                }
+                inputHandle.Free();
             }
         }
 
-        private static bool HasOwnerOnlyPermissions(string secretPath)
+        private static byte[] UnprotectForCurrentUser(byte[] data)
         {
-            if (Syscall.stat(secretPath, out var stat) != 0)
+            var inputHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
             {
-                return false;
+                var input = new DataBlob
+                {
+                    cbData = data.Length,
+                    pbData = inputHandle.AddrOfPinnedObject()
+                };
+
+                if (!CryptUnprotectData(ref input, out var description, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CryptProtectUiForbidden, out var output))
+                {
+                    throw new CryptographicException(Marshal.GetLastWin32Error());
+                }
+
+                try
+                {
+                    return CopyOutputBlob(output);
+                }
+                finally
+                {
+                    if (description != IntPtr.Zero)
+                    {
+                        LocalFree(description);
+                    }
+
+                    FreeOutputBlob(output);
+                }
+            }
+            finally
+            {
+                inputHandle.Free();
+            }
+        }
+
+        private static byte[] CopyOutputBlob(DataBlob blob)
+        {
+            if (blob.cbData <= 0 || blob.pbData == IntPtr.Zero)
+            {
+                return Array.Empty<byte>();
             }
 
-            var forbidden = FilePermissions.S_IRWXG | FilePermissions.S_IRWXO;
-            return (stat.st_mode & forbidden) == 0;
+            var bytes = new byte[blob.cbData];
+            Marshal.Copy(blob.pbData, bytes, 0, blob.cbData);
+            return bytes;
+        }
+
+        private static void FreeOutputBlob(DataBlob blob)
+        {
+            if (blob.pbData != IntPtr.Zero)
+            {
+                LocalFree(blob.pbData);
+            }
         }
 
         private static byte[] CreateRandomSecret()
@@ -192,9 +214,34 @@ namespace MLVScan.Services.Caching
             return bytes;
         }
 
-        private static IOException CreateUnixIoException(string operation, string path, Errno? errno = null)
+        [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool CryptProtectData(
+            ref DataBlob pDataIn,
+            string szDataDescr,
+            IntPtr pOptionalEntropy,
+            IntPtr pvReserved,
+            IntPtr pPromptStruct,
+            int dwFlags,
+            out DataBlob pDataOut);
+
+        [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool CryptUnprotectData(
+            ref DataBlob pDataIn,
+            out IntPtr ppszDataDescr,
+            IntPtr pOptionalEntropy,
+            IntPtr pvReserved,
+            IntPtr pPromptStruct,
+            int dwFlags,
+            out DataBlob pDataOut);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr LocalFree(IntPtr hMem);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DataBlob
         {
-            return new IOException($"{operation} failed for {path}: {errno ?? Stdlib.GetLastError()}");
+            public int cbData;
+            public IntPtr pbData;
         }
     }
 }
