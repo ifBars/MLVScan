@@ -57,18 +57,32 @@ namespace MLVScan.Services.Caching
             if (RuntimeInformationHelper.IsWindows)
             {
                 var builder = new StringBuilder(1024);
-                var result = GetFinalPathNameByHandle(handle, builder, builder.Capacity, 0);
-                if (result > 0)
+                while (true)
                 {
-                    return NormalizeWindowsDevicePath(builder.ToString());
-                }
+                    var result = GetFinalPathNameByHandle(handle, builder, builder.Capacity, 0);
+                    if (result == 0)
+                    {
+                        return path;
+                    }
 
-                return path;
+                    if (result >= builder.Capacity)
+                    {
+                        if (result >= int.MaxValue)
+                        {
+                            return path;
+                        }
+
+                        builder = new StringBuilder((int)result + 1);
+                        continue;
+                    }
+
+                    return NormalizeWindowsDevicePath(builder.ToString(0, (int)result));
+                }
             }
 
             try
             {
-                var realPath = UnixPath.GetRealPath(path);
+                var realPath = GetUnixCanonicalPath(handle, path);
                 return string.IsNullOrWhiteSpace(realPath)
                     ? path
                     : Path.GetFullPath(realPath);
@@ -139,6 +153,19 @@ namespace MLVScan.Services.Caching
             }
 
             return (int)rawHandle;
+        }
+
+        private static string GetUnixCanonicalPath(SafeFileHandle handle, string path)
+        {
+            var fd = GetUnixFileDescriptor(handle, path);
+            var descriptorPath = RuntimeInformationHelper.IsLinux
+                ? $"/proc/self/fd/{fd}"
+                : $"/dev/fd/{fd}";
+
+            var realPath = UnixPath.GetRealPath(descriptorPath);
+            return string.IsNullOrWhiteSpace(realPath)
+                ? path
+                : realPath;
         }
 
         private static string NormalizeWindowsDevicePath(string path)

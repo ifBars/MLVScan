@@ -12,36 +12,53 @@ namespace MLVScan.Services.Resolution
     {
         public static ResolverCatalog Build(IEnumerable<ResolverRoot> roots)
         {
-            var pathComparer = GetPathComparer();
             var candidates = new List<ResolverCatalogCandidate>();
-            var seenPaths = new HashSet<string>(pathComparer);
+            var seenPaths = new HashSet<string>(StringComparer.Ordinal);
             var fingerprintLines = new List<string>();
 
             foreach (var root in roots
                          .Where(static root => !string.IsNullOrWhiteSpace(root.Path) && Directory.Exists(root.Path))
                          .OrderBy(static root => root.Priority)
-                         .ThenBy(static root => root.Path, pathComparer))
+                         .ThenBy(root => GetComparisonKey(root.Path), StringComparer.Ordinal))
             {
-                foreach (var path in Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories)
-                             .Where(IsAssemblyLike))
+                foreach (var path in EnumerateAssemblyPaths(root.Path))
                 {
-                    var fullPath = Path.GetFullPath(path);
-                    if (!seenPaths.Add(fullPath))
+                    try
+                    {
+                        var fullPath = Path.GetFullPath(path);
+                        if (!seenPaths.Add(GetComparisonKey(fullPath)))
+                        {
+                            continue;
+                        }
+
+                        if (!TryReadAssemblyIdentity(fullPath, out var candidate))
+                        {
+                            continue;
+                        }
+
+                        candidate.Priority = root.Priority;
+                        candidates.Add(candidate);
+
+                        var fileInfo = new FileInfo(fullPath);
+                        fingerprintLines.Add(
+                            $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{fullPath}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}");
+                    }
+                    catch (UnauthorizedAccessException)
                     {
                         continue;
                     }
-
-                    if (!TryReadAssemblyIdentity(fullPath, out var candidate))
+                    catch (FileNotFoundException)
                     {
                         continue;
                     }
-
-                    candidate.Priority = root.Priority;
-                    candidates.Add(candidate);
-
-                    var fileInfo = new FileInfo(fullPath);
-                    fingerprintLines.Add(
-                        $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{fullPath}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}");
+                    catch (DirectoryNotFoundException)
+                    {
+                        continue;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
                 }
             }
 
@@ -51,7 +68,7 @@ namespace MLVScan.Services.Resolution
                     group => group.Key,
                     group => (IReadOnlyList<ResolverCatalogCandidate>)group
                         .OrderBy(candidate => candidate.Priority)
-                        .ThenBy(candidate => candidate.Path, pathComparer)
+                        .ThenBy(candidate => GetComparisonKey(candidate.Path), StringComparer.Ordinal)
                         .ToArray(),
                     StringComparer.OrdinalIgnoreCase);
 
@@ -106,11 +123,134 @@ namespace MLVScan.Services.Resolution
                    || extension.Equals(".winmd", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static StringComparer GetPathComparer()
+        private static IEnumerable<string> EnumerateAssemblyPaths(string rootPath)
         {
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            IEnumerator<string> enumerator;
+            try
+            {
+                enumerator = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).GetEnumerator();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                yield break;
+            }
+            catch (FileNotFoundException)
+            {
+                yield break;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                yield break;
+            }
+            catch (IOException)
+            {
+                yield break;
+            }
+
+            using (enumerator)
+            {
+                while (true)
+                {
+                    string current;
+                    try
+                    {
+                        if (!enumerator.MoveNext())
+                        {
+                            yield break;
+                        }
+
+                        current = enumerator.Current;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        continue;
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        continue;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+
+                    if (IsAssemblyLike(current))
+                    {
+                        yield return current;
+                    }
+                }
+            }
+        }
+
+        private static string GetComparisonKey(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            return GetPathComparerForRoot(fullPath) == StringComparer.OrdinalIgnoreCase
+                ? fullPath.ToUpperInvariant()
+                : fullPath;
+        }
+
+        private static StringComparer GetPathComparerForRoot(string pathRoot)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return StringComparer.OrdinalIgnoreCase;
+            }
+
+            var probePath = FindExistingPathForSensitivityProbe(pathRoot);
+            if (string.IsNullOrWhiteSpace(probePath))
+            {
+                return StringComparer.Ordinal;
+            }
+
+            var alternateCasePath = GetAlternateCasePath(probePath);
+            if (string.Equals(alternateCasePath, probePath, StringComparison.Ordinal))
+            {
+                return StringComparer.Ordinal;
+            }
+
+            return File.Exists(alternateCasePath) || Directory.Exists(alternateCasePath)
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
+        }
+
+        private static string FindExistingPathForSensitivityProbe(string path)
+        {
+            var current = Path.GetFullPath(path);
+            while (!string.IsNullOrWhiteSpace(current))
+            {
+                if (File.Exists(current) || Directory.Exists(current))
+                {
+                    return current;
+                }
+
+                current = Path.GetDirectoryName(current);
+            }
+
+            return string.Empty;
+        }
+
+        private static string GetAlternateCasePath(string path)
+        {
+            var chars = path.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (!char.IsLetter(chars[i]))
+                {
+                    continue;
+                }
+
+                chars[i] = char.IsUpper(chars[i])
+                    ? char.ToLowerInvariant(chars[i])
+                    : char.ToUpperInvariant(chars[i]);
+                break;
+            }
+
+            return new string(chars);
         }
     }
 }

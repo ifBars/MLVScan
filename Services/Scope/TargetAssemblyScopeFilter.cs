@@ -38,7 +38,7 @@ public sealed class TargetAssemblyScopeFilter
                 continue;
             }
 
-            if (IsResolverOnlyPath(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
+            if (IsResolverOnlyRoot(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
             {
                 continue;
             }
@@ -67,7 +67,7 @@ public sealed class TargetAssemblyScopeFilter
             return false;
         }
 
-        if (IsResolverOnlyPath(fullPath) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
+        if (IsResolverOnlyPath(fullPath, effectiveRoots) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
         {
             return false;
         }
@@ -75,7 +75,7 @@ public sealed class TargetAssemblyScopeFilter
         return effectiveRoots.Any(root => IsUnderRoot(fullPath, root));
     }
 
-    private static bool IsResolverOnlyPath(string path)
+    private static bool IsResolverOnlyRoot(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -83,7 +83,33 @@ public sealed class TargetAssemblyScopeFilter
         }
 
         var pathSegments = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-        return ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(pathSegments, sequence));
+        return ResolverOnlySegmentSequences.Any(sequence => EndsWithSegmentSequence(pathSegments, sequence));
+    }
+
+    private static bool IsResolverOnlyPath(string path, IEnumerable<string> effectiveRoots)
+    {
+        foreach (var root in effectiveRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            var normalizedRoot = Normalize(root);
+            if (!IsUnderRoot(path, normalizedRoot))
+            {
+                continue;
+            }
+
+            var relativePath = Path.GetRelativePath(normalizedRoot, path);
+            var relativeSegments = relativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            if (ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(relativeSegments, sequence)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ContainsSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
@@ -113,6 +139,25 @@ public sealed class TargetAssemblyScopeFilter
         }
 
         return false;
+    }
+
+    private static bool EndsWithSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
+    {
+        if (pathSegments.Count < candidateSegments.Count)
+        {
+            return false;
+        }
+
+        var startIndex = pathSegments.Count - candidateSegments.Count;
+        for (var i = 0; i < candidateSegments.Count; i++)
+        {
+            if (!SegmentMatches(pathSegments[startIndex + i], candidateSegments[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool SegmentMatches(string actualSegment, string candidateSegment)

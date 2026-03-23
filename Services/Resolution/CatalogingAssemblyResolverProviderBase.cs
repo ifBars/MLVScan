@@ -32,9 +32,8 @@ namespace MLVScan.Services.Resolution
             var catalog = AssemblyResolverCatalogBuilder.Build(roots);
             lock (_sync)
             {
-                _resolver?.Dispose();
-                _resolver = new IndexedAssemblyResolver(catalog, _telemetry);
                 ContextFingerprint = catalog.Fingerprint;
+                _resolver = new IndexedAssemblyResolver(catalog, _telemetry);
             }
         }
 

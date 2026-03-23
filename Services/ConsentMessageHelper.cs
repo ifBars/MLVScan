@@ -1,7 +1,7 @@
 using System;
 using MLVScan.Models;
 
-namespace MLVScan.BepInEx
+namespace MLVScan.Services
 {
     internal static class ConsentMessageHelper
     {
