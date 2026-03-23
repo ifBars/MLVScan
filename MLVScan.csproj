@@ -258,11 +258,19 @@
     <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
-    <PackageReference Include="UnityEngine" Version="5.6.1" />
+    <!-- IL2CPP games expose Unity types from module assemblies, not the legacy monolithic UnityEngine.dll. -->
     <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(NuGetPackageRoot)unityengine.coremodule\2020.3.0\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(NuGetPackageRoot)unityengine.imguimodule\2020.3.0\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- ============================================ -->
