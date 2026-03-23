@@ -5,6 +5,7 @@ using BepInEx.Logging;
 using Mono.Cecil;
 using MLVScan.BepInEx;
 using MLVScan.BepInEx.Adapters;
+using MLVScan.Services.Diagnostics;
 
 namespace MLVScan.BepInEx5
 {
@@ -59,6 +60,7 @@ namespace MLVScan.BepInEx5
 
                 // Create platform environment
                 var environment = new BepInExPlatformEnvironment();
+                var telemetry = new LoaderScanTelemetryHub();
 
                 // Load or create configuration
                 var configManager = new BepInExConfigManager(_logger, DefaultWhitelistedHashes);
@@ -66,7 +68,7 @@ namespace MLVScan.BepInEx5
 
                 // Create adapters
                 var scanLogger = new BepInExScanLogger(_logger);
-                var resolverProvider = new BepInExAssemblyResolverProvider();
+                var resolverProvider = new BepInExAssemblyResolverProvider(telemetry);
 
                 // Create scanner and disabler
                 var pluginScanner = new BepInExPluginScanner(
@@ -74,7 +76,8 @@ namespace MLVScan.BepInEx5
                     resolverProvider,
                     config,
                     configManager,
-                    environment);
+                    environment,
+                    telemetry);
 
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
                 var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl(), configManager);

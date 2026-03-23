@@ -26,7 +26,8 @@ namespace MLVScan.Services.Resolution
                     try
                     {
                         var fullPath = Path.GetFullPath(path);
-                        if (!seenPaths.Add(GetComparisonKey(fullPath)))
+                        var comparisonKey = GetComparisonKey(fullPath);
+                        if (!seenPaths.Add(comparisonKey))
                         {
                             continue;
                         }
@@ -41,7 +42,7 @@ namespace MLVScan.Services.Resolution
 
                         var fileInfo = new FileInfo(fullPath);
                         fingerprintLines.Add(
-                            $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{fullPath}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}");
+                            $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{comparisonKey}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}");
                     }
                     catch (UnauthorizedAccessException)
                     {

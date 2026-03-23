@@ -13,8 +13,8 @@ namespace MLVScan.Adapters
     /// </summary>
     public class GameAssemblyResolverProvider : CatalogingAssemblyResolverProviderBase
     {
-        public GameAssemblyResolverProvider()
-            : base()
+        public GameAssemblyResolverProvider(LoaderScanTelemetryHub telemetry)
+            : base(telemetry)
         {
         }
 

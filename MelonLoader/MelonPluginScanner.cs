@@ -5,6 +5,7 @@ using MelonLoader.Utils;
 using MLVScan.Abstractions;
 using MLVScan.Models;
 using MLVScan.Services.Caching;
+using MLVScan.Services.Diagnostics;
 using MLVScan.Services;
 
 namespace MLVScan.MelonLoader
@@ -22,8 +23,9 @@ namespace MLVScan.MelonLoader
             IAssemblyResolverProvider resolverProvider,
             MLVScanConfig config,
             IConfigManager configManager,
-            MelonPlatformEnvironment environment)
-            : base(logger, resolverProvider, config, configManager, environment)
+            MelonPlatformEnvironment environment,
+            LoaderScanTelemetryHub telemetry)
+            : base(logger, resolverProvider, config, configManager, environment, telemetry)
         {
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         }
@@ -96,6 +98,39 @@ namespace MLVScan.MelonLoader
             }
         }
 
+        protected override IEnumerable<string> GetResolverDirectories()
+        {
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Mods"));
+            AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Plugins"));
+            AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
+
+            foreach (var scanDir in Config.ScanDirectories)
+            {
+                AddIfPresent(Path.IsPathRooted(scanDir)
+                    ? scanDir
+                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+            }
+
+            foreach (var thunderstoreRoot in GetThunderstoreDirectories())
+            {
+                AddIfPresent(thunderstoreRoot);
+            }
+
+            return emitted;
+
+            void AddIfPresent(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                {
+                    return;
+                }
+
+                emitted.Add(Path.GetFullPath(path));
+            }
+        }
+
         /// <summary>
         /// Resolves Thunderstore profile mod folders from the Windows AppData layout only.
         /// GetThunderstoreDirectories uses RuntimeInformationHelper to skip non-Windows platforms.
@@ -115,7 +150,7 @@ namespace MLVScan.MelonLoader
                 yield break;
             }
 
-            foreach (var gameFolder in Directory.GetDirectories(thunderstoreBasePath))
+            foreach (var gameFolder in SafeGetDirectories(thunderstoreBasePath))
             {
                 string profilesPath = Path.Combine(gameFolder, "profiles");
                 if (!Directory.Exists(profilesPath))
@@ -123,7 +158,7 @@ namespace MLVScan.MelonLoader
                     continue;
                 }
 
-                foreach (var profileFolder in Directory.GetDirectories(profilesPath))
+                foreach (var profileFolder in SafeGetDirectories(profilesPath))
                 {
                     var modsPath = Path.Combine(profileFolder, "Mods");
                     if (Directory.Exists(modsPath))
@@ -137,6 +172,32 @@ namespace MLVScan.MelonLoader
                         yield return pluginsPath;
                     }
                 }
+            }
+        }
+
+        private static IEnumerable<string> SafeGetDirectories(string path)
+        {
+            string[] directories;
+            try
+            {
+                directories = Directory.GetDirectories(path);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                yield break;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                yield break;
+            }
+            catch (IOException)
+            {
+                yield break;
+            }
+
+            foreach (var directory in directories)
+            {
+                yield return directory;
             }
         }
     }

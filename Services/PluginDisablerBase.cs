@@ -66,7 +66,7 @@ namespace MLVScan.Services
         /// Disables plugins that meet the configured verdict policy.
         /// </summary>
         /// <param name="scanResults">Dictionary of file paths to their findings.</param>
-        /// <param name="forceDisable">If true, disables even if auto-disable is off.</param>
+        /// <param name="forceDisable">If true, disables even if auto-disable is off, while still honoring verdict policy toggles.</param>
         public List<DisabledPluginInfo> DisableSuspiciousPlugins(
             Dictionary<string, ScannedPluginResult> scanResults,
             bool forceDisable = false)
@@ -88,7 +88,7 @@ namespace MLVScan.Services
                     continue;
                 }
 
-                if (!forceDisable && !ShouldDisable(verdict))
+                if (!ShouldDisable(verdict))
                 {
                     Logger.Info(
                         $"Plugin {Path.GetFileName(pluginPath)} matched \"{verdict.Title}\" but blocking for this verdict is disabled in configuration");

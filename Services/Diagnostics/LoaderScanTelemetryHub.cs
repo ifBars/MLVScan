@@ -1,15 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 #if MLVSCAN_PROFILING
-using System.Text.Json;
 #endif
 
 namespace MLVScan.Services.Diagnostics
 {
-    internal sealed class LoaderScanTelemetryHub
+    public sealed class LoaderScanTelemetryHub
     {
         private LoaderScanProfileSnapshot _lastSnapshot;
 
@@ -105,7 +106,7 @@ namespace MLVScan.Services.Diagnostics
 #endif
         }
 
-        public LoaderScanProfileSnapshot GetLastSnapshot()
+        internal LoaderScanProfileSnapshot GetLastSnapshot()
         {
             return _lastSnapshot;
         }
@@ -118,19 +119,146 @@ namespace MLVScan.Services.Diagnostics
                 return null;
             }
 
-            Directory.CreateDirectory(diagnosticsDirectory);
-            var path = Path.Combine(diagnosticsDirectory, $"loader-scan-profile-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json");
-            var json = JsonSerializer.Serialize(_lastSnapshot, new JsonSerializerOptions
+            try
             {
-                WriteIndented = true
-            });
-            File.WriteAllText(path, json);
-            return path;
+                Directory.CreateDirectory(diagnosticsDirectory);
+                var path = Path.Combine(diagnosticsDirectory, $"loader-scan-profile-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json");
+                File.WriteAllText(path, SerializeSnapshot(_lastSnapshot));
+                return path;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
 #else
             _ = diagnosticsDirectory;
             return null;
 #endif
         }
+
+#if MLVSCAN_PROFILING
+        private static string SerializeSnapshot(LoaderScanProfileSnapshot snapshot)
+        {
+            var builder = new StringBuilder(4096);
+            builder.AppendLine("{");
+            builder.Append("  \"runId\": ");
+            AppendJsonString(builder, snapshot.RunId);
+            builder.AppendLine(",");
+            builder.Append("  \"totalElapsedTicks\": ");
+            builder.Append(snapshot.TotalElapsedTicks.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine(",");
+            builder.AppendLine("  \"phases\": [");
+
+            var phases = snapshot.Phases ?? Array.Empty<LoaderScanPhaseTiming>();
+            for (var i = 0; i < phases.Count; i++)
+            {
+                var phase = phases[i];
+                builder.AppendLine("    {");
+                builder.Append("      \"name\": ");
+                AppendJsonString(builder, phase.Name);
+                builder.AppendLine(",");
+                builder.Append("      \"elapsedTicks\": ");
+                builder.Append(phase.ElapsedTicks.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine(",");
+                builder.Append("      \"count\": ");
+                builder.Append(phase.Count.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine();
+                builder.Append("    }");
+                builder.AppendLine(i < phases.Count - 1 ? "," : string.Empty);
+            }
+
+            builder.AppendLine("  ],");
+            builder.AppendLine("  \"counters\": {");
+
+            var counters = (snapshot.Counters ?? new Dictionary<string, long>(StringComparer.Ordinal)).ToArray();
+            for (var i = 0; i < counters.Length; i++)
+            {
+                var counter = counters[i];
+                builder.Append("    ");
+                AppendJsonString(builder, counter.Key);
+                builder.Append(": ");
+                builder.Append(counter.Value.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine(i < counters.Length - 1 ? "," : string.Empty);
+            }
+
+            builder.AppendLine("  },");
+            builder.AppendLine("  \"slowFiles\": [");
+
+            var files = snapshot.SlowFiles ?? Array.Empty<LoaderScanFileSample>();
+            for (var i = 0; i < files.Count; i++)
+            {
+                var file = files[i];
+                builder.AppendLine("    {");
+                builder.Append("      \"filePath\": ");
+                AppendJsonString(builder, file.FilePath);
+                builder.AppendLine(",");
+                builder.Append("      \"elapsedTicks\": ");
+                builder.Append(file.ElapsedTicks.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine(",");
+                builder.Append("      \"action\": ");
+                AppendJsonString(builder, file.Action);
+                builder.AppendLine(",");
+                builder.Append("      \"bytesRead\": ");
+                builder.Append(file.BytesRead.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine(",");
+                builder.Append("      \"findingsCount\": ");
+                builder.Append(file.FindingsCount.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine();
+                builder.Append("    }");
+                builder.AppendLine(i < files.Count - 1 ? "," : string.Empty);
+            }
+
+            builder.AppendLine("  ]");
+            builder.Append('}');
+            return builder.ToString();
+        }
+
+        private static void AppendJsonString(StringBuilder builder, string value)
+        {
+            builder.Append('"');
+            foreach (var ch in value ?? string.Empty)
+            {
+                switch (ch)
+                {
+                    case '\\':
+                        builder.Append("\\\\");
+                        break;
+                    case '"':
+                        builder.Append("\\\"");
+                        break;
+                    case '\b':
+                        builder.Append("\\b");
+                        break;
+                    case '\f':
+                        builder.Append("\\f");
+                        break;
+                    case '\n':
+                        builder.Append("\\n");
+                        break;
+                    case '\r':
+                        builder.Append("\\r");
+                        break;
+                    case '\t':
+                        builder.Append("\\t");
+                        break;
+                    default:
+                        if (char.IsControl(ch))
+                        {
+                            builder.Append("\\u");
+                            builder.Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
+                        }
+                        else
+                        {
+                            builder.Append(ch);
+                        }
+
+                        break;
+                }
+            }
+
+            builder.Append('"');
+        }
+#endif
     }
 
     internal sealed class LoaderScanProfileSnapshot

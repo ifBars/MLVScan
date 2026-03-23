@@ -5,6 +5,7 @@ using BepInEx;
 using MLVScan.Abstractions;
 using MLVScan.Models;
 using MLVScan.Services;
+using MLVScan.Services.Diagnostics;
 
 namespace MLVScan.BepInEx
 {
@@ -21,8 +22,9 @@ namespace MLVScan.BepInEx
             IAssemblyResolverProvider resolverProvider,
             MLVScanConfig config,
             IConfigManager configManager,
-            BepInExPlatformEnvironment environment)
-            : base(logger, resolverProvider, config, configManager, environment)
+            BepInExPlatformEnvironment environment,
+            LoaderScanTelemetryHub telemetry)
+            : base(logger, resolverProvider, config, configManager, environment, telemetry)
         {
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         }
@@ -89,6 +91,35 @@ namespace MLVScan.BepInEx
             catch
             {
                 return false;
+            }
+        }
+
+        protected override IEnumerable<string> GetResolverDirectories()
+        {
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            AddIfPresent(Paths.PluginPath);
+            AddIfPresent(Paths.PatcherPluginPath);
+            AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
+            AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Mods"));
+
+            foreach (var scanDir in Config.ScanDirectories)
+            {
+                AddIfPresent(Path.IsPathRooted(scanDir)
+                    ? scanDir
+                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+            }
+
+            return emitted;
+
+            void AddIfPresent(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                {
+                    return;
+                }
+
+                emitted.Add(Path.GetFullPath(path));
             }
         }
     }

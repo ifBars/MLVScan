@@ -74,18 +74,22 @@ namespace MLVScan.Services.Caching
                 var existingSecret = File.ReadAllBytes(secretPath);
                 try
                 {
-                    return UnprotectForCurrentUser(existingSecret);
+                    var unprotectedSecret = UnprotectForCurrentUser(existingSecret);
+                    if (IsValidSecret(unprotectedSecret))
+                    {
+                        return unprotectedSecret;
+                    }
                 }
                 catch
                 {
-                    if (existingSecret.Length == 32)
+                    if (IsValidSecret(existingSecret))
                     {
                         canTrustCleanEntries = false;
                         return existingSecret;
                     }
-
-                    throw;
                 }
+
+                DeleteInvalidSecret(secretPath);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(secretPath)!);
@@ -111,7 +115,13 @@ namespace MLVScan.Services.Caching
 
             if (File.Exists(secretPath))
             {
-                return File.ReadAllBytes(secretPath);
+                var existingSecret = File.ReadAllBytes(secretPath);
+                if (IsValidSecret(existingSecret))
+                {
+                    return existingSecret;
+                }
+
+                DeleteInvalidSecret(secretPath);
             }
 
             var secret = CreateRandomSecret();
@@ -212,6 +222,26 @@ namespace MLVScan.Services.Caching
             using var random = RandomNumberGenerator.Create();
             random.GetBytes(bytes);
             return bytes;
+        }
+
+        private static bool IsValidSecret(byte[] secret)
+        {
+            return secret != null && secret.Length == 32;
+        }
+
+        private static void DeleteInvalidSecret(string secretPath)
+        {
+            try
+            {
+                if (File.Exists(secretPath))
+                {
+                    File.Delete(secretPath);
+                }
+            }
+            catch
+            {
+                // Ignore invalid secret cleanup failures and fall back to untrusted/no cache.
+            }
         }
 
         [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

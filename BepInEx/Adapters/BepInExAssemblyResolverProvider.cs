@@ -13,8 +13,8 @@ namespace MLVScan.BepInEx.Adapters
     /// </summary>
     public class BepInExAssemblyResolverProvider : CatalogingAssemblyResolverProviderBase
     {
-        public BepInExAssemblyResolverProvider()
-            : base()
+        public BepInExAssemblyResolverProvider(LoaderScanTelemetryHub telemetry)
+            : base(telemetry)
         {
         }
 

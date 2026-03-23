@@ -4,6 +4,7 @@ using MLVScan.Abstractions;
 using MLVScan.Adapters;
 using MLVScan.Models;
 using MLVScan.Services;
+using MLVScan.Services.Diagnostics;
 
 namespace MLVScan.MelonLoader
 {
@@ -18,12 +19,14 @@ namespace MLVScan.MelonLoader
         private readonly MelonConfigManager _configManager;
         private readonly MelonPlatformEnvironment _environment;
         private readonly MLVScanConfig _fallbackConfig;
+        private readonly LoaderScanTelemetryHub _telemetry;
 
         public MelonLoaderServiceFactory(MelonLogger.Instance logger)
         {
             _melonLogger = logger ?? throw new ArgumentNullException(nameof(logger));
             _scanLogger = new MelonScanLogger(logger);
-            _resolverProvider = new GameAssemblyResolverProvider();
+            _telemetry = new LoaderScanTelemetryHub();
+            _resolverProvider = new GameAssemblyResolverProvider(_telemetry);
             _environment = new MelonPlatformEnvironment();
             _fallbackConfig = new MLVScanConfig();
 
@@ -73,7 +76,8 @@ namespace MLVScan.MelonLoader
                 _resolverProvider,
                 config,
                 _configManager,
-                _environment);
+                _environment,
+                _telemetry);
         }
 
         public MelonPluginDisabler CreatePluginDisabler()

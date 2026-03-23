@@ -11,11 +11,11 @@ namespace MLVScan.Services.Resolution
     {
         private readonly object _sync = new object();
         private readonly LoaderScanTelemetryHub _telemetry;
-        private IndexedAssemblyResolver _resolver;
+        private ResolverCatalog _catalog;
 
-        protected CatalogingAssemblyResolverProviderBase()
+        protected CatalogingAssemblyResolverProviderBase(LoaderScanTelemetryHub telemetry)
         {
-            _telemetry = new LoaderScanTelemetryHub();
+            _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             ContextFingerprint = ResolverCatalog.Empty.Fingerprint;
         }
 
@@ -32,24 +32,29 @@ namespace MLVScan.Services.Resolution
             var catalog = AssemblyResolverCatalogBuilder.Build(roots);
             lock (_sync)
             {
+                _catalog = catalog;
                 ContextFingerprint = catalog.Fingerprint;
-                _resolver = new IndexedAssemblyResolver(catalog, _telemetry);
             }
         }
 
         public IAssemblyResolver CreateResolver()
         {
+            ResolverCatalog catalog;
             lock (_sync)
             {
-                if (_resolver == null)
+                if (_catalog == null)
                 {
-                    var catalog = AssemblyResolverCatalogBuilder.Build(GetStableRoots());
-                    ContextFingerprint = catalog.Fingerprint;
-                    _resolver = new IndexedAssemblyResolver(catalog, _telemetry);
+                    _catalog = AssemblyResolverCatalogBuilder.Build(GetStableRoots());
+                    ContextFingerprint = _catalog.Fingerprint;
                 }
 
-                return _resolver;
+                catalog = _catalog;
             }
+
+            // Return a fresh resolver for each scan/read context so Cecil resolution state
+            // cannot bleed between different plugins that bundle private assemblies with
+            // the same identity.
+            return new IndexedAssemblyResolver(catalog, _telemetry);
         }
 
         protected abstract IEnumerable<ResolverRoot> GetStableRoots();

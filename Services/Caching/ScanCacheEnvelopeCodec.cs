@@ -38,12 +38,10 @@ namespace MLVScan.Services.Caching
         public static bool TryDeserializeEnvelope(
             byte[] envelopeBytes,
             out string signature,
-            out byte[] payloadBytes,
-            out ScanCacheEntryPayload payload)
+            out byte[] payloadBytes)
         {
             signature = string.Empty;
             payloadBytes = Array.Empty<byte>();
-            payload = null;
 
             if (envelopeBytes == null || envelopeBytes.Length == 0)
             {
@@ -73,19 +71,17 @@ namespace MLVScan.Services.Caching
                     return false;
                 }
 
-                payload = DeserializePayload(payloadBytes);
-                return payload != null;
+                return true;
             }
             catch
             {
                 signature = string.Empty;
                 payloadBytes = Array.Empty<byte>();
-                payload = null;
                 return false;
             }
         }
 
-        private static ScanCacheEntryPayload DeserializePayload(byte[] payloadBytes)
+        public static ScanCacheEntryPayload DeserializePayload(byte[] payloadBytes)
         {
             using var memory = new MemoryStream(payloadBytes, writable: false);
             using var reader = new BinaryReader(memory, Encoding.UTF8, true);
@@ -193,6 +189,7 @@ namespace MLVScan.Services.Caching
             writer.Write((int)value.Severity);
             WriteString(writer, value.CodeSnippet);
             WriteString(writer, value.RuleId);
+            WriteDeveloperGuidance(writer, value.DeveloperGuidance);
             writer.Write(value.BypassCompanionCheck);
             writer.Write(value.RiskScore.HasValue);
             if (value.RiskScore.HasValue)
@@ -213,6 +210,7 @@ namespace MLVScan.Services.Caching
                 ReadString(reader))
             {
                 RuleId = ReadString(reader),
+                DeveloperGuidance = ReadDeveloperGuidance(reader),
                 BypassCompanionCheck = reader.ReadBoolean()
             };
 
@@ -224,6 +222,34 @@ namespace MLVScan.Services.Caching
             finding.CallChain = ReadCallChain(reader);
             finding.DataFlowChain = ReadDataFlowChain(reader);
             return finding;
+        }
+
+        private static void WriteDeveloperGuidance(BinaryWriter writer, IDeveloperGuidance guidance)
+        {
+            writer.Write(guidance != null);
+            if (guidance == null)
+            {
+                return;
+            }
+
+            WriteString(writer, guidance.Remediation);
+            WriteString(writer, guidance.DocumentationUrl);
+            WriteStringArray(writer, guidance.AlternativeApis);
+            writer.Write(guidance.IsRemediable);
+        }
+
+        private static IDeveloperGuidance ReadDeveloperGuidance(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean())
+            {
+                return null;
+            }
+
+            return new DeveloperGuidance(
+                ReadString(reader),
+                ReadString(reader),
+                ReadStringArray(reader),
+                reader.ReadBoolean());
         }
 
         private static void WriteThreatVerdict(BinaryWriter writer, ThreatVerdictInfo verdict)
@@ -493,6 +519,38 @@ namespace MLVScan.Services.Caching
             for (var i = 0; i < count; i++)
             {
                 values.Add(ReadString(reader));
+            }
+
+            return values;
+        }
+
+        private static void WriteStringArray(BinaryWriter writer, string[] values)
+        {
+            writer.Write(values != null);
+            if (values == null)
+            {
+                return;
+            }
+
+            writer.Write(values.Length);
+            foreach (var value in values)
+            {
+                WriteString(writer, value);
+            }
+        }
+
+        private static string[] ReadStringArray(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean())
+            {
+                return null;
+            }
+
+            var count = reader.ReadInt32();
+            var values = new string[Math.Max(count, 0)];
+            for (var i = 0; i < count; i++)
+            {
+                values[i] = ReadString(reader);
             }
 
             return values;

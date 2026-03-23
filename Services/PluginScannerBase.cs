@@ -42,7 +42,8 @@ namespace MLVScan.Services
             IAssemblyResolverProvider resolverProvider,
             MLVScanConfig config,
             IConfigManager configManager,
-            IPlatformEnvironment environment)
+            IPlatformEnvironment environment,
+            LoaderScanTelemetryHub telemetry)
         {
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             ResolverProvider = resolverProvider ?? throw new ArgumentNullException(nameof(resolverProvider));
@@ -50,7 +51,7 @@ namespace MLVScan.Services
             ConfigManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
             Environment = environment ?? throw new ArgumentNullException(nameof(environment));
 
-            _telemetry = new LoaderScanTelemetryHub();
+            _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _fileIdentityProvider = new CrossPlatformFileIdentityProvider();
             _cacheStore = CreateDefaultCacheStore(environment);
             _resolverCatalogProvider = resolverProvider as IResolverCatalogProvider;
@@ -71,6 +72,15 @@ namespace MLVScan.Services
         /// Checks if a file path is this scanner's own assembly.
         /// </summary>
         protected abstract bool IsSelfAssembly(string filePath);
+
+        /// <summary>
+        /// Gets directories that should participate in dependency resolution, even if they are
+        /// currently excluded from target scanning.
+        /// </summary>
+        protected virtual IEnumerable<string> GetResolverDirectories()
+        {
+            return GetScanDirectories();
+        }
 
         /// <summary>
         /// Performs any platform-specific post-scan processing.
@@ -103,8 +113,15 @@ namespace MLVScan.Services
             var effectiveRoots = _scopeFilter.BuildEffectiveRoots(rawRoots, Config);
             _telemetry.AddPhaseElapsed("Scope.BuildEffectiveRoots", scopeStart);
 
-            var resolverFingerprint = BuildResolverCatalog(effectiveRoots);
             var pathComparer = GetPathComparer();
+            var resolverRoots = GetResolverDirectories()
+                .Concat(Config.AdditionalTargetRoots)
+                .Where(static root => !string.IsNullOrWhiteSpace(root))
+                .Select(Path.GetFullPath)
+                .Distinct(pathComparer)
+                .ToArray();
+
+            var resolverFingerprint = BuildResolverCatalog(resolverRoots);
             var candidateFiles = effectiveRoots
                 .SelectMany(EnumerateCandidateFiles)
                 .Distinct(pathComparer)

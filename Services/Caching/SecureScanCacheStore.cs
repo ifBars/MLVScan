@@ -61,11 +61,7 @@ namespace MLVScan.Services.Caching
             AtomicFileStorage.WriteAllBytes(GetEntryFilePath(entry.CanonicalPath), envelopeBytes);
 
             var normalizedPath = NormalizePathKey(entry.CanonicalPath);
-            _entriesByPath[normalizedPath] = entry;
-            if (!string.IsNullOrWhiteSpace(entry.Sha256))
-            {
-                _entriesByHash[entry.Sha256] = entry;
-            }
+            IndexEntry(normalizedPath, entry);
         }
 
         public void Remove(string canonicalPath)
@@ -132,8 +128,7 @@ namespace MLVScan.Services.Caching
                 try
                 {
                     var envelopeBytes = File.ReadAllBytes(path);
-                    if (!ScanCacheEnvelopeCodec.TryDeserializeEnvelope(envelopeBytes, out var signature, out var payloadBytes, out var payload) ||
-                        payload == null)
+                    if (!ScanCacheEnvelopeCodec.TryDeserializeEnvelope(envelopeBytes, out var signature, out var payloadBytes))
                     {
                         DeleteCorruptEntry(path);
                         continue;
@@ -145,13 +140,16 @@ namespace MLVScan.Services.Caching
                         continue;
                     }
 
+                    var payload = ScanCacheEnvelopeCodec.DeserializePayload(payloadBytes);
+                    if (payload == null)
+                    {
+                        DeleteCorruptEntry(path);
+                        continue;
+                    }
+
                     var entry = payload.ToEntry();
                     var normalizedPath = NormalizePathKey(entry.CanonicalPath);
-                    _entriesByPath[normalizedPath] = entry;
-                    if (!string.IsNullOrWhiteSpace(entry.Sha256))
-                    {
-                        _entriesByHash[entry.Sha256] = entry;
-                    }
+                    IndexEntry(normalizedPath, entry);
                 }
                 catch
                 {
@@ -169,6 +167,23 @@ namespace MLVScan.Services.Caching
             catch
             {
                 // Ignore corrupt cache cleanup failures.
+            }
+        }
+
+        private void IndexEntry(string normalizedPath, ScanCacheEntry entry)
+        {
+            if (_entriesByPath.TryGetValue(normalizedPath, out var existing) &&
+                !string.IsNullOrWhiteSpace(existing.Sha256) &&
+                (string.IsNullOrWhiteSpace(entry.Sha256) ||
+                 !string.Equals(existing.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase)))
+            {
+                _entriesByHash.Remove(existing.Sha256);
+            }
+
+            _entriesByPath[normalizedPath] = entry;
+            if (!string.IsNullOrWhiteSpace(entry.Sha256))
+            {
+                _entriesByHash[entry.Sha256] = entry;
             }
         }
 

@@ -101,6 +101,12 @@ public sealed class TargetAssemblyScopeFilter
                 continue;
             }
 
+            var rootSegments = normalizedRoot.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            if (ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(rootSegments, sequence)))
+            {
+                return true;
+            }
+
             var relativePath = Path.GetRelativePath(normalizedRoot, path);
             var relativeSegments = relativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
             if (ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(relativeSegments, sequence)))

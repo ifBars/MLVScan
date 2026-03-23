@@ -42,7 +42,7 @@
   <!-- MelonLoader Configuration                   -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='MelonLoader'">
-    <DefineConstants>MELONLOADER</DefineConstants>
+    <DefineConstants>$(DefineConstants);MELONLOADER</DefineConstants>
     <AssemblyName>MLVScan.MelonLoader</AssemblyName>
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
@@ -51,7 +51,7 @@
   <!-- BepInEx 5.x Configuration                   -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx5'">
-    <DefineConstants>BEPINEX</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX</DefineConstants>
     <AssemblyName>MLVScan.BepInEx5</AssemblyName>
   </PropertyGroup>
 
@@ -59,7 +59,7 @@
   <!-- BepInEx 6.x Mono Configuration              -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx6Mono'">
-    <DefineConstants>BEPINEX;BEPINEX6;BEPINEX6_MONO</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_MONO</DefineConstants>
     <AssemblyName>MLVScan.BepInEx6.Mono</AssemblyName>
   </PropertyGroup>
 
@@ -68,7 +68,7 @@
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
     <TargetFramework>net6.0</TargetFramework>
-    <DefineConstants>BEPINEX;BEPINEX6;BEPINEX6_IL2CPP</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_IL2CPP</DefineConstants>
     <AssemblyName>MLVScan.BepInEx6.IL2CPP</AssemblyName>
   </PropertyGroup>
 
