@@ -8,17 +8,17 @@ namespace MLVScan.Services.Scope;
 /// </summary>
 public sealed class TargetAssemblyScopeFilter
 {
-    private static readonly string[] ResolverOnlySegments =
+    private static readonly string[][] ResolverOnlySegmentSequences =
     [
-        "_Data\\Managed",
-        "MelonLoader\\Managed",
-        "MelonLoader\\net35",
-        "MelonLoader\\net6",
-        "BepInEx\\core",
-        "BepInEx\\cache",
-        "BepInEx\\interop",
-        ".nuget\\packages",
-        "dotnet\\shared"
+        ["*_Data", "Managed"],
+        ["MelonLoader", "Managed"],
+        ["MelonLoader", "net35"],
+        ["MelonLoader", "net6"],
+        ["BepInEx", "core"],
+        ["BepInEx", "cache"],
+        ["BepInEx", "interop"],
+        [".nuget", "packages"],
+        ["dotnet", "shared"]
     ];
 
     public IReadOnlyList<string> BuildEffectiveRoots(IEnumerable<string> candidateRoots, MLVScanConfig config)
@@ -77,8 +77,52 @@ public sealed class TargetAssemblyScopeFilter
 
     private static bool IsResolverOnlyPath(string path)
     {
-        return ResolverOnlySegments.Any(segment =>
-            path.IndexOf(segment, StringComparison.OrdinalIgnoreCase) >= 0);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var pathSegments = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+        return ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(pathSegments, sequence));
+    }
+
+    private static bool ContainsSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
+    {
+        if (pathSegments.Count < candidateSegments.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i <= pathSegments.Count - candidateSegments.Count; i++)
+        {
+            var matched = true;
+
+            for (var j = 0; j < candidateSegments.Count; j++)
+            {
+                if (!SegmentMatches(pathSegments[i + j], candidateSegments[j]))
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SegmentMatches(string actualSegment, string candidateSegment)
+    {
+        if (candidateSegment.StartsWith("*", StringComparison.Ordinal))
+        {
+            return actualSegment.EndsWith(candidateSegment.Substring(1), StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(actualSegment, candidateSegment, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsUnderAny(string fullPath, IEnumerable<string> roots)

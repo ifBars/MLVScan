@@ -141,6 +141,7 @@ namespace MLVScan.BepInEx
             try
             {
                 var findings = scanResult?.Findings ?? new List<ScanFinding>();
+                var resolvedVerdict = pluginInfo?.ThreatVerdict ?? scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 var reportPath = Path.Combine(_reportDirectory, $"{pluginName}_{timestamp}.report.txt");
 
@@ -158,7 +159,7 @@ namespace MLVScan.BepInEx
 
                 using (var verdictWriter = new StringWriter(sb))
                 {
-                    ThreatVerdictTextFormatter.WriteThreatVerdictSection(verdictWriter, pluginInfo.ThreatVerdict ?? scanResult?.ThreatVerdict);
+                    ThreatVerdictTextFormatter.WriteThreatVerdictSection(verdictWriter, resolvedVerdict);
                 }
 
                 // Severity breakdown
@@ -266,7 +267,7 @@ namespace MLVScan.BepInEx
                 sb.AppendLine(new string('=', 60));
                 sb.AppendLine("SECURITY RECOMMENDATIONS");
                 sb.AppendLine(new string('=', 60));
-                if (IsKnownThreatVerdict(pluginInfo.ThreatVerdict))
+                if (IsKnownThreatVerdict(resolvedVerdict))
                 {
                     sb.AppendLine("1. Verify with the modding community if this is a known mod");
                     sb.AppendLine("2. Run a full system scan with Malwarebytes or similar");

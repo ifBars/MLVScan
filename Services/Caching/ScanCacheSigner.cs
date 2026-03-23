@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 using Mono.Unix.Native;
 
 namespace MLVScan.Services.Caching
@@ -81,6 +82,7 @@ namespace MLVScan.Services.Caching
                 {
                     if (existingSecret.Length == 32)
                     {
+                        canTrustCleanEntries = false;
                         return existingSecret;
                     }
 
@@ -97,6 +99,7 @@ namespace MLVScan.Services.Caching
             }
             catch
             {
+                canTrustCleanEntries = false;
                 AtomicFileStorage.WriteAllBytes(secretPath, secret);
             }
 
@@ -109,13 +112,65 @@ namespace MLVScan.Services.Caching
             Directory.CreateDirectory(Path.GetDirectoryName(secretPath)!);
             if (!File.Exists(secretPath))
             {
-                var created = CreateRandomSecret();
-                AtomicFileStorage.WriteAllBytes(secretPath, created);
-                Syscall.chmod(secretPath, FilePermissions.S_IRUSR | FilePermissions.S_IWUSR);
+                CreateUnixSecret(secretPath, CreateRandomSecret());
             }
 
             canTrustCleanEntries = HasOwnerOnlyPermissions(secretPath);
             return File.ReadAllBytes(secretPath);
+        }
+
+        private static void CreateUnixSecret(string secretPath, byte[] secret)
+        {
+            const FilePermissions OwnerOnlyPermissions = FilePermissions.S_IRUSR | FilePermissions.S_IWUSR;
+            var fd = Syscall.open(secretPath, OpenFlags.O_CREAT | OpenFlags.O_EXCL | OpenFlags.O_WRONLY, OwnerOnlyPermissions);
+            if (fd < 0)
+            {
+                var errno = Stdlib.GetLastError();
+                if (errno == Errno.EEXIST)
+                {
+                    return;
+                }
+
+                throw CreateUnixIoException("open", secretPath, errno);
+            }
+
+            var success = false;
+            try
+            {
+                if (Syscall.fchmod(fd, OwnerOnlyPermissions) != 0)
+                {
+                    throw CreateUnixIoException("fchmod", secretPath);
+                }
+
+                using (var stream = new FileStream(new SafeFileHandle((IntPtr)fd, ownsHandle: false), FileAccess.Write))
+                {
+                    stream.Write(secret, 0, secret.Length);
+                    stream.Flush(true);
+                }
+
+                if (Syscall.fsync(fd) != 0)
+                {
+                    throw CreateUnixIoException("fsync", secretPath);
+                }
+
+                success = true;
+            }
+            finally
+            {
+                Syscall.close(fd);
+
+                if (!success && File.Exists(secretPath))
+                {
+                    try
+                    {
+                        File.Delete(secretPath);
+                    }
+                    catch
+                    {
+                        // Preserve the original failure if cleanup also fails.
+                    }
+                }
+            }
         }
 
         private static bool HasOwnerOnlyPermissions(string secretPath)
@@ -135,6 +190,11 @@ namespace MLVScan.Services.Caching
             using var random = RandomNumberGenerator.Create();
             random.GetBytes(bytes);
             return bytes;
+        }
+
+        private static IOException CreateUnixIoException(string operation, string path, Errno? errno = null)
+        {
+            return new IOException($"{operation} failed for {path}: {errno ?? Stdlib.GetLastError()}");
         }
     }
 }

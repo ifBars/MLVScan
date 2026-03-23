@@ -96,6 +96,7 @@
     <Compile Include="Abstractions\IConfigManager.cs" />
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
     <Compile Include="Models\MLVScanConfig.cs" />
+    <Compile Include="BepInEx\ConsentMessageHelper.cs" />
     <Compile Include="Services\PluginScannerBase.cs" />
     <Compile Include="Services\Caching\AtomicFileStorage.cs" />
     <Compile Include="Services\Caching\CrossPlatformFileIdentityProvider.cs" />

@@ -4,6 +4,7 @@ using System.IO;
 using MelonLoader.Utils;
 using MLVScan.Abstractions;
 using MLVScan.Models;
+using MLVScan.Services.Caching;
 using MLVScan.Services;
 
 namespace MLVScan.MelonLoader
@@ -95,8 +96,17 @@ namespace MLVScan.MelonLoader
             }
         }
 
+        /// <summary>
+        /// Resolves Thunderstore profile mod folders from the Windows AppData layout only.
+        /// GetThunderstoreDirectories uses RuntimeInformationHelper to skip non-Windows platforms.
+        /// </summary>
         private static IEnumerable<string> GetThunderstoreDirectories()
         {
+            if (!RuntimeInformationHelper.IsWindows)
+            {
+                yield break;
+            }
+
             string appDataPath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
             string thunderstoreBasePath = Path.Combine(appDataPath, "Thunderstore Mod Manager", "DataFolder");
 

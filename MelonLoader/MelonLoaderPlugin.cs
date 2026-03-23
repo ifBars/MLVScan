@@ -132,6 +132,7 @@ namespace MLVScan.MelonLoader
                 return;
 
             var currentWhitelist = (_configManager.GetWhitelistedHashes() ?? Array.Empty<string>())
+                .Select(hash => hash?.Trim())
                 .Where(hash => !string.IsNullOrWhiteSpace(hash))
                 .Select(hash => hash.ToLowerInvariant())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -139,6 +140,7 @@ namespace MLVScan.MelonLoader
 
             var mergedWhitelist = currentWhitelist
                 .Concat(DefaultWhitelistedHashes)
+                .Select(hash => hash?.Trim())
                 .Where(hash => !string.IsNullOrWhiteSpace(hash))
                 .Select(hash => hash.ToLowerInvariant())
                 .Distinct(StringComparer.OrdinalIgnoreCase)

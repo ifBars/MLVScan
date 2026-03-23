@@ -1,21 +1,40 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Collections.ObjectModel;
 
 namespace MLVScan.Services.Resolution
 {
     internal sealed class ResolverCatalog
     {
-        public static readonly ResolverCatalog Empty = new ResolverCatalog
+        private static readonly IReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>> EmptyCandidates =
+            new ReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(
+                new Dictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(StringComparer.OrdinalIgnoreCase));
+
+        private ResolverCatalog(
+            string fingerprint,
+            IReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>> candidatesBySimpleName)
         {
-            Fingerprint = "empty",
-            CandidatesBySimpleName = new Dictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(StringComparer.OrdinalIgnoreCase)
-        };
+            Fingerprint = string.IsNullOrWhiteSpace(fingerprint) ? "empty" : fingerprint;
+            CandidatesBySimpleName = candidatesBySimpleName ?? EmptyCandidates;
+        }
 
-        public string Fingerprint { get; set; } = "empty";
+        public static ResolverCatalog Empty { get; } = new ResolverCatalog("empty", EmptyCandidates);
 
-        public IReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>> CandidatesBySimpleName { get; set; } =
-            new Dictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(StringComparer.OrdinalIgnoreCase);
+        public string Fingerprint { get; }
+
+        public IReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>> CandidatesBySimpleName { get; }
+
+        public static ResolverCatalog Create(
+            string fingerprint,
+            IReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>> candidatesBySimpleName)
+        {
+            return new ResolverCatalog(
+                fingerprint,
+                candidatesBySimpleName == null
+                    ? EmptyCandidates
+                    : new ReadOnlyDictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(
+                        new Dictionary<string, IReadOnlyList<ResolverCatalogCandidate>>(candidatesBySimpleName, StringComparer.OrdinalIgnoreCase)));
+        }
     }
 
     internal sealed class ResolverCatalogCandidate

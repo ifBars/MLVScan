@@ -66,7 +66,7 @@ namespace MLVScan.BepInEx
             GUI.Box(new Rect(0f, 0f, Screen.width, Screen.height), string.Empty);
             GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
             GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
-                GetUploadConsentMessage(_pendingUploadName, _pendingUploadVerdictKind) + "\n\n" +
+                ConsentMessageHelper.GetUploadConsentMessage(_pendingUploadName, _pendingUploadVerdictKind) + "\n\n" +
                 "Would you like to upload this file to the MLVScan API for human review?\n\n" +
                 "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
                 "No: do not upload and do not show this prompt again.");
@@ -158,16 +158,5 @@ namespace MLVScan.BepInEx
             };
         }
 
-        private static string GetUploadConsentMessage(string modName, string verdictKind)
-        {
-            var label = string.IsNullOrWhiteSpace(modName) ? "this mod" : modName;
-            if (string.Equals(verdictKind, ThreatVerdictKind.KnownMaliciousSample.ToString(), StringComparison.Ordinal) ||
-                string.Equals(verdictKind, ThreatVerdictKind.KnownMalwareFamily.ToString(), StringComparison.Ordinal))
-            {
-                return $"MLVScan identified {label} as likely malware and disabled it.";
-            }
-
-            return $"MLVScan blocked {label} because it triggered suspicious behavior. It may still be a false positive.";
-        }
     }
 }

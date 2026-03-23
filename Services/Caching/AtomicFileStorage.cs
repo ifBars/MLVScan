@@ -19,7 +19,26 @@ namespace MLVScan.Services.Caching
                 stream.Flush(true);
             }
 
-            Replace(tempPath, path);
+            try
+            {
+                Replace(tempPath, path);
+            }
+            catch
+            {
+                if (File.Exists(tempPath))
+                {
+                    try
+                    {
+                        File.Delete(tempPath);
+                    }
+                    catch
+                    {
+                        // Preserve the original replace failure if cleanup also fails.
+                    }
+                }
+
+                throw;
+            }
         }
 
         public static void WriteAllText(string path, string contents)

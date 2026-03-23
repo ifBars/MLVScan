@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Mono.Cecil;
 using MLVScan.Services.Diagnostics;
 
 namespace MLVScan.Services.Resolution
 {
-    internal sealed class IndexedAssemblyResolver : BaseAssemblyResolver, IDisposable
+    internal sealed class IndexedAssemblyResolver : BaseAssemblyResolver
     {
         private readonly ResolverCatalog _catalog;
         private readonly Dictionary<string, AssemblyDefinition> _resolved = new Dictionary<string, AssemblyDefinition>(StringComparer.Ordinal);
@@ -76,15 +77,20 @@ namespace MLVScan.Services.Resolution
             throw new AssemblyResolutionException(name);
         }
 
-        public new void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            foreach (var assembly in _resolved.Values.Distinct())
+            if (disposing)
             {
-                assembly.Dispose();
+                foreach (var assembly in _resolved.Values.Distinct())
+                {
+                    assembly.Dispose();
+                }
+
+                _resolved.Clear();
+                _missing.Clear();
             }
 
-            _resolved.Clear();
-            _missing.Clear();
+            base.Dispose(disposing);
         }
 
         private static IEnumerable<ResolverCatalogCandidate> OrderCandidates(
@@ -97,7 +103,7 @@ namespace MLVScan.Services.Resolution
             return candidates
                 .OrderBy(candidate => CandidateMatches(reference.Name, expectedVersion, expectedToken, candidate) ? 0 : 1)
                 .ThenBy(candidate => candidate.Priority)
-                .ThenBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase);
+                .ThenBy(candidate => candidate.Path, GetPathComparer());
         }
 
         private static bool CandidateMatches(
@@ -134,6 +140,13 @@ namespace MLVScan.Services.Resolution
             }
 
             return BitConverter.ToString(token).Replace("-", string.Empty).ToLowerInvariant();
+        }
+
+        private static StringComparer GetPathComparer()
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
         }
     }
 }

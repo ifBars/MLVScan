@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace MLVScan.Services.Resolution
@@ -11,14 +12,15 @@ namespace MLVScan.Services.Resolution
     {
         public static ResolverCatalog Build(IEnumerable<ResolverRoot> roots)
         {
+            var pathComparer = GetPathComparer();
             var candidates = new List<ResolverCatalogCandidate>();
-            var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenPaths = new HashSet<string>(pathComparer);
             var fingerprintLines = new List<string>();
 
             foreach (var root in roots
                          .Where(static root => !string.IsNullOrWhiteSpace(root.Path) && Directory.Exists(root.Path))
                          .OrderBy(static root => root.Priority)
-                         .ThenBy(static root => root.Path, StringComparer.OrdinalIgnoreCase))
+                         .ThenBy(static root => root.Path, pathComparer))
             {
                 foreach (var path in Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories)
                              .Where(IsAssemblyLike))
@@ -49,15 +51,11 @@ namespace MLVScan.Services.Resolution
                     group => group.Key,
                     group => (IReadOnlyList<ResolverCatalogCandidate>)group
                         .OrderBy(candidate => candidate.Priority)
-                        .ThenBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(candidate => candidate.Path, pathComparer)
                         .ToArray(),
                     StringComparer.OrdinalIgnoreCase);
 
-            return new ResolverCatalog
-            {
-                Fingerprint = ComputeFingerprint(fingerprintLines),
-                CandidatesBySimpleName = grouped
-            };
+            return ResolverCatalog.Create(ComputeFingerprint(fingerprintLines), grouped);
         }
 
         private static bool TryReadAssemblyIdentity(string path, out ResolverCatalogCandidate candidate)
@@ -106,6 +104,13 @@ namespace MLVScan.Services.Resolution
             return extension.Equals(".dll", StringComparison.OrdinalIgnoreCase)
                    || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
                    || extension.Equals(".winmd", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static StringComparer GetPathComparer()
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
         }
     }
 }

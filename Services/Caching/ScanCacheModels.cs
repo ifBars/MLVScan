@@ -25,6 +25,9 @@ namespace MLVScan.Services.Caching
 
         public ScannedPluginResult Result { get; set; } = new ScannedPluginResult();
 
+        // ScanCacheEntry / ScanCacheEntryPayload conversions intentionally keep shallow FileIdentity
+        // and Result references for performance. Call CloneResultForPath when mutation-safe Result
+        // data is required instead of relying on ToEntry or FromEntry to deep-copy it.
         public bool CanReuseStrictly(FileProbe probe, string scannerFingerprint, string resolverFingerprint, bool canTrustCleanEntries)
         {
             if (probe == null)
@@ -151,6 +154,8 @@ namespace MLVScan.Services.Caching
 
         public ScannedPluginResult Result { get; set; } = new ScannedPluginResult();
 
+        // ToEntry and FromEntry intentionally keep ScanCacheEntry / ScanCacheEntryPayload shallow for
+        // FileIdentity and Result. Use CloneResultForPath when callers need a deep-cloned Result.
         public ScanCacheEntry ToEntry()
         {
             return new ScanCacheEntry

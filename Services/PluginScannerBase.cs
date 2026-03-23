@@ -27,6 +27,7 @@ namespace MLVScan.Services
         protected readonly IPlatformEnvironment Environment;
         protected readonly AssemblyScanner AssemblyScanner;
         protected readonly ThreatVerdictBuilder ThreatVerdictBuilder;
+        private const long MaxAssemblyScanBytes = 256L * 1024 * 1024;
 
         private readonly IFileIdentityProvider _fileIdentityProvider;
         private readonly IScanCacheStore _cacheStore;
@@ -103,13 +104,14 @@ namespace MLVScan.Services
             _telemetry.AddPhaseElapsed("Scope.BuildEffectiveRoots", scopeStart);
 
             var resolverFingerprint = BuildResolverCatalog(effectiveRoots);
+            var pathComparer = GetPathComparer();
             var candidateFiles = effectiveRoots
                 .SelectMany(EnumerateCandidateFiles)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(pathComparer)
                 .ToArray();
 
-            var activeCanonicalPaths = new HashSet<string>(GetPathComparer());
-            var processedCanonicalPaths = new HashSet<string>(GetPathComparer());
+            var activeCanonicalPaths = new HashSet<string>(pathComparer);
+            var processedCanonicalPaths = new HashSet<string>(pathComparer);
 
             foreach (var pluginFile in candidateFiles)
             {
@@ -191,6 +193,15 @@ namespace MLVScan.Services
                 TryReuseByPathCache(probe, filePath, resolverFingerprint, results))
             {
                 _telemetry.RecordFileSample(filePath, fileStart, "cache-hit:path", 0, 0);
+                return;
+            }
+
+            if (probe.Stream.CanSeek && probe.Stream.Length > MaxAssemblyScanBytes)
+            {
+                Logger.Warning(
+                    $"Skipping {fileName} because it is larger than the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB.");
+                _telemetry.IncrementCounter("Files.TooLarge");
+                _telemetry.RecordFileSample(filePath, fileStart, "skip:too-large", 0, 0);
                 return;
             }
 
@@ -353,7 +364,7 @@ namespace MLVScan.Services
             _cacheStore.Upsert(new ScanCacheEntry
             {
                 CanonicalPath = probe.CanonicalPath,
-                RealPath = probe.CanonicalPath,
+                RealPath = probe.OriginalPath,
                 FileIdentity = probe.Identity,
                 Sha256 = hash,
                 ScannerFingerprint = _scannerFingerprint,
@@ -443,7 +454,7 @@ namespace MLVScan.Services
 
         private static StringComparer GetPathComparer()
         {
-            return RuntimeInformationHelper.IsWindows
+            return RuntimeInformationHelper.IsWindows || RuntimeInformationHelper.IsMacOs
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
         }

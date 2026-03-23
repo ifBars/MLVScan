@@ -42,9 +42,12 @@ namespace MLVScan.Services.Resolution
         {
             lock (_sync)
             {
-                _resolver ??= new IndexedAssemblyResolver(
-                    AssemblyResolverCatalogBuilder.Build(GetStableRoots()),
-                    _telemetry);
+                if (_resolver == null)
+                {
+                    var catalog = AssemblyResolverCatalogBuilder.Build(GetStableRoots());
+                    ContextFingerprint = catalog.Fingerprint;
+                    _resolver = new IndexedAssemblyResolver(catalog, _telemetry);
+                }
 
                 return _resolver;
             }

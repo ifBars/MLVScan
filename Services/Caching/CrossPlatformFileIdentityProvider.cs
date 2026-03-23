@@ -105,7 +105,7 @@ namespace MLVScan.Services.Caching
 
         private static FileIdentitySnapshot CreateUnixIdentity(string path, SafeFileHandle handle, bool isLink)
         {
-            var fd = handle.DangerousGetHandle().ToInt32();
+            var fd = GetUnixFileDescriptor(handle, path);
             if (Syscall.fstat(fd, out var stat) != 0)
             {
                 throw new IOException($"fstat failed for {path}");
@@ -117,10 +117,28 @@ namespace MLVScan.Services.Caching
                 HasStrongIdentity = true,
                 IdentityKey = $"{stat.st_dev}:{stat.st_ino}",
                 Size = stat.st_size,
-                LastWriteUtcTicks = DateTimeOffset.FromUnixTimeSeconds(stat.st_mtime).UtcDateTime.Ticks,
-                ChangeUtcTicks = DateTimeOffset.FromUnixTimeSeconds(stat.st_ctime).UtcDateTime.Ticks,
+                LastWriteUtcTicks = ConvertUnixTimeToUtcTicks(stat.st_mtime, stat.st_mtime_nsec),
+                ChangeUtcTicks = ConvertUnixTimeToUtcTicks(stat.st_ctime, stat.st_ctime_nsec),
                 IsSymlinkOrReparsePoint = isLink
             };
+        }
+
+        private static long ConvertUnixTimeToUtcTicks(long seconds, long nanoseconds)
+        {
+            return checked(DateTime.UnixEpoch.Ticks +
+                (seconds * TimeSpan.TicksPerSecond) +
+                (nanoseconds / 100));
+        }
+
+        private static int GetUnixFileDescriptor(SafeFileHandle handle, string path)
+        {
+            var rawHandle = handle.DangerousGetHandle().ToInt64();
+            if (rawHandle < 0 || rawHandle > int.MaxValue)
+            {
+                throw new IOException($"File descriptor out of range for {path}");
+            }
+
+            return (int)rawHandle;
         }
 
         private static string NormalizeWindowsDevicePath(string path)
