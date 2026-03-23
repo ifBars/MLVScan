@@ -33,6 +33,12 @@ namespace MLVScan.MelonLoader
         protected override IEnumerable<string> GetScanDirectories()
         {
             var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var builtInRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.GetFullPath(Path.Combine(_environment.GameRootDirectory, "Mods")),
+                Path.GetFullPath(Path.Combine(_environment.GameRootDirectory, "Plugins")),
+                Path.GetFullPath(Path.Combine(_environment.GameRootDirectory, "UserLibs"))
+            };
 
             if (Config.IncludeMods)
             {
@@ -49,11 +55,9 @@ namespace MLVScan.MelonLoader
                 AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
             }
 
-            foreach (var scanDir in Config.ScanDirectories)
+            foreach (var scanDir in Config.ScanDirectories ?? Array.Empty<string>())
             {
-                AddIfPresent(Path.IsPathRooted(scanDir)
-                    ? scanDir
-                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+                AddLegacyIfPresent(scanDir);
             }
 
             if (Config.IncludeThunderstoreProfiles)
@@ -77,6 +81,25 @@ namespace MLVScan.MelonLoader
                 }
 
                 emitted.Add(Path.GetFullPath(path));
+            }
+
+            void AddLegacyIfPresent(string scanDir)
+            {
+                if (string.IsNullOrWhiteSpace(scanDir))
+                {
+                    return;
+                }
+
+                var resolvedPath = Path.GetFullPath(Path.IsPathRooted(scanDir)
+                    ? scanDir
+                    : Path.Combine(_environment.GameRootDirectory, scanDir));
+
+                if (builtInRoots.Contains(resolvedPath))
+                {
+                    return;
+                }
+
+                AddIfPresent(resolvedPath);
             }
         }
 

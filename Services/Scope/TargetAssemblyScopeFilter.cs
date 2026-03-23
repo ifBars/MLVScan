@@ -67,7 +67,7 @@ public sealed class TargetAssemblyScopeFilter
             return false;
         }
 
-        if (IsResolverOnlyPath(fullPath, effectiveRoots) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
+        if (IsUnderAny(fullPath, config.ExcludedTargetRoots))
         {
             return false;
         }
@@ -84,67 +84,6 @@ public sealed class TargetAssemblyScopeFilter
 
         var pathSegments = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
         return ResolverOnlySegmentSequences.Any(sequence => EndsWithSegmentSequence(pathSegments, sequence));
-    }
-
-    private static bool IsResolverOnlyPath(string path, IEnumerable<string> effectiveRoots)
-    {
-        foreach (var root in effectiveRoots)
-        {
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                continue;
-            }
-
-            var normalizedRoot = Normalize(root);
-            if (!IsUnderRoot(path, normalizedRoot))
-            {
-                continue;
-            }
-
-            var rootSegments = normalizedRoot.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-            if (ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(rootSegments, sequence)))
-            {
-                return true;
-            }
-
-            var relativePath = Path.GetRelativePath(normalizedRoot, path);
-            var relativeSegments = relativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-            if (ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(relativeSegments, sequence)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool ContainsSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
-    {
-        if (pathSegments.Count < candidateSegments.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i <= pathSegments.Count - candidateSegments.Count; i++)
-        {
-            var matched = true;
-
-            for (var j = 0; j < candidateSegments.Count; j++)
-            {
-                if (!SegmentMatches(pathSegments[i + j], candidateSegments[j]))
-                {
-                    matched = false;
-                    break;
-                }
-            }
-
-            if (matched)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool EndsWithSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
