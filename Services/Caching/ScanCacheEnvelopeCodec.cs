@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using MLVScan.Abstractions;
 using MLVScan.Models;
 
 namespace MLVScan.Services.Caching

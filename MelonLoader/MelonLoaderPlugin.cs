@@ -294,7 +294,8 @@ namespace MLVScan.MelonLoader
                 try
                 {
                     // Generate report and prompt files
-                    var reportDirectory = Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
+                    var reportDirectory = _environment?.ReportsDirectory
+                        ?? Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
                     if (!Directory.Exists(reportDirectory))
                     {
                         Directory.CreateDirectory(reportDirectory);

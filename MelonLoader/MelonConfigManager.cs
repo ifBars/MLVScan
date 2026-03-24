@@ -35,7 +35,6 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _includeMods;
         private readonly MelonPreferences_Entry<bool> _includePlugins;
         private readonly MelonPreferences_Entry<bool> _includeUserLibs;
-        private readonly MelonPreferences_Entry<bool> _includePatchers;
         private readonly MelonPreferences_Entry<bool> _includeThunderstoreProfiles;
         private readonly MelonPreferences_Entry<string[]> _additionalTargetRoots;
         private readonly MelonPreferences_Entry<string[]> _excludedTargetRoots;
@@ -111,9 +110,6 @@ namespace MLVScan.MelonLoader
                 _includeUserLibs = _category.CreateEntry("IncludeUserLibs", true,
                     description: "Whether to include UserLibs folders in the target scan scope");
 
-                _includePatchers = _category.CreateEntry("IncludePatchers", true,
-                    description: "Whether to include patcher folders in the target scan scope");
-
                 _includeThunderstoreProfiles = _category.CreateEntry("IncludeThunderstoreProfiles", true,
                     description: "Whether to include Thunderstore profile folders in the target scan scope");
 
@@ -144,7 +140,6 @@ namespace MLVScan.MelonLoader
                 _includeMods.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _includePlugins.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _includeUserLibs.OnEntryValueChanged.Subscribe(OnConfigChanged);
-                _includePatchers.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _includeThunderstoreProfiles.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _additionalTargetRoots.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _excludedTargetRoots.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -203,7 +198,7 @@ namespace MLVScan.MelonLoader
                 IncludeMods = _includeMods.Value,
                 IncludePlugins = _includePlugins.Value,
                 IncludeUserLibs = _includeUserLibs.Value,
-                IncludePatchers = _includePatchers.Value,
+                IncludePatchers = false,
                 IncludeThunderstoreProfiles = _includeThunderstoreProfiles.Value,
                 AdditionalTargetRoots = _additionalTargetRoots.Value ?? Array.Empty<string>(),
                 ExcludedTargetRoots = _excludedTargetRoots.Value ?? Array.Empty<string>()
@@ -235,7 +230,6 @@ namespace MLVScan.MelonLoader
                 _includeMods.Value = newConfig.IncludeMods;
                 _includePlugins.Value = newConfig.IncludePlugins;
                 _includeUserLibs.Value = newConfig.IncludeUserLibs;
-                _includePatchers.Value = newConfig.IncludePatchers;
                 _includeThunderstoreProfiles.Value = newConfig.IncludeThunderstoreProfiles;
                 _additionalTargetRoots.Value = newConfig.AdditionalTargetRoots ?? Array.Empty<string>();
                 _excludedTargetRoots.Value = newConfig.ExcludedTargetRoots ?? Array.Empty<string>();
