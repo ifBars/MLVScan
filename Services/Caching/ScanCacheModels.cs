@@ -41,7 +41,7 @@ namespace MLVScan.Services.Caching
                 return false;
             }
 
-            if (Result?.ThreatVerdict?.Kind == ThreatVerdictKind.None &&
+            if (!ScanResultFacts.HasThreatVerdict(Result) &&
                 !canTrustCleanEntries)
             {
                 return false;
@@ -93,12 +93,24 @@ namespace MLVScan.Services.Caching
                 };
             }
 
+            ScanStatusInfo scanStatus = null;
+            if (Result?.ScanStatus != null)
+            {
+                scanStatus = new ScanStatusInfo
+                {
+                    Kind = Result.ScanStatus.Kind,
+                    Title = Result.ScanStatus.Title,
+                    Summary = Result.ScanStatus.Summary
+                };
+            }
+
             return new ScannedPluginResult
             {
                 FilePath = filePath,
                 FileHash = Result?.FileHash ?? Sha256,
                 Findings = findings,
-                ThreatVerdict = verdict ?? new ThreatVerdictInfo()
+                ThreatVerdict = verdict ?? new ThreatVerdictInfo(),
+                ScanStatus = scanStatus ?? new ScanStatusInfo()
             };
         }
 
@@ -127,7 +139,7 @@ namespace MLVScan.Services.Caching
 
     internal sealed class ScanCacheEnvelope
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
 
         public string Signature { get; set; } = string.Empty;
 

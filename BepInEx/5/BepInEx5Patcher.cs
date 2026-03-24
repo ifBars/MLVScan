@@ -87,10 +87,9 @@ namespace MLVScan.BepInEx5
 
                 if (scanResults.Count > 0)
                 {
-                    // Disable suspicious plugins
                     var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
+                    var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
-                    // Generate reports for disabled plugins
                     if (disabledPlugins.Count > 0)
                     {
                         // First-run consent fallback for BepInEx 5.
@@ -102,12 +101,21 @@ namespace MLVScan.BepInEx5
                             _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
                             _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
                         }
-
-                        reportGenerator.GenerateReports(disabledPlugins, scanResults);
-
-                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} flagged plugin(s).");
-                        _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
+
+                    reportGenerator.GenerateReports(disabledPlugins, scanResults);
+
+                    if (disabledPlugins.Count > 0)
+                    {
+                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} plugin(s).");
+                    }
+
+                    if (reviewOnlyCount > 0)
+                    {
+                        _logger.LogWarning($"MLVScan flagged {reviewOnlyCount} plugin(s) for manual review without blocking them.");
+                    }
+
+                    _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                 }
                 else if (!config.EnableAutoScan)
                 {
@@ -115,7 +123,7 @@ namespace MLVScan.BepInEx5
                 }
                 else
                 {
-                    _logger.LogInfo("No flagged plugins detected.");
+                    _logger.LogInfo("No plugins requiring action were detected.");
                 }
 
                 _logger.LogInfo("MLVScan preloader scan complete.");

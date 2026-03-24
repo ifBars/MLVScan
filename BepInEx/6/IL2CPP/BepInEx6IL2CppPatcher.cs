@@ -79,10 +79,9 @@ namespace MLVScan.BepInEx6.IL2CPP
 
                 if (scanResults.Count > 0)
                 {
-                    // Disable suspicious plugins
                     var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
+                    var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
-                    // Generate reports for disabled plugins
                     if (disabledPlugins.Count > 0)
                     {
                         // Queue first-run GUI consent for runtime plugin.
@@ -96,12 +95,21 @@ namespace MLVScan.BepInEx6.IL2CPP
                             configManager.SaveConfig(config);
                             _logger.LogInfo("MLVScan will show an in-game upload consent popup.");
                         }
-
-                        reportGenerator.GenerateReports(disabledPlugins, scanResults);
-
-                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} flagged plugin(s).");
-                        _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
+
+                    reportGenerator.GenerateReports(disabledPlugins, scanResults);
+
+                    if (disabledPlugins.Count > 0)
+                    {
+                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} plugin(s).");
+                    }
+
+                    if (reviewOnlyCount > 0)
+                    {
+                        _logger.LogWarning($"MLVScan flagged {reviewOnlyCount} plugin(s) for manual review without blocking them.");
+                    }
+
+                    _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                 }
                 else if (!config.EnableAutoScan)
                 {
@@ -109,7 +117,7 @@ namespace MLVScan.BepInEx6.IL2CPP
                 }
                 else
                 {
-                    _logger.LogInfo("No flagged plugins detected.");
+                    _logger.LogInfo("No plugins requiring action were detected.");
                 }
 
                 _logger.LogInfo("MLVScan BepInEx 6 (IL2CPP) preloader scan complete.");

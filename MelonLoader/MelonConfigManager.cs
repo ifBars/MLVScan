@@ -19,6 +19,7 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _enableScanCache;
         private readonly MelonPreferences_Entry<bool> _blockKnownThreats;
         private readonly MelonPreferences_Entry<bool> _blockSuspicious;
+        private readonly MelonPreferences_Entry<bool> _blockIncompleteScans;
         private readonly MelonPreferences_Entry<string> _minSeverityForDisable;
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
@@ -51,7 +52,7 @@ namespace MLVScan.MelonLoader
                     description: "Whether to scan mods at startup");
 
                 _enableAutoDisable = _category.CreateEntry("EnableAutoDisable", true,
-                    description: "Whether to disable suspicious mods");
+                    description: "Whether to automatically disable mods that meet the active blocking policy");
 
                 _enableScanCache = _category.CreateEntry("EnableScanCache", true,
                     description: "Whether to reuse scan results for unchanged files using a local authenticated cache");
@@ -61,6 +62,9 @@ namespace MLVScan.MelonLoader
 
                 _blockSuspicious = _category.CreateEntry("BlockSuspicious", true,
                     description: "Whether to block suspicious unknown behavior that may still be a false positive");
+
+                _blockIncompleteScans = _category.CreateEntry("BlockIncompleteScans", false,
+                    description: "Whether to block mods that could not be fully analyzed and require manual review");
 
                 _minSeverityForDisable = _category.CreateEntry("MinSeverityForDisable", "Medium",
                     description: "Legacy setting from the old severity-based blocking model (no longer used for blocking)");
@@ -124,6 +128,7 @@ namespace MLVScan.MelonLoader
                 _enableScanCache.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _blockKnownThreats.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _blockSuspicious.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockIncompleteScans.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -179,6 +184,7 @@ namespace MLVScan.MelonLoader
                 EnableScanCache = _enableScanCache.Value,
                 BlockKnownThreats = _blockKnownThreats.Value,
                 BlockSuspicious = _blockSuspicious.Value,
+                BlockIncompleteScans = _blockIncompleteScans.Value,
                 MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
@@ -214,6 +220,7 @@ namespace MLVScan.MelonLoader
                 _enableScanCache.Value = newConfig.EnableScanCache;
                 _blockKnownThreats.Value = newConfig.BlockKnownThreats;
                 _blockSuspicious.Value = newConfig.BlockSuspicious;
+                _blockIncompleteScans.Value = newConfig.BlockIncompleteScans;
                 _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;

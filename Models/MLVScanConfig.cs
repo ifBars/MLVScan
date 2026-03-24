@@ -41,6 +41,11 @@ public class MLVScanConfig
     public bool BlockSuspicious { get; set; } = true;
 
     /// <summary>
+    /// Whether to block files that could not be fully analyzed and require manual review.
+    /// </summary>
+    public bool BlockIncompleteScans { get; set; } = false;
+
+    /// <summary>
     /// Legacy severity threshold from the rule-first blocking model.
     /// Retained for one compatibility window but no longer used for blocking decisions.
     /// </summary>

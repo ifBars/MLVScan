@@ -178,7 +178,7 @@ namespace MLVScan.Services
         }
 
         /// <summary>
-        /// Scans a single file and adds results if suspicious.
+        /// Scans a single file and adds results when the file requires user attention.
         /// </summary>
         protected virtual void ScanSingleFile(
             string filePath,
@@ -227,7 +227,7 @@ namespace MLVScan.Services
             if (isOversized)
             {
                 Logger.Warning(
-                    $"Flagging {fileName} because it exceeds the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB and cannot be fully analyzed in memory.");
+                    $"Manual review required for {fileName}: it exceeds the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB and cannot be fully analyzed in memory.");
                 _telemetry.IncrementCounter("Files.TooLarge");
                 bytesRead = probe.Stream.CanSeek ? probe.Stream.Length : 0L;
                 if (bytesRead > 0)
@@ -275,7 +275,7 @@ namespace MLVScan.Services
             if (exactHashResult.ThreatVerdict.Kind == ThreatVerdictKind.KnownMaliciousSample)
             {
                 UpsertCacheEntry(probe, hash, resolverFingerprint, exactHashResult);
-                RegisterFlaggedResultIfNeeded(fileName, exactHashResult, results);
+                RegisterResultIfNeeded(fileName, exactHashResult, results);
                 _telemetry.RecordFileSample(filePath, fileStart, "hash-only-known-sample", bytesRead, 0);
                 return;
             }
@@ -284,8 +284,8 @@ namespace MLVScan.Services
             {
                 var oversizedResult = CreateOversizedAssemblyResult(filePath, hash, bytesRead);
                 UpsertCacheEntry(probe, hash, resolverFingerprint, oversizedResult);
-                RegisterFlaggedResultIfNeeded(fileName, oversizedResult, results);
-                _telemetry.RecordFileSample(filePath, fileStart, "oversized:flagged", bytesRead, oversizedResult.Findings.Count);
+                RegisterResultIfNeeded(fileName, oversizedResult, results);
+                _telemetry.RecordFileSample(filePath, fileStart, "oversized:review-required", bytesRead, oversizedResult.Findings.Count);
                 return;
             }
 
@@ -301,7 +301,7 @@ namespace MLVScan.Services
             var scannedResult = ThreatVerdictBuilder.Build(filePath, hash, actualFindings);
             UpsertCacheEntry(probe, hash, resolverFingerprint, scannedResult);
 
-            RegisterFlaggedResultIfNeeded(fileName, scannedResult, results);
+            RegisterResultIfNeeded(fileName, scannedResult, results);
             _telemetry.RecordFileSample(filePath, fileStart, "scan", bytesRead, actualFindings.Count);
         }
 
@@ -331,7 +331,7 @@ namespace MLVScan.Services
             }
 
             _telemetry.IncrementCounter("Cache.PathHit");
-            RegisterFlaggedResultIfNeeded(Path.GetFileName(filePath), entry.CloneResultForPath(filePath), results);
+            RegisterResultIfNeeded(Path.GetFileName(filePath), entry.CloneResultForPath(filePath), results);
             return true;
         }
 
@@ -362,7 +362,7 @@ namespace MLVScan.Services
                 return false;
             }
 
-            if (entry.Result?.ThreatVerdict?.Kind == ThreatVerdictKind.None &&
+            if (!ScanResultFacts.HasThreatVerdict(entry.Result) &&
                 !cacheStore.CanTrustCleanEntries)
             {
                 _telemetry.IncrementCounter("Cache.HashRejected");
@@ -372,11 +372,11 @@ namespace MLVScan.Services
             var clonedResult = entry.CloneResultForPath(filePath);
             UpsertCacheEntry(probe, hash, resolverFingerprint, clonedResult);
             _telemetry.IncrementCounter("Cache.HashHit");
-            RegisterFlaggedResultIfNeeded(Path.GetFileName(filePath), clonedResult, results);
+            RegisterResultIfNeeded(Path.GetFileName(filePath), clonedResult, results);
             return true;
         }
 
-        private void RegisterFlaggedResultIfNeeded(
+        private void RegisterResultIfNeeded(
             string fileName,
             ScannedPluginResult scannedResult,
             Dictionary<string, ScannedPluginResult> results)
@@ -391,7 +391,7 @@ namespace MLVScan.Services
                 return;
             }
 
-            if (scannedResult.ThreatVerdict.Kind == ThreatVerdictKind.None)
+            if (!ScanResultFacts.RequiresAttention(scannedResult))
             {
                 return;
             }
@@ -413,7 +413,13 @@ namespace MLVScan.Services
                 return;
             }
 
-            Logger.Warning($"Detected suspicious behavior in {fileName} - {scannedResult.ThreatVerdict.Title}");
+            if (scannedResult.ThreatVerdict.Kind == ThreatVerdictKind.Suspicious)
+            {
+                Logger.Warning($"Detected suspicious behavior in {fileName} - {scannedResult.ThreatVerdict.Title}");
+                return;
+            }
+
+            Logger.Warning($"Manual review required for {fileName} - {scannedResult.ScanStatus.Title}");
         }
 
         private bool IsHashWhitelisted(string fileName, string fileHash)
@@ -458,8 +464,8 @@ namespace MLVScan.Services
             {
                 new ScanFinding(
                     "Loader scan preflight",
-                    $"Assembly exceeds the loader scan limit ({sizeMb:0.#} MB > {limitMb} MB), so full IL analysis was skipped and the file is being treated as suspicious until reviewed.",
-                    Severity.High)
+                    $"Assembly exceeds the loader scan limit ({sizeMb:0.#} MB > {limitMb} MB). SHA-256 and exact known-malicious sample checks still ran, but full IL analysis was skipped and the file requires manual review.",
+                    Severity.Medium)
                 {
                     RuleId = "OversizedAssembly"
                 }
@@ -472,11 +478,17 @@ namespace MLVScan.Services
                 Findings = findings,
                 ThreatVerdict = new ThreatVerdictInfo
                 {
-                    Kind = ThreatVerdictKind.Suspicious,
-                    Title = "Oversized assembly requires manual review",
-                    Summary = "This file exceeds the loader scan size limit, so full IL analysis was skipped and it is being treated as suspicious until reviewed.",
+                    Kind = ThreatVerdictKind.None,
+                    Title = "No threat verdict",
+                    Summary = "No retained malicious verdict was produced before the loader hit a scan-completeness limit.",
                     Confidence = 0d,
                     ShouldBypassThreshold = false
+                },
+                ScanStatus = new ScanStatusInfo
+                {
+                    Kind = ScanStatusKind.RequiresReview,
+                    Title = "Manual review required",
+                    Summary = $"This file exceeds the loader scan size limit ({limitMb} MB). MLVScan calculated its SHA-256 hash and checked exact known-malicious sample matches, but full IL analysis was skipped to avoid loading the entire assembly into memory."
                 }
             };
         }

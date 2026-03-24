@@ -10,4 +10,13 @@ namespace MLVScan.Models
         KnownMalwareFamily,
         KnownMaliciousSample
     }
+
+    /// <summary>
+    /// User-facing scan completion status, independent of the threat verdict.
+    /// </summary>
+    public enum ScanStatusKind
+    {
+        Complete,
+        RequiresReview
+    }
 }

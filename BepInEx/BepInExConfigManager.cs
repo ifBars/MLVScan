@@ -103,6 +103,7 @@ namespace MLVScan.BepInEx
                 EnableScanCache = true,
                 BlockKnownThreats = true,
                 BlockSuspicious = true,
+                BlockIncompleteScans = false,
                 MinSeverityForDisable = Severity.Medium,
                 ScanDirectories = new[] { "plugins" },
                 SuspiciousThreshold = 1,

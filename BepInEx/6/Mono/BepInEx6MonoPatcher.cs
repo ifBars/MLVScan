@@ -85,6 +85,7 @@ namespace MLVScan.BepInEx6.Mono
                     if (scanResults.Count > 0)
                     {
                         var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
+                        var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
                         if (disabledPlugins.Count > 0)
                         {
@@ -99,16 +100,25 @@ namespace MLVScan.BepInEx6.Mono
                                 configManager.SaveConfig(config);
                                 _logger.LogInfo("MLVScan will show an in-game upload consent popup.");
                             }
-
-                            reportGenerator.GenerateReports(disabledPlugins, scanResults);
-
-                            _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} flagged plugin(s).");
-                            _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                         }
+
+                        reportGenerator.GenerateReports(disabledPlugins, scanResults);
+
+                        if (disabledPlugins.Count > 0)
+                        {
+                            _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} plugin(s).");
+                        }
+
+                        if (reviewOnlyCount > 0)
+                        {
+                            _logger.LogWarning($"MLVScan flagged {reviewOnlyCount} plugin(s) for manual review without blocking them.");
+                        }
+
+                        _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
                     else
                     {
-                        _logger.LogInfo("No flagged plugins detected.");
+                        _logger.LogInfo("No plugins requiring action were detected.");
                     }
                 }
 

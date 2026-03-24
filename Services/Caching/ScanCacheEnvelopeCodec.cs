@@ -10,7 +10,7 @@ namespace MLVScan.Services.Caching
     internal static class ScanCacheEnvelopeCodec
     {
         private const int EnvelopeMagic = 0x4D4C5643;
-        private const int EnvelopeVersion = 1;
+        private const int EnvelopeVersion = 2;
 
         public static byte[] SerializePayload(ScanCacheEntryPayload payload)
         {
@@ -147,6 +147,7 @@ namespace MLVScan.Services.Caching
             WriteString(writer, value.FileHash);
             WriteFindings(writer, value.Findings);
             WriteThreatVerdict(writer, value.ThreatVerdict);
+            WriteScanStatus(writer, value.ScanStatus);
         }
 
         private static ScannedPluginResult ReadResult(BinaryReader reader)
@@ -156,7 +157,8 @@ namespace MLVScan.Services.Caching
                 FilePath = ReadString(reader),
                 FileHash = ReadString(reader),
                 Findings = ReadFindings(reader),
-                ThreatVerdict = ReadThreatVerdict(reader) ?? new ThreatVerdictInfo()
+                ThreatVerdict = ReadThreatVerdict(reader) ?? new ThreatVerdictInfo(),
+                ScanStatus = ReadScanStatus(reader) ?? new ScanStatusInfo()
             };
         }
 
@@ -286,6 +288,34 @@ namespace MLVScan.Services.Caching
                 ShouldBypassThreshold = reader.ReadBoolean(),
                 PrimaryFamily = ReadThreatFamily(reader),
                 Families = ReadThreatFamilies(reader)
+            };
+        }
+
+        private static void WriteScanStatus(BinaryWriter writer, ScanStatusInfo scanStatus)
+        {
+            writer.Write(scanStatus != null);
+            if (scanStatus == null)
+            {
+                return;
+            }
+
+            writer.Write((int)scanStatus.Kind);
+            WriteString(writer, scanStatus.Title);
+            WriteString(writer, scanStatus.Summary);
+        }
+
+        private static ScanStatusInfo ReadScanStatus(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean())
+            {
+                return null;
+            }
+
+            return new ScanStatusInfo
+            {
+                Kind = (ScanStatusKind)reader.ReadInt32(),
+                Title = ReadString(reader),
+                Summary = ReadString(reader)
             };
         }
 
