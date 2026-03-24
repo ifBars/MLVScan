@@ -25,8 +25,11 @@ public sealed class TargetAssemblyScopeFilter
     public IReadOnlyList<string> BuildEffectiveRoots(IEnumerable<string> candidateRoots, MLVScanConfig config)
     {
         var roots = new HashSet<string>(GetPathComparer());
+        var candidateRootSet = candidateRoots ?? Array.Empty<string>();
+        var additionalTargetRoots = config?.AdditionalTargetRoots ?? Array.Empty<string>();
+        var excludedTargetRoots = config?.ExcludedTargetRoots ?? Array.Empty<string>();
 
-        foreach (var root in candidateRoots.Concat(config.AdditionalTargetRoots))
+        foreach (var root in candidateRootSet.Concat(additionalTargetRoots))
         {
             if (string.IsNullOrWhiteSpace(root))
             {
@@ -39,7 +42,7 @@ public sealed class TargetAssemblyScopeFilter
                 continue;
             }
 
-            if (IsResolverOnlyPath(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
+            if (IsResolverOnlyRoot(normalized) || IsUnderAny(normalized, excludedTargetRoots))
             {
                 continue;
             }
@@ -68,15 +71,16 @@ public sealed class TargetAssemblyScopeFilter
             return false;
         }
 
-        if (IsResolverOnlyPath(fullPath) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
+        var excludedTargetRoots = config?.ExcludedTargetRoots ?? Array.Empty<string>();
+        if (IsUnderAny(fullPath, excludedTargetRoots))
         {
             return false;
         }
 
-        return effectiveRoots.Any(root => IsUnderRoot(fullPath, root));
+        return (effectiveRoots ?? Array.Empty<string>()).Any(root => IsTargetAssemblyUnderRoot(fullPath, root));
     }
 
-    private static bool IsResolverOnlyPath(string path)
+    private static bool IsResolverOnlyRoot(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -84,35 +88,56 @@ public sealed class TargetAssemblyScopeFilter
         }
 
         var pathSegments = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-        return ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(pathSegments, sequence));
+        return ResolverOnlySegmentSequences.Any(sequence => EndsWithSegmentSequence(pathSegments, sequence));
     }
 
-    private static bool ContainsSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
+    private static bool IsTargetAssemblyUnderRoot(string fullPath, string root)
+    {
+        if (!IsUnderRoot(fullPath, root))
+        {
+            return false;
+        }
+
+        var relativePath = Path.GetRelativePath(root, fullPath);
+        var relativeSegments = relativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+        return !ResolverOnlySegmentSequences.Any(sequence => StartsWithSegmentSequence(relativeSegments, sequence));
+    }
+
+    private static bool StartsWithSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
     {
         if (pathSegments.Count < candidateSegments.Count)
         {
             return false;
         }
 
-        for (var startIndex = 0; startIndex <= pathSegments.Count - candidateSegments.Count; startIndex++)
+        for (var i = 0; i < candidateSegments.Count; i++)
         {
-            var matches = true;
-            for (var i = 0; i < candidateSegments.Count; i++)
+            if (!SegmentMatches(pathSegments[i], candidateSegments[i]))
             {
-                if (!SegmentMatches(pathSegments[startIndex + i], candidateSegments[i]))
-                {
-                    matches = false;
-                    break;
-                }
-            }
-
-            if (matches)
-            {
-                return true;
+                return false;
             }
         }
 
-        return false;
+        return true;
+    }
+
+    private static bool EndsWithSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
+    {
+        if (pathSegments.Count < candidateSegments.Count)
+        {
+            return false;
+        }
+
+        var startIndex = pathSegments.Count - candidateSegments.Count;
+        for (var i = 0; i < candidateSegments.Count; i++)
+        {
+            if (!SegmentMatches(pathSegments[startIndex + i], candidateSegments[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool SegmentMatches(string actualSegment, string candidateSegment)
