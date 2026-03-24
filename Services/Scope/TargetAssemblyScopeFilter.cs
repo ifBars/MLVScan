@@ -1,4 +1,5 @@
 using MLVScan.Models;
+using MLVScan.Services.Caching;
 
 namespace MLVScan.Services.Scope;
 
@@ -23,7 +24,7 @@ public sealed class TargetAssemblyScopeFilter
 
     public IReadOnlyList<string> BuildEffectiveRoots(IEnumerable<string> candidateRoots, MLVScanConfig config)
     {
-        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var roots = new HashSet<string>(GetPathComparer());
 
         foreach (var root in candidateRoots.Concat(config.AdditionalTargetRoots))
         {
@@ -38,7 +39,7 @@ public sealed class TargetAssemblyScopeFilter
                 continue;
             }
 
-            if (IsResolverOnlyRoot(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
+            if (IsResolverOnlyPath(normalized) || IsUnderAny(normalized, config.ExcludedTargetRoots))
             {
                 continue;
             }
@@ -46,7 +47,7 @@ public sealed class TargetAssemblyScopeFilter
             roots.Add(normalized);
         }
 
-        return roots.OrderBy(root => root, StringComparer.OrdinalIgnoreCase).ToList();
+        return roots.OrderBy(root => root, GetPathComparer()).ToList();
     }
 
     public bool IsTargetAssembly(string assemblyPath, IReadOnlyCollection<string> effectiveRoots, MLVScanConfig config)
@@ -67,7 +68,7 @@ public sealed class TargetAssemblyScopeFilter
             return false;
         }
 
-        if (IsUnderAny(fullPath, config.ExcludedTargetRoots))
+        if (IsResolverOnlyPath(fullPath) || IsUnderAny(fullPath, config.ExcludedTargetRoots))
         {
             return false;
         }
@@ -75,7 +76,7 @@ public sealed class TargetAssemblyScopeFilter
         return effectiveRoots.Any(root => IsUnderRoot(fullPath, root));
     }
 
-    private static bool IsResolverOnlyRoot(string path)
+    private static bool IsResolverOnlyPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -83,26 +84,35 @@ public sealed class TargetAssemblyScopeFilter
         }
 
         var pathSegments = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-        return ResolverOnlySegmentSequences.Any(sequence => EndsWithSegmentSequence(pathSegments, sequence));
+        return ResolverOnlySegmentSequences.Any(sequence => ContainsSegmentSequence(pathSegments, sequence));
     }
 
-    private static bool EndsWithSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
+    private static bool ContainsSegmentSequence(IReadOnlyList<string> pathSegments, IReadOnlyList<string> candidateSegments)
     {
         if (pathSegments.Count < candidateSegments.Count)
         {
             return false;
         }
 
-        var startIndex = pathSegments.Count - candidateSegments.Count;
-        for (var i = 0; i < candidateSegments.Count; i++)
+        for (var startIndex = 0; startIndex <= pathSegments.Count - candidateSegments.Count; startIndex++)
         {
-            if (!SegmentMatches(pathSegments[startIndex + i], candidateSegments[i]))
+            var matches = true;
+            for (var i = 0; i < candidateSegments.Count; i++)
             {
-                return false;
+                if (!SegmentMatches(pathSegments[startIndex + i], candidateSegments[i]))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
 
     private static bool SegmentMatches(string actualSegment, string candidateSegment)
@@ -139,12 +149,27 @@ public sealed class TargetAssemblyScopeFilter
             ? root
             : root + Path.DirectorySeparatorChar;
 
-        return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase);
+        var pathComparison = GetPathComparison();
+        return fullPath.StartsWith(normalizedRoot, pathComparison)
+               || string.Equals(fullPath, root, pathComparison);
     }
 
     private static string Normalize(string path)
     {
         return Path.GetFullPath(path);
+    }
+
+    private static StringComparer GetPathComparer()
+    {
+        return RuntimeInformationHelper.IsWindows || RuntimeInformationHelper.IsMacOs
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+    }
+
+    private static StringComparison GetPathComparison()
+    {
+        return RuntimeInformationHelper.IsWindows || RuntimeInformationHelper.IsMacOs
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
     }
 }

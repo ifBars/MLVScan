@@ -129,16 +129,19 @@ namespace MLVScan.MelonLoader
             AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Plugins"));
             AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
 
-            foreach (var scanDir in Config.ScanDirectories)
+            foreach (var scanDir in Config.ScanDirectories ?? Array.Empty<string>())
             {
                 AddIfPresent(Path.IsPathRooted(scanDir)
                     ? scanDir
                     : Path.Combine(_environment.GameRootDirectory, scanDir));
             }
 
-            foreach (var thunderstoreRoot in GetThunderstoreDirectories())
+            if (Config.IncludeThunderstoreProfiles)
             {
-                AddIfPresent(thunderstoreRoot);
+                foreach (var thunderstoreRoot in GetThunderstoreDirectories())
+                {
+                    AddIfPresent(thunderstoreRoot);
+                }
             }
 
             return emitted;

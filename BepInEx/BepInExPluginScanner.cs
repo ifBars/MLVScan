@@ -127,7 +127,7 @@ namespace MLVScan.BepInEx
             AddIfPresent(Path.Combine(_environment.GameRootDirectory, "UserLibs"));
             AddIfPresent(Path.Combine(_environment.GameRootDirectory, "Mods"));
 
-            foreach (var scanDir in Config.ScanDirectories)
+            foreach (var scanDir in Config.ScanDirectories ?? Array.Empty<string>())
             {
                 AddIfPresent(Path.IsPathRooted(scanDir)
                     ? scanDir

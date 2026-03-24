@@ -30,12 +30,13 @@ namespace MLVScan.Services
         private const long MaxAssemblyScanBytes = 256L * 1024 * 1024;
 
         private readonly IFileIdentityProvider _fileIdentityProvider;
-        private readonly IScanCacheStore _cacheStore;
         private readonly IResolverCatalogProvider _resolverCatalogProvider;
         private readonly LoaderScanTelemetryHub _telemetry;
         private readonly TargetAssemblyScopeFilter _scopeFilter = new TargetAssemblyScopeFilter();
         private readonly string _scannerFingerprint;
         private readonly string _selfAssemblyHash;
+        private IScanCacheStore _cacheStore;
+        private bool _cacheUnavailable;
 
         protected PluginScannerBase(
             IScanLogger logger,
@@ -53,7 +54,6 @@ namespace MLVScan.Services
 
             _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _fileIdentityProvider = new CrossPlatformFileIdentityProvider();
-            _cacheStore = CreateDefaultCacheStore(environment);
             _resolverCatalogProvider = resolverProvider as IResolverCatalogProvider;
 
             var rules = RuleFactory.CreateDefaultRules().ToArray();
@@ -148,18 +148,23 @@ namespace MLVScan.Services
                 }
             }
 
-            if (Config.EnableScanCache)
+            var cacheStore = GetCacheStore();
+            if (cacheStore != null)
             {
-                _cacheStore.PruneMissingEntries(activeCanonicalPaths);
+                cacheStore.PruneMissingEntries(activeCanonicalPaths);
             }
 
             OnScanComplete(results);
             _telemetry.CompleteRun(effectiveRoots.Count, candidateFiles.Length, results.Count);
 
-            var artifactPath = _telemetry.TryWriteArtifact(Path.Combine(Environment.DataDirectory, "Diagnostics"));
-            if (!string.IsNullOrWhiteSpace(artifactPath))
+            var dataDirectory = TryGetDataDirectory();
+            if (!string.IsNullOrWhiteSpace(dataDirectory))
             {
-                Logger.Debug($"Wrote loader profile artifact: {artifactPath}");
+                var artifactPath = _telemetry.TryWriteArtifact(Path.Combine(dataDirectory, "Diagnostics"));
+                if (!string.IsNullOrWhiteSpace(artifactPath))
+                {
+                    Logger.Debug($"Wrote loader profile artifact: {artifactPath}");
+                }
             }
 
             return results;
@@ -276,14 +281,20 @@ namespace MLVScan.Services
             string resolverFingerprint,
             Dictionary<string, ScannedPluginResult> results)
         {
-            var entry = _cacheStore.TryGetByPath(probe.CanonicalPath);
+            var cacheStore = GetCacheStore();
+            if (cacheStore == null)
+            {
+                return false;
+            }
+
+            var entry = cacheStore.TryGetByPath(probe.CanonicalPath);
             if (entry == null)
             {
                 _telemetry.IncrementCounter("Cache.PathMiss");
                 return false;
             }
 
-            if (!entry.CanReuseStrictly(probe, _scannerFingerprint, resolverFingerprint, _cacheStore.CanTrustCleanEntries))
+            if (!entry.CanReuseStrictly(probe, _scannerFingerprint, resolverFingerprint, cacheStore.CanTrustCleanEntries))
             {
                 _telemetry.IncrementCounter("Cache.PathRejected");
                 return false;
@@ -301,7 +312,13 @@ namespace MLVScan.Services
             string resolverFingerprint,
             Dictionary<string, ScannedPluginResult> results)
         {
-            var entry = _cacheStore.TryGetByHash(hash);
+            var cacheStore = GetCacheStore();
+            if (cacheStore == null)
+            {
+                return false;
+            }
+
+            var entry = cacheStore.TryGetByHash(hash);
             if (entry == null)
             {
                 _telemetry.IncrementCounter("Cache.HashMiss");
@@ -316,7 +333,7 @@ namespace MLVScan.Services
             }
 
             if (entry.Result?.ThreatVerdict?.Kind == ThreatVerdictKind.None &&
-                !_cacheStore.CanTrustCleanEntries)
+                !cacheStore.CanTrustCleanEntries)
             {
                 _telemetry.IncrementCounter("Cache.HashRejected");
                 return false;
@@ -373,12 +390,13 @@ namespace MLVScan.Services
 
         private void UpsertCacheEntry(FileProbe probe, string hash, string resolverFingerprint, ScannedPluginResult result)
         {
-            if (!Config.EnableScanCache)
+            var cacheStore = GetCacheStore();
+            if (cacheStore == null)
             {
                 return;
             }
 
-            _cacheStore.Upsert(new ScanCacheEntry
+            cacheStore.Upsert(new ScanCacheEntry
             {
                 CanonicalPath = probe.CanonicalPath,
                 RealPath = probe.OriginalPath,
@@ -403,10 +421,48 @@ namespace MLVScan.Services
             return _resolverCatalogProvider.ContextFingerprint;
         }
 
+        private IScanCacheStore GetCacheStore()
+        {
+            if (!Config.EnableScanCache || _cacheUnavailable)
+            {
+                return null;
+            }
+
+            if (_cacheStore != null)
+            {
+                return _cacheStore;
+            }
+
+            try
+            {
+                _cacheStore = CreateDefaultCacheStore(Environment);
+            }
+            catch (Exception ex)
+            {
+                _cacheUnavailable = true;
+                Logger.Warning($"Scan cache unavailable; continuing without cache reuse: {ex.Message}");
+            }
+
+            return _cacheStore;
+        }
+
         private bool IsExactSelfCopy(string hash)
         {
             return !string.IsNullOrWhiteSpace(_selfAssemblyHash) &&
                    _selfAssemblyHash.Equals(hash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string TryGetDataDirectory()
+        {
+            try
+            {
+                return Environment.DataDirectory;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning($"Diagnostics output unavailable: {ex.Message}");
+                return null;
+            }
         }
 
         private static string GetSelfAssemblyHash(string selfAssemblyPath)
