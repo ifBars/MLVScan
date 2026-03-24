@@ -112,20 +112,28 @@ namespace MLVScan.Services.Caching
         {
             Directory.CreateDirectory(Path.GetDirectoryName(secretPath)!);
             canTrustCleanEntries = false;
+            var foundInvalidSecret = false;
 
             if (File.Exists(secretPath))
             {
                 var existingSecret = File.ReadAllBytes(secretPath);
                 if (IsValidSecret(existingSecret))
                 {
+                    canTrustCleanEntries = true;
                     return existingSecret;
                 }
 
                 DeleteInvalidSecret(secretPath);
+                foundInvalidSecret = true;
             }
 
             var secret = CreateRandomSecret();
             AtomicFileStorage.WriteAllBytes(secretPath, secret);
+            if (!foundInvalidSecret)
+            {
+                canTrustCleanEntries = true;
+            }
+
             return secret;
         }
 
