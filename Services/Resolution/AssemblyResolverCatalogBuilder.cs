@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace MLVScan.Services.Resolution
@@ -41,8 +42,9 @@ namespace MLVScan.Services.Resolution
                         candidates.Add(candidate);
 
                         var fileInfo = new FileInfo(fullPath);
+                        var contentFingerprint = ComputeContentFingerprint(fullPath);
                         fingerprintLines.Add(
-                            $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{comparisonKey}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}");
+                            $"{candidate.SimpleName}|{candidate.Version}|{candidate.PublicKeyToken}|{root.Priority}|{comparisonKey}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}|{contentFingerprint}");
                     }
                     catch (UnauthorizedAccessException)
                     {
@@ -104,6 +106,14 @@ namespace MLVScan.Services.Resolution
         {
             var payload = string.Join("\n", lines.OrderBy(static line => line, StringComparer.Ordinal));
             return Services.HashUtility.CalculateBytesHash(Encoding.UTF8.GetBytes(payload));
+        }
+
+        private static string ComputeContentFingerprint(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var sha256 = SHA256.Create();
+            var hash = sha256.ComputeHash(stream);
+            return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
         }
 
         private static string FormatPublicKeyToken(byte[] token)

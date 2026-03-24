@@ -243,6 +243,11 @@ namespace MLVScan.Services
                 return;
             }
 
+            if (IsHashWhitelisted(fileName, hash))
+            {
+                return;
+            }
+
             if (Config.EnableScanCache &&
                 TryReuseByHashCache(hash, probe, filePath, resolverFingerprint, results))
             {
@@ -356,10 +361,8 @@ namespace MLVScan.Services
                 return;
             }
 
-            if (ConfigManager.IsHashWhitelisted(scannedResult.FileHash))
+            if (IsHashWhitelisted(fileName, scannedResult.FileHash))
             {
-                Logger.Debug($"Skipping whitelisted: {fileName}");
-                _telemetry.IncrementCounter("Files.Whitelisted");
                 return;
             }
 
@@ -386,6 +389,18 @@ namespace MLVScan.Services
             }
 
             Logger.Warning($"Detected suspicious behavior in {fileName} - {scannedResult.ThreatVerdict.Title}");
+        }
+
+        private bool IsHashWhitelisted(string fileName, string fileHash)
+        {
+            if (!ConfigManager.IsHashWhitelisted(fileHash))
+            {
+                return false;
+            }
+
+            Logger.Debug($"Skipping whitelisted: {fileName}");
+            _telemetry.IncrementCounter("Files.Whitelisted");
+            return true;
         }
 
         private void UpsertCacheEntry(FileProbe probe, string hash, string resolverFingerprint, ScannedPluginResult result)
