@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using MLVScan.Abstractions;
 using MLVScan.Models;
@@ -218,23 +219,38 @@ namespace MLVScan.Services
                 return;
             }
 
-            if (probe.Stream.CanSeek && probe.Stream.Length > MaxAssemblyScanBytes)
+            var isOversized = probe.Stream.CanSeek && probe.Stream.Length > MaxAssemblyScanBytes;
+            var bytesRead = 0L;
+            byte[] assemblyBytes = null;
+            string hash;
+
+            if (isOversized)
             {
                 Logger.Warning(
-                    $"Skipping {fileName} because it is larger than the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB.");
+                    $"Flagging {fileName} because it exceeds the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB and cannot be fully analyzed in memory.");
                 _telemetry.IncrementCounter("Files.TooLarge");
-                _telemetry.RecordFileSample(filePath, fileStart, "skip:too-large", 0, 0);
-                return;
+                bytesRead = probe.Stream.CanSeek ? probe.Stream.Length : 0L;
+                if (bytesRead > 0)
+                {
+                    _telemetry.IncrementCounter("Bytes.Read", bytesRead);
+                }
+
+                var hashStart = _telemetry.StartTimestamp();
+                hash = CalculateStreamHash(probe.Stream);
+                _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
             }
+            else
+            {
+                var readStart = _telemetry.StartTimestamp();
+                assemblyBytes = ReadFileBytes(probe.Stream);
+                _telemetry.AddPhaseElapsed("File.ReadBytes", readStart);
+                bytesRead = assemblyBytes.Length;
+                _telemetry.IncrementCounter("Bytes.Read", bytesRead);
 
-            var readStart = _telemetry.StartTimestamp();
-            var assemblyBytes = ReadFileBytes(probe.Stream);
-            _telemetry.AddPhaseElapsed("File.ReadBytes", readStart);
-            _telemetry.IncrementCounter("Bytes.Read", assemblyBytes.Length);
-
-            var hashStart = _telemetry.StartTimestamp();
-            var hash = HashUtility.CalculateBytesHash(assemblyBytes);
-            _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
+                var hashStart = _telemetry.StartTimestamp();
+                hash = HashUtility.CalculateBytesHash(assemblyBytes);
+                _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
+            }
 
             if (IsExactSelfCopy(hash))
             {
@@ -251,7 +267,7 @@ namespace MLVScan.Services
             if (Config.EnableScanCache &&
                 TryReuseByHashCache(hash, probe, filePath, resolverFingerprint, results))
             {
-                _telemetry.RecordFileSample(filePath, fileStart, "cache-hit:hash", assemblyBytes.Length, 0);
+                _telemetry.RecordFileSample(filePath, fileStart, "cache-hit:hash", bytesRead, 0);
                 return;
             }
 
@@ -260,7 +276,16 @@ namespace MLVScan.Services
             {
                 UpsertCacheEntry(probe, hash, resolverFingerprint, exactHashResult);
                 RegisterFlaggedResultIfNeeded(fileName, exactHashResult, results);
-                _telemetry.RecordFileSample(filePath, fileStart, "hash-only-known-sample", assemblyBytes.Length, 0);
+                _telemetry.RecordFileSample(filePath, fileStart, "hash-only-known-sample", bytesRead, 0);
+                return;
+            }
+
+            if (isOversized)
+            {
+                var oversizedResult = CreateOversizedAssemblyResult(filePath, hash, bytesRead);
+                UpsertCacheEntry(probe, hash, resolverFingerprint, oversizedResult);
+                RegisterFlaggedResultIfNeeded(fileName, oversizedResult, results);
+                _telemetry.RecordFileSample(filePath, fileStart, "oversized:flagged", bytesRead, oversizedResult.Findings.Count);
                 return;
             }
 
@@ -277,7 +302,7 @@ namespace MLVScan.Services
             UpsertCacheEntry(probe, hash, resolverFingerprint, scannedResult);
 
             RegisterFlaggedResultIfNeeded(fileName, scannedResult, results);
-            _telemetry.RecordFileSample(filePath, fileStart, "scan", assemblyBytes.Length, actualFindings.Count);
+            _telemetry.RecordFileSample(filePath, fileStart, "scan", bytesRead, actualFindings.Count);
         }
 
         private bool TryReuseByPathCache(
@@ -423,6 +448,39 @@ namespace MLVScan.Services
             });
         }
 
+        private static ScannedPluginResult CreateOversizedAssemblyResult(string filePath, string fileHash, long fileSizeBytes)
+        {
+            var limitMb = MaxAssemblyScanBytes / (1024 * 1024);
+            var sizeMb = fileSizeBytes > 0
+                ? Math.Ceiling(fileSizeBytes / (1024d * 1024d))
+                : 0d;
+            var findings = new List<ScanFinding>
+            {
+                new ScanFinding(
+                    "Loader scan preflight",
+                    $"Assembly exceeds the loader scan limit ({sizeMb:0.#} MB > {limitMb} MB), so full IL analysis was skipped and the file is being treated as suspicious until reviewed.",
+                    Severity.High)
+                {
+                    RuleId = "OversizedAssembly"
+                }
+            };
+
+            return new ScannedPluginResult
+            {
+                FilePath = filePath ?? string.Empty,
+                FileHash = fileHash ?? string.Empty,
+                Findings = findings,
+                ThreatVerdict = new ThreatVerdictInfo
+                {
+                    Kind = ThreatVerdictKind.Suspicious,
+                    Title = "Oversized assembly requires manual review",
+                    Summary = "This file exceeds the loader scan size limit, so full IL analysis was skipped and it is being treated as suspicious until reviewed.",
+                    Confidence = 0d,
+                    ShouldBypassThreshold = false
+                }
+            };
+        }
+
         private string BuildResolverCatalog(IReadOnlyCollection<string> effectiveRoots)
         {
             if (_resolverCatalogProvider == null)
@@ -503,6 +561,14 @@ namespace MLVScan.Services
             using var memory = new MemoryStream(stream.CanSeek ? (int)stream.Length : 0);
             stream.CopyTo(memory);
             return memory.ToArray();
+        }
+
+        private static string CalculateStreamHash(FileStream stream)
+        {
+            stream.Position = 0;
+            using var sha256 = SHA256.Create();
+            var hash = sha256.ComputeHash(stream);
+            return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
         }
 
         private static IScanCacheStore CreateDefaultCacheStore(IPlatformEnvironment environment)
