@@ -16,13 +16,20 @@ namespace MLVScan.Services
         public string DisabledPath { get; }
         public string FileHash { get; }
         public ThreatVerdictInfo ThreatVerdict { get; }
+        public ScanStatusInfo ScanStatus { get; }
 
-        public DisabledPluginInfo(string originalPath, string disabledPath, string fileHash, ThreatVerdictInfo threatVerdict)
+        public DisabledPluginInfo(
+            string originalPath,
+            string disabledPath,
+            string fileHash,
+            ThreatVerdictInfo threatVerdict,
+            ScanStatusInfo scanStatus)
         {
             OriginalPath = originalPath;
             DisabledPath = disabledPath;
             FileHash = fileHash;
             ThreatVerdict = threatVerdict ?? new ThreatVerdictInfo();
+            ScanStatus = scanStatus ?? new ScanStatusInfo();
         }
     }
 
@@ -63,10 +70,10 @@ namespace MLVScan.Services
         protected virtual void OnPluginDisabled(string originalPath, string disabledPath, string hash) { }
 
         /// <summary>
-        /// Disables plugins that meet severity and threshold criteria.
+        /// Disables plugins that meet the configured verdict or incomplete-scan policy.
         /// </summary>
         /// <param name="scanResults">Dictionary of file paths to their findings.</param>
-        /// <param name="forceDisable">If true, disables even if auto-disable is off.</param>
+        /// <param name="forceDisable">If true, disables even if auto-disable is off, while still honoring verdict policy toggles.</param>
         public List<DisabledPluginInfo> DisableSuspiciousPlugins(
             Dictionary<string, ScannedPluginResult> scanResults,
             bool forceDisable = false)
@@ -81,27 +88,24 @@ namespace MLVScan.Services
 
             foreach (var (pluginPath, scanResult) in scanResults)
             {
-                var findings = scanResult?.Findings ?? new List<ScanFinding>();
-                var severeFindings = findings
-                    .Where(f => (int)f.Severity >= (int)Config.MinSeverityForDisable)
-                    .ToList();
-                var shouldBypassThreshold = scanResult?.ThreatVerdict?.ShouldBypassThreshold == true;
-
-                if (!shouldBypassThreshold && severeFindings.Count == 0)
+                if (!ScanResultFacts.RequiresAttention(scanResult))
                 {
-                    Logger.Info($"Plugin {Path.GetFileName(pluginPath)} has findings but none meet severity threshold ({Config.MinSeverityForDisable})");
                     continue;
                 }
 
-                if (!forceDisable && !shouldBypassThreshold && severeFindings.Count < Config.SuspiciousThreshold)
+                var verdict = scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
+                var scanStatus = scanResult?.ScanStatus ?? new ScanStatusInfo();
+
+                if (!ShouldDisable(scanResult))
                 {
-                    Logger.Info($"Plugin {Path.GetFileName(pluginPath)} below suspicious threshold");
+                    Logger.Info(
+                        $"Plugin {Path.GetFileName(pluginPath)} requires attention ({GetOutcomeTitle(scanResult)}) but blocking for this outcome is disabled in configuration");
                     continue;
                 }
 
                 try
                 {
-                    var info = DisablePlugin(pluginPath, scanResult?.ThreatVerdict);
+                    var info = DisablePlugin(pluginPath, verdict, scanStatus);
                     if (info != null)
                     {
                         disabledPlugins.Add(info);
@@ -117,10 +121,49 @@ namespace MLVScan.Services
             return disabledPlugins;
         }
 
+        private bool ShouldDisable(ScannedPluginResult scanResult)
+        {
+            var verdict = scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
+            return verdict.Kind switch
+            {
+                ThreatVerdictKind.KnownMaliciousSample => Config.BlockKnownThreats,
+                ThreatVerdictKind.KnownMalwareFamily => Config.BlockKnownThreats,
+                ThreatVerdictKind.Suspicious => Config.BlockSuspicious,
+                _ => ShouldDisable(scanResult?.ScanStatus ?? new ScanStatusInfo())
+            };
+        }
+
+        private bool ShouldDisable(ScanStatusInfo scanStatus)
+        {
+            return (scanStatus?.Kind ?? ScanStatusKind.Complete) switch
+            {
+                ScanStatusKind.RequiresReview => Config.BlockIncompleteScans,
+                _ => false
+            };
+        }
+
+        private static string GetOutcomeTitle(ScannedPluginResult scanResult)
+        {
+            if (ScanResultFacts.HasThreatVerdict(scanResult))
+            {
+                return scanResult.ThreatVerdict.Title;
+            }
+
+            if (ScanResultFacts.RequiresManualReview(scanResult))
+            {
+                return scanResult.ScanStatus.Title;
+            }
+
+            return "No action required";
+        }
+
         /// <summary>
         /// Disables a single plugin by renaming it.
         /// </summary>
-        protected virtual DisabledPluginInfo DisablePlugin(string pluginPath, ThreatVerdictInfo threatVerdict)
+        protected virtual DisabledPluginInfo DisablePlugin(
+            string pluginPath,
+            ThreatVerdictInfo threatVerdict,
+            ScanStatusInfo scanStatus)
         {
             var fileHash = HashUtility.CalculateFileHash(pluginPath);
             var disabledPath = GetDisabledPath(pluginPath);
@@ -135,7 +178,7 @@ namespace MLVScan.Services
             File.Move(pluginPath, disabledPath);
 
             Logger.Warning($"BLOCKED: {Path.GetFileName(pluginPath)}");
-            return new DisabledPluginInfo(pluginPath, disabledPath, fileHash, threatVerdict);
+            return new DisabledPluginInfo(pluginPath, disabledPath, fileHash, threatVerdict, scanStatus);
         }
     }
 }

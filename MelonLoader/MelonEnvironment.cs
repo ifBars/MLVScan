@@ -18,7 +18,7 @@ namespace MLVScan.MelonLoader
         public MelonPlatformEnvironment()
         {
             _gameRoot = MelonEnvironment.GameRootDirectory;
-            _dataDir = Path.Combine(_gameRoot, "MLVScan");
+            _dataDir = Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan");
             _reportsDir = Path.Combine(_dataDir, "Reports");
         }
 
@@ -34,8 +34,7 @@ namespace MLVScan.MelonLoader
         {
             get
             {
-                if (!Directory.Exists(_dataDir))
-                    Directory.CreateDirectory(_dataDir);
+                EnsureDataDirectory();
                 return _dataDir;
             }
         }
@@ -44,8 +43,12 @@ namespace MLVScan.MelonLoader
         {
             get
             {
+                EnsureDataDirectory();
                 if (!Directory.Exists(_reportsDir))
+                {
                     Directory.CreateDirectory(_reportsDir);
+                }
+
                 return _reportsDir;
             }
         }
@@ -92,5 +95,13 @@ namespace MLVScan.MelonLoader
         }
 
         public string PlatformName => "MelonLoader";
+
+        private void EnsureDataDirectory()
+        {
+            if (!Directory.Exists(_dataDir))
+            {
+                Directory.CreateDirectory(_dataDir);
+            }
+        }
     }
 }

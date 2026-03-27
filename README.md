@@ -32,6 +32,16 @@ Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 2. **Install** by dropping it into your game's `BepInEx/plugins` folder.
 3. **Play!** MLVScan automatically scans plugins before they load.
 
+## Blocking Policy
+
+MLVScan now separates **threat verdicts** from **scan completeness**:
+
+- `BlockKnownThreats = true` blocks exact malicious sample matches and known malware-family matches.
+- `BlockSuspicious = true` blocks unknown correlated suspicious behavior that may still be a false positive.
+- `BlockIncompleteScans = false` leaves incomplete scans as **manual review required** by default instead of blocking them automatically.
+
+Current loader note: assemblies larger than **256 MB** are still SHA256 hashed and checked for exact known-malicious sample matches, but full IL analysis is skipped to avoid loading the entire file into memory during startup. Those files are reported as manual-review items unless you explicitly enable `BlockIncompleteScans`.
+
 ## Optional Report Upload
 
 MLVScan can optionally send scan reports to the MLVScan API to help fix false positives. This is **off by default** and requires your explicit consent.
@@ -39,7 +49,7 @@ MLVScan can optionally send scan reports to the MLVScan API to help fix false po
 - **MelonLoader:** Set `EnableReportUpload = true` in `MelonPreferences.cfg` under `[MLVScan]`
 - **BepInEx:** Set `"EnableReportUpload": true` in `BepInEx/config/MLVScan.json`
 
-The first time a suspicious mod is detected, MLVScan shows a one-time message. Local reports are always generated regardless of upload settings.
+The first time a suspicious or known-malicious mod is detected, MLVScan shows a one-time message. Local reports are always generated regardless of upload settings.
 
 ## 📚 Documentation
 

@@ -43,6 +43,7 @@ namespace MLVScan.BepInEx
             private readonly ReportUploadService _reportUploadService;
             private string _pendingUploadPath = string.Empty;
             private string _pendingUploadName = string.Empty;
+            private string _pendingUploadVerdictKind = string.Empty;
 
             public bool ShouldShowPopup { get; private set; }
 
@@ -86,6 +87,7 @@ namespace MLVScan.BepInEx
                 _pendingUploadName = string.IsNullOrWhiteSpace(_pendingUploadPath)
                     ? "flagged mod"
                     : Path.GetFileName(_pendingUploadPath);
+                _pendingUploadVerdictKind = config.PendingReportUploadVerdictKind ?? string.Empty;
             }
 
             public void DrawGui()
@@ -103,7 +105,7 @@ namespace MLVScan.BepInEx
                 GUI.Box(new Rect(0f, 0f, Screen.width, Screen.height), string.Empty);
                 GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
                 GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
-                    $"MLVScan flagged {_pendingUploadName} as suspicious and disabled it.\n\n" +
+                    ConsentMessageHelper.GetUploadConsentMessage(_pendingUploadName, _pendingUploadVerdictKind) + "\n\n" +
                     "Would you like to upload this file to the MLVScan API for human review?\n\n" +
                     "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
                     "No: do not upload and do not show this prompt again.");
@@ -127,6 +129,7 @@ namespace MLVScan.BepInEx
                 config.ReportUploadConsentAsked = true;
                 config.ReportUploadConsentPending = false;
                 config.PendingReportUploadPath = string.Empty;
+                config.PendingReportUploadVerdictKind = string.Empty;
                 config.EnableReportUpload = approved;
                 _configManager.SaveConfig(config);
 

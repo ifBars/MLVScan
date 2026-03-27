@@ -1,6 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using MelonLoader.Utils;
-using MLVScan.Abstractions;
-using Mono.Cecil;
+using MLVScan.Services.Diagnostics;
+using MLVScan.Services.Resolution;
 
 namespace MLVScan.Adapters
 {
@@ -8,57 +11,53 @@ namespace MLVScan.Adapters
     /// Provides assembly resolution for game assemblies in MelonLoader context.
     /// Adds the game's Managed folder and MelonLoader folder to the search paths.
     /// </summary>
-    public class GameAssemblyResolverProvider : IAssemblyResolverProvider
+    public class GameAssemblyResolverProvider : CatalogingAssemblyResolverProviderBase
     {
-        public IAssemblyResolver CreateResolver()
+        public GameAssemblyResolverProvider(LoaderScanTelemetryHub telemetry)
+            : base(telemetry)
         {
-            var resolver = new DefaultAssemblyResolver();
+        }
+
+        protected override IEnumerable<ResolverRoot> GetStableRoots()
+        {
+            var roots = new List<ResolverRoot>();
 
             try
             {
-                // Add the game's Managed folder (contains Unity assemblies)
                 var managedPath = Path.Combine(
                     MelonEnvironment.GameRootDirectory,
                     $"{Path.GetFileNameWithoutExtension(MelonEnvironment.GameExecutablePath)}_Data",
                     "Managed");
 
                 if (Directory.Exists(managedPath))
-                    resolver.AddSearchDirectory(managedPath);
+                {
+                    roots.Add(new ResolverRoot(managedPath, 0));
+                }
 
-                // Add MelonLoader's assembly folder
-                var melonLoaderPath = Path.Combine(
+                var melonLoaderNet35Path = Path.Combine(
                     MelonEnvironment.GameRootDirectory,
                     "MelonLoader",
                     "net35");
+                if (Directory.Exists(melonLoaderNet35Path))
+                {
+                    roots.Add(new ResolverRoot(melonLoaderNet35Path, 5));
+                }
 
-                if (Directory.Exists(melonLoaderPath))
-                    resolver.AddSearchDirectory(melonLoaderPath);
-
-                // Also check for net6 folder (for newer MelonLoader versions)
                 var melonLoaderNet6Path = Path.Combine(
                     MelonEnvironment.GameRootDirectory,
                     "MelonLoader",
                     "net6");
-
                 if (Directory.Exists(melonLoaderNet6Path))
-                    resolver.AddSearchDirectory(melonLoaderNet6Path);
-
-                // Add Mods directory (for mod-to-mod references)
-                var modsPath = MelonEnvironment.ModsDirectory;
-                if (Directory.Exists(modsPath))
-                    resolver.AddSearchDirectory(modsPath);
-
-                // Add Plugins directory (for plugin-to-plugin references)
-                var pluginsPath = MelonEnvironment.PluginsDirectory;
-                if (Directory.Exists(pluginsPath))
-                    resolver.AddSearchDirectory(pluginsPath);
+                {
+                    roots.Add(new ResolverRoot(melonLoaderNet6Path, 6));
+                }
             }
             catch (Exception)
             {
-                // If we can't set up the resolver, just use the default
+                return roots;
             }
 
-            return resolver;
+            return roots;
         }
     }
 }

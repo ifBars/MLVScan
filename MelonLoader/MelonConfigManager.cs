@@ -16,6 +16,10 @@ namespace MLVScan.MelonLoader
 
         private readonly MelonPreferences_Entry<bool> _enableAutoScan;
         private readonly MelonPreferences_Entry<bool> _enableAutoDisable;
+        private readonly MelonPreferences_Entry<bool> _enableScanCache;
+        private readonly MelonPreferences_Entry<bool> _blockKnownThreats;
+        private readonly MelonPreferences_Entry<bool> _blockSuspicious;
+        private readonly MelonPreferences_Entry<bool> _blockIncompleteScans;
         private readonly MelonPreferences_Entry<string> _minSeverityForDisable;
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
         private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
@@ -26,8 +30,15 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentAsked;
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentPending;
         private readonly MelonPreferences_Entry<string> _pendingReportUploadPath;
+        private readonly MelonPreferences_Entry<string> _pendingReportUploadVerdictKind;
         private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
         private readonly MelonPreferences_Entry<string[]> _uploadedReportHashes;
+        private readonly MelonPreferences_Entry<bool> _includeMods;
+        private readonly MelonPreferences_Entry<bool> _includePlugins;
+        private readonly MelonPreferences_Entry<bool> _includeUserLibs;
+        private readonly MelonPreferences_Entry<bool> _includeThunderstoreProfiles;
+        private readonly MelonPreferences_Entry<string[]> _additionalTargetRoots;
+        private readonly MelonPreferences_Entry<string[]> _excludedTargetRoots;
 
         public MelonConfigManager(MelonLogger.Instance logger)
         {
@@ -41,16 +52,28 @@ namespace MLVScan.MelonLoader
                     description: "Whether to scan mods at startup");
 
                 _enableAutoDisable = _category.CreateEntry("EnableAutoDisable", true,
-                    description: "Whether to disable suspicious mods");
+                    description: "Whether to automatically disable mods that meet the active blocking policy");
+
+                _enableScanCache = _category.CreateEntry("EnableScanCache", true,
+                    description: "Whether to reuse scan results for unchanged files using a local authenticated cache");
+
+                _blockKnownThreats = _category.CreateEntry("BlockKnownThreats", true,
+                    description: "Whether to block mods that match a known threat family or exact malicious sample");
+
+                _blockSuspicious = _category.CreateEntry("BlockSuspicious", true,
+                    description: "Whether to block suspicious unknown behavior that may still be a false positive");
+
+                _blockIncompleteScans = _category.CreateEntry("BlockIncompleteScans", false,
+                    description: "Whether to block mods that could not be fully analyzed and require manual review");
 
                 _minSeverityForDisable = _category.CreateEntry("MinSeverityForDisable", "Medium",
-                    description: "Minimum severity level to trigger disabling (Low, Medium, High, Critical)");
+                    description: "Legacy setting from the old severity-based blocking model (no longer used for blocking)");
 
                 _scanDirectories = _category.CreateEntry("ScanDirectories", new[] { "Mods", "Plugins" },
                     description: "Directories to scan for mods");
 
                 _suspiciousThreshold = _category.CreateEntry("SuspiciousThreshold", 1,
-                    description: "How many suspicious findings required before disabling a mod");
+                    description: "Legacy setting from the old threshold-based blocking model (no longer used for blocking)");
 
                 _whitelistedHashes = _category.CreateEntry("WhitelistedHashes", Array.Empty<string>(),
                     description: "List of mod SHA256 hashes to skip when scanning");
@@ -73,14 +96,39 @@ namespace MLVScan.MelonLoader
                 _pendingReportUploadPath = _category.CreateEntry("PendingReportUploadPath", string.Empty,
                     description: "Suspicious mod path waiting for upload consent (internal)");
 
+                _pendingReportUploadVerdictKind = _category.CreateEntry("PendingReportUploadVerdictKind", string.Empty,
+                    description: "Threat verdict kind for the pending upload consent item (internal)");
+
                 _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
                     description: "API base URL for report uploads");
 
                 _uploadedReportHashes = _category.CreateEntry("UploadedReportHashes", Array.Empty<string>(),
                     description: "List of assembly SHA256 hashes already uploaded to the MLVScan API (internal)");
 
+                _includeMods = _category.CreateEntry("IncludeMods", true,
+                    description: "Whether to include Mods folders in the target scan scope");
+
+                _includePlugins = _category.CreateEntry("IncludePlugins", true,
+                    description: "Whether to include Plugins folders in the target scan scope");
+
+                _includeUserLibs = _category.CreateEntry("IncludeUserLibs", true,
+                    description: "Whether to include UserLibs folders in the target scan scope");
+
+                _includeThunderstoreProfiles = _category.CreateEntry("IncludeThunderstoreProfiles", true,
+                    description: "Whether to include Thunderstore profile folders in the target scan scope");
+
+                _additionalTargetRoots = _category.CreateEntry("AdditionalTargetRoots", Array.Empty<string>(),
+                    description: "Additional absolute paths to include in the target scan scope");
+
+                _excludedTargetRoots = _category.CreateEntry("ExcludedTargetRoots", Array.Empty<string>(),
+                    description: "Absolute paths to exclude from the target scan scope");
+
                 _enableAutoScan.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableAutoDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _enableScanCache.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockKnownThreats.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockSuspicious.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _blockIncompleteScans.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -91,8 +139,15 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentAsked.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadConsentPending.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _pendingReportUploadPath.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _pendingReportUploadVerdictKind.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadApiBaseUrl.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _uploadedReportHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _includeMods.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _includePlugins.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _includeUserLibs.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _includeThunderstoreProfiles.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _additionalTargetRoots.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _excludedTargetRoots.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
 
@@ -126,6 +181,10 @@ namespace MLVScan.MelonLoader
             {
                 EnableAutoScan = _enableAutoScan.Value,
                 EnableAutoDisable = _enableAutoDisable.Value,
+                EnableScanCache = _enableScanCache.Value,
+                BlockKnownThreats = _blockKnownThreats.Value,
+                BlockSuspicious = _blockSuspicious.Value,
+                BlockIncompleteScans = _blockIncompleteScans.Value,
                 MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
                 SuspiciousThreshold = _suspiciousThreshold.Value,
@@ -139,8 +198,16 @@ namespace MLVScan.MelonLoader
                 ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
                 ReportUploadConsentPending = _reportUploadConsentPending.Value,
                 PendingReportUploadPath = _pendingReportUploadPath.Value,
+                PendingReportUploadVerdictKind = _pendingReportUploadVerdictKind.Value,
                 ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value,
-                UploadedReportHashes = NormalizeHashes(_uploadedReportHashes.Value)
+                UploadedReportHashes = NormalizeHashes(_uploadedReportHashes.Value),
+                IncludeMods = _includeMods.Value,
+                IncludePlugins = _includePlugins.Value,
+                IncludeUserLibs = _includeUserLibs.Value,
+                IncludePatchers = false,
+                IncludeThunderstoreProfiles = _includeThunderstoreProfiles.Value,
+                AdditionalTargetRoots = _additionalTargetRoots.Value ?? Array.Empty<string>(),
+                ExcludedTargetRoots = _excludedTargetRoots.Value ?? Array.Empty<string>()
             };
         }
 
@@ -150,6 +217,10 @@ namespace MLVScan.MelonLoader
             {
                 _enableAutoScan.Value = newConfig.EnableAutoScan;
                 _enableAutoDisable.Value = newConfig.EnableAutoDisable;
+                _enableScanCache.Value = newConfig.EnableScanCache;
+                _blockKnownThreats.Value = newConfig.BlockKnownThreats;
+                _blockSuspicious.Value = newConfig.BlockSuspicious;
+                _blockIncompleteScans.Value = newConfig.BlockIncompleteScans;
                 _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
                 _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
@@ -160,8 +231,15 @@ namespace MLVScan.MelonLoader
                 _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
                 _reportUploadConsentPending.Value = newConfig.ReportUploadConsentPending;
                 _pendingReportUploadPath.Value = newConfig.PendingReportUploadPath ?? string.Empty;
+                _pendingReportUploadVerdictKind.Value = newConfig.PendingReportUploadVerdictKind ?? string.Empty;
                 _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
                 _uploadedReportHashes.Value = NormalizeHashes(newConfig.UploadedReportHashes);
+                _includeMods.Value = newConfig.IncludeMods;
+                _includePlugins.Value = newConfig.IncludePlugins;
+                _includeUserLibs.Value = newConfig.IncludeUserLibs;
+                _includeThunderstoreProfiles.Value = newConfig.IncludeThunderstoreProfiles;
+                _additionalTargetRoots.Value = newConfig.AdditionalTargetRoots ?? Array.Empty<string>();
+                _excludedTargetRoots.Value = newConfig.ExcludedTargetRoots ?? Array.Empty<string>();
 
                 MelonPreferences.Save();
 

@@ -10,6 +10,7 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <EnableMlvScanProfiling>false</EnableMlvScanProfiling>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
     <Version>1.6.6</Version>
@@ -18,8 +19,13 @@
     <InformationalVersion>$(Version)</InformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <Configurations>MelonLoader;BepInEx5;BepInEx6Mono;BepInEx6IL2CPP</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableMlvScanProfiling)' == 'true'">
+    <DefineConstants>$(DefineConstants);MLVSCAN_PROFILING</DefineConstants>
   </PropertyGroup>
 
   <!-- ============================================ -->
@@ -36,7 +42,7 @@
   <!-- MelonLoader Configuration                   -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='MelonLoader'">
-    <DefineConstants>MELONLOADER</DefineConstants>
+    <DefineConstants>$(DefineConstants);MELONLOADER</DefineConstants>
     <AssemblyName>MLVScan.MelonLoader</AssemblyName>
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
@@ -45,7 +51,7 @@
   <!-- BepInEx 5.x Configuration                   -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx5'">
-    <DefineConstants>BEPINEX</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX</DefineConstants>
     <AssemblyName>MLVScan.BepInEx5</AssemblyName>
   </PropertyGroup>
 
@@ -53,7 +59,7 @@
   <!-- BepInEx 6.x Mono Configuration              -->
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx6Mono'">
-    <DefineConstants>BEPINEX;BEPINEX6;BEPINEX6_MONO</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_MONO</DefineConstants>
     <AssemblyName>MLVScan.BepInEx6.Mono</AssemblyName>
   </PropertyGroup>
 
@@ -62,7 +68,7 @@
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
     <TargetFramework>net6.0</TargetFramework>
-    <DefineConstants>BEPINEX;BEPINEX6;BEPINEX6_IL2CPP</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_IL2CPP</DefineConstants>
     <AssemblyName>MLVScan.BepInEx6.IL2CPP</AssemblyName>
   </PropertyGroup>
 
@@ -90,7 +96,24 @@
     <Compile Include="Abstractions\IConfigManager.cs" />
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
     <Compile Include="Models\MLVScanConfig.cs" />
+    <Compile Include="Services\ConsentMessageHelper.cs" />
     <Compile Include="Services\PluginScannerBase.cs" />
+    <Compile Include="Services\Caching\AtomicFileStorage.cs" />
+    <Compile Include="Services\Caching\CrossPlatformFileIdentityProvider.cs" />
+    <Compile Include="Services\Caching\IFileIdentityProvider.cs" />
+    <Compile Include="Services\Caching\IScanCacheSigner.cs" />
+    <Compile Include="Services\Caching\IScanCacheStore.cs" />
+    <Compile Include="Services\Caching\RuntimeInformationHelper.cs" />
+    <Compile Include="Services\Caching\ScanCacheEnvelopeCodec.cs" />
+    <Compile Include="Services\Caching\ScanCacheModels.cs" />
+    <Compile Include="Services\Caching\ScanCacheSigner.cs" />
+    <Compile Include="Services\Caching\SecureScanCacheStore.cs" />
+    <Compile Include="Services\Diagnostics\LoaderScanTelemetryHub.cs" />
+    <Compile Include="Services\Resolution\AssemblyResolverCatalogBuilder.cs" />
+    <Compile Include="Services\Resolution\CatalogingAssemblyResolverProviderBase.cs" />
+    <Compile Include="Services\Resolution\IResolverCatalogProvider.cs" />
+    <Compile Include="Services\Resolution\IndexedAssemblyResolver.cs" />
+    <Compile Include="Services\Resolution\ResolverCatalogModels.cs" />
     <Compile Include="Services\Scope\TargetAssemblyScopeFilter.cs" />
     <Compile Include="Services\PluginDisablerBase.cs" />
     <Compile Include="Services\DeveloperReportGenerator.cs" />
@@ -235,11 +258,19 @@
     <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
-    <PackageReference Include="UnityEngine" Version="5.6.1" />
+    <!-- IL2CPP games expose Unity types from module assemblies, not the legacy monolithic UnityEngine.dll. -->
     <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(NuGetPackageRoot)unityengine.coremodule\2020.3.0\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(NuGetPackageRoot)unityengine.imguimodule\2020.3.0\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- ============================================ -->

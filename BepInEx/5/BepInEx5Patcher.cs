@@ -5,6 +5,7 @@ using BepInEx.Logging;
 using Mono.Cecil;
 using MLVScan.BepInEx;
 using MLVScan.BepInEx.Adapters;
+using MLVScan.Services.Diagnostics;
 
 namespace MLVScan.BepInEx5
 {
@@ -59,6 +60,7 @@ namespace MLVScan.BepInEx5
 
                 // Create platform environment
                 var environment = new BepInExPlatformEnvironment();
+                var telemetry = new LoaderScanTelemetryHub();
 
                 // Load or create configuration
                 var configManager = new BepInExConfigManager(_logger, DefaultWhitelistedHashes);
@@ -66,7 +68,7 @@ namespace MLVScan.BepInEx5
 
                 // Create adapters
                 var scanLogger = new BepInExScanLogger(_logger);
-                var resolverProvider = new BepInExAssemblyResolverProvider();
+                var resolverProvider = new BepInExAssemblyResolverProvider(telemetry);
 
                 // Create scanner and disabler
                 var pluginScanner = new BepInExPluginScanner(
@@ -74,7 +76,8 @@ namespace MLVScan.BepInEx5
                     resolverProvider,
                     config,
                     configManager,
-                    environment);
+                    environment,
+                    telemetry);
 
                 var pluginDisabler = new BepInExPluginDisabler(scanLogger, config);
                 var reportGenerator = new BepInExReportGenerator(_logger, config, configManager.GetReportUploadApiBaseUrl(), configManager);
@@ -84,26 +87,35 @@ namespace MLVScan.BepInEx5
 
                 if (scanResults.Count > 0)
                 {
-                    // Disable suspicious plugins
                     var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
+                    var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
-                    // Generate reports for disabled plugins
                     if (disabledPlugins.Count > 0)
                     {
                         // First-run consent fallback for BepInEx 5.
                         if (!config.ReportUploadConsentAsked)
                         {
                             config.ReportUploadConsentAsked = true;
+                            config.PendingReportUploadVerdictKind = disabledPlugins[0].ThreatVerdict?.Kind.ToString() ?? string.Empty;
                             configManager.SaveConfig(config);
                             _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
                             _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
                         }
-
-                        reportGenerator.GenerateReports(disabledPlugins, scanResults);
-
-                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} suspicious plugin(s).");
-                        _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                     }
+
+                    reportGenerator.GenerateReports(disabledPlugins, scanResults);
+
+                    if (disabledPlugins.Count > 0)
+                    {
+                        _logger.LogWarning($"MLVScan blocked {disabledPlugins.Count} plugin(s).");
+                    }
+
+                    if (reviewOnlyCount > 0)
+                    {
+                        _logger.LogWarning($"MLVScan flagged {reviewOnlyCount} plugin(s) for manual review without blocking them.");
+                    }
+
+                    _logger.LogWarning("Check BepInEx/MLVScan/Reports/ for details.");
                 }
                 else if (!config.EnableAutoScan)
                 {
@@ -111,7 +123,7 @@ namespace MLVScan.BepInEx5
                 }
                 else
                 {
-                    _logger.LogInfo("No suspicious plugins detected.");
+                    _logger.LogInfo("No plugins requiring action were detected.");
                 }
 
                 _logger.LogInfo("MLVScan preloader scan complete.");

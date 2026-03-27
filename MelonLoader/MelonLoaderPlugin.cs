@@ -33,6 +33,8 @@ namespace MLVScan.MelonLoader
         private bool _showUploadConsentPopup;
         private string _pendingUploadPath = string.Empty;
         private string _pendingUploadModName = string.Empty;
+        private string _pendingUploadVerdictKind = string.Empty;
+        private bool _pendingUploadWasBlocked = true;
         private List<ScanFinding> _pendingUploadFindings;
 
         private static readonly string[] DefaultWhitelistedHashes =
@@ -109,7 +111,7 @@ namespace MLVScan.MelonLoader
 
             GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
             GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
-                $"MLVScan flagged {_pendingUploadModName} as suspicious and disabled it.\n\n" +
+                ConsentMessageHelper.GetUploadConsentMessage(_pendingUploadModName, _pendingUploadVerdictKind, _pendingUploadWasBlocked) + "\n\n" +
                 "Would you like to upload this file to the MLVScan API for human review?\n\n" +
                 "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
                 "No: do not upload and do not show this prompt again.");
@@ -130,12 +132,28 @@ namespace MLVScan.MelonLoader
             if (_configManager == null)
                 return;
 
-            var currentWhitelist = _configManager.GetWhitelistedHashes();
+            var currentWhitelist = (_configManager.GetWhitelistedHashes() ?? Array.Empty<string>())
+                .Select(hash => hash?.Trim())
+                .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                .Select(hash => hash.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
-            if (currentWhitelist.Length == 0)
+            var mergedWhitelist = currentWhitelist
+                .Concat(DefaultWhitelistedHashes)
+                .Select(hash => hash?.Trim())
+                .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                .Select(hash => hash.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (!mergedWhitelist.SequenceEqual(currentWhitelist, StringComparer.OrdinalIgnoreCase))
             {
-                LoggerInstance.Msg("Initializing default whitelist");
-                _configManager.SetWhitelistedHashes(DefaultWhitelistedHashes);
+                var addedCount = mergedWhitelist.Length - currentWhitelist.Length;
+                LoggerInstance.Msg(currentWhitelist.Length == 0
+                    ? "Initializing default whitelist"
+                    : $"Adding {addedCount} new default whitelist hash(es)");
+                _configManager.SetWhitelistedHashes(mergedWhitelist);
             }
         }
 
@@ -149,31 +167,39 @@ namespace MLVScan.MelonLoader
                     return new Dictionary<string, ScannedPluginResult>();
                 }
 
-                LoggerInstance.Msg("Scanning for suspicious mods...");
+                LoggerInstance.Msg("Scanning mods for threats...");
                 var scanResults = _pluginScanner.ScanAllPlugins(force);
 
-                var filteredResults = scanResults
-                    .Where(kv => kv.Value != null && kv.Value.Findings.Count > 0)
+                var attentionResults = scanResults
+                    .Where(kv => kv.Value != null && ScanResultFacts.RequiresAttention(kv.Value))
                     .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-                if (filteredResults.Count > 0)
+                if (attentionResults.Count > 0)
                 {
-                    var disabledMods = _pluginDisabler.DisableSuspiciousPlugins(filteredResults, force);
+                    var disabledMods = _pluginDisabler.DisableSuspiciousPlugins(attentionResults, force);
                     var disabledCount = disabledMods.Count;
-                    LoggerInstance.Msg($"Disabled {disabledCount} suspicious mods");
+                    var reviewOnlyCount = attentionResults.Count - disabledCount;
 
-                    if (disabledCount <= 0)
-                        return filteredResults;
-                    GenerateDetailedReports(disabledMods, filteredResults);
+                    if (disabledCount > 0)
+                    {
+                        LoggerInstance.Msg($"Disabled {disabledCount} mod(s) that matched the active blocking policy");
+                    }
+
+                    if (reviewOnlyCount > 0)
+                    {
+                        LoggerInstance.Warning($"{reviewOnlyCount} mod(s) require manual review but were not blocked by the current configuration");
+                    }
+
+                    GenerateDetailedReports(disabledMods, attentionResults);
 
                     LoggerInstance.Msg("To whitelist any false positives, add their SHA256 hash to the MLVScan → WhitelistedHashes setting in MelonPreferences.cfg");
                 }
                 else
                 {
-                    LoggerInstance.Msg("No suspicious mods found");
+                    LoggerInstance.Msg("No mods requiring action were found");
                 }
 
-                return filteredResults;
+                return attentionResults;
             }
             catch (Exception ex)
             {
@@ -185,6 +211,8 @@ namespace MLVScan.MelonLoader
         private void GenerateDetailedReports(List<DisabledPluginInfo> disabledMods, Dictionary<string, ScannedPluginResult> scanResults)
         {
             var isDeveloperMode = _configManager?.Config?.Scan?.DeveloperMode ?? false;
+            var disabledByPath = (disabledMods ?? new List<DisabledPluginInfo>())
+                .ToDictionary(info => info.OriginalPath, StringComparer.OrdinalIgnoreCase);
 
             if (isDeveloperMode)
             {
@@ -194,55 +222,75 @@ namespace MLVScan.MelonLoader
             LoggerInstance.Warning("======= DETAILED SCAN REPORT =======");
             LoggerInstance.Msg(PlatformConstants.GetFullVersionInfo());
 
-            foreach (var modInfo in disabledMods)
+            foreach (var (scanPath, scanResult) in scanResults.OrderBy(kv => Path.GetFileName(kv.Key), StringComparer.OrdinalIgnoreCase))
             {
-                var modName = Path.GetFileName(modInfo.OriginalPath);
-                var fileHash = modInfo.FileHash;
-                var accessiblePath = File.Exists(modInfo.DisabledPath) ? modInfo.DisabledPath : modInfo.OriginalPath;
+                disabledByPath.TryGetValue(scanPath, out var modInfo);
 
-                    LoggerInstance.Warning($"BLOCKED MOD: {modName}");
-                    LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
-                    LoggerInstance.Msg("-------------------------------");
-
-                    if (!scanResults.TryGetValue(modInfo.OriginalPath, out var scanResult))
-                    {
-                        LoggerInstance.Error("Could not find scan results for disabled mod");
-                        continue;
-                    }
-
-                    var actualFindings = scanResult?.Findings ?? new List<ScanFinding>();
-                    var threatVerdict = modInfo.ThreatVerdict ?? scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
-
-                    if (actualFindings.Count == 0)
-                    {
-                        LoggerInstance.Msg("No specific suspicious patterns were identified.");
-                        continue;
-                }
-
-                QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings);
-
+                var wasBlocked = modInfo != null;
+                var modName = Path.GetFileName(scanPath);
+                var fileHash = modInfo?.FileHash ?? scanResult?.FileHash ?? string.Empty;
+                var originalPath = modInfo?.OriginalPath ?? scanResult?.FilePath ?? string.Empty;
+                var accessiblePath = wasBlocked && File.Exists(modInfo.DisabledPath)
+                    ? modInfo.DisabledPath
+                    : (scanResult?.FilePath ?? scanPath);
+                var actualFindings = scanResult?.Findings ?? new List<ScanFinding>();
+                var threatVerdict = modInfo?.ThreatVerdict ?? scanResult?.ThreatVerdict ?? new ThreatVerdictInfo();
+                var scanStatus = modInfo?.ScanStatus ?? scanResult?.ScanStatus ?? new ScanStatusInfo();
+                var outcomeLabel = ThreatVerdictTextFormatter.GetOutcomeLabel(scanResult);
+                var outcomeSummary = ThreatVerdictTextFormatter.GetOutcomeSummary(scanResult);
                 var groupedFindings = actualFindings
                     .GroupBy(f => f.Description)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
-                    LoggerInstance.Warning($"Total suspicious patterns found: {actualFindings.Count}");
-                    LoggerInstance.Warning($"Verdict: {ThreatVerdictTextFormatter.GetVerdictLabel(threatVerdict)}");
-                    LoggerInstance.Msg(threatVerdict.Summary);
+                LoggerInstance.Warning($"{(wasBlocked ? "BLOCKED MOD" : "REVIEW REQUIRED")}: {modName}");
+                LoggerInstance.Msg($"SHA256 Hash: {fileHash}");
+                LoggerInstance.Msg("-------------------------------");
 
-                    var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
-                    if (!string.IsNullOrWhiteSpace(familyName))
-                    {
-                        LoggerInstance.Msg($"Family: {familyName}");
-                    }
+                if (actualFindings.Count == 0 &&
+                    threatVerdict.Kind == ThreatVerdictKind.None &&
+                    scanStatus.Kind == ScanStatusKind.Complete)
+                {
+                    LoggerInstance.Msg("No specific findings were retained.");
+                    continue;
+                }
 
-                    var confidenceLabel = ThreatVerdictTextFormatter.GetConfidenceLabel(threatVerdict);
-                    if (!string.IsNullOrWhiteSpace(confidenceLabel))
-                    {
-                        LoggerInstance.Msg($"Confidence: {confidenceLabel}");
-                    }
+                if (threatVerdict.Kind != ThreatVerdictKind.None)
+                {
+                    QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings, threatVerdict, wasBlocked);
+                }
 
-                    var severityCounts = actualFindings
-                        .GroupBy(f => f.Severity)
+                LoggerInstance.Warning($"Total retained findings: {actualFindings.Count}");
+                if (!string.IsNullOrWhiteSpace(outcomeLabel))
+                {
+                    LoggerInstance.Warning($"Outcome: {outcomeLabel}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(outcomeSummary))
+                {
+                    LoggerInstance.Msg(outcomeSummary);
+                }
+
+                if (scanStatus.Kind != ScanStatusKind.Complete)
+                {
+                    LoggerInstance.Msg(wasBlocked
+                        ? "Action: blocked by current incomplete-scan policy."
+                        : "Action: manual review required; not blocked by current config.");
+                }
+
+                var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
+                if (!string.IsNullOrWhiteSpace(familyName))
+                {
+                    LoggerInstance.Msg($"Family: {familyName}");
+                }
+
+                var confidenceLabel = ThreatVerdictTextFormatter.GetConfidenceLabel(threatVerdict);
+                if (!string.IsNullOrWhiteSpace(confidenceLabel))
+                {
+                    LoggerInstance.Msg($"Confidence: {confidenceLabel}");
+                }
+
+                var severityCounts = actualFindings
+                    .GroupBy(f => f.Severity)
                     .OrderByDescending(g => (int)g.Key)
                     .ToDictionary(g => g.Key, g => g.Count());
 
@@ -253,31 +301,31 @@ namespace MLVScan.MelonLoader
                     LoggerInstance.Msg($"  {severityLabel}: {severityCount.Value} issue(s)");
                 }
 
-                    LoggerInstance.Msg("-------------------------------");
+                LoggerInstance.Msg("-------------------------------");
 
-                    var topSignals = ThreatVerdictTextFormatter.GetTopFindingSummaries(actualFindings, 3);
-                    if (topSignals.Count > 0)
+                var topSignals = ThreatVerdictTextFormatter.GetTopFindingSummaries(actualFindings, 3);
+                if (topSignals.Count > 0)
+                {
+                    LoggerInstance.Warning("Top signals:");
+                    foreach (var signal in topSignals)
                     {
-                        LoggerInstance.Warning("Top signals:");
-                        foreach (var signal in topSignals)
-                        {
-                            LoggerInstance.Msg($"  - {signal}");
-                        }
+                        LoggerInstance.Msg($"  - {signal}");
                     }
+                }
 
-                    if (isDeveloperMode)
-                    {
-                        LoggerInstance.Msg("Developer mode is enabled. Full remediation guidance is included in the report file.");
-                    }
+                if (isDeveloperMode)
+                {
+                    LoggerInstance.Msg("Developer mode is enabled. Full remediation guidance is included in the report file.");
+                }
 
-                    LoggerInstance.Msg("Full technical details were written to the saved report file for human review.");
-                    LoggerInstance.Msg("-------------------------------");
-                    DisplaySecurityNotice(modName, threatVerdict);
+                LoggerInstance.Msg("Full technical details were written to the saved report file for human review.");
+                LoggerInstance.Msg("-------------------------------");
+                DisplaySecurityNotice(modName, threatVerdict, scanStatus, wasBlocked);
 
                 try
                 {
-                    // Generate report and prompt files
-                    var reportDirectory = Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
+                    var reportDirectory = _environment?.ReportsDirectory
+                        ?? Path.Combine(MelonEnvironment.UserDataDirectory, "MLVScan", "Reports");
                     if (!Directory.Exists(reportDirectory))
                     {
                         Directory.CreateDirectory(reportDirectory);
@@ -291,7 +339,9 @@ namespace MLVScan.MelonLoader
                         Directory.CreateDirectory(promptDirectory);
                     }
 
-                    if (_configManager?.Config?.DumpFullIlReports == true && _ilDumpService != null)
+                    if (_configManager?.Config?.DumpFullIlReports == true &&
+                        _ilDumpService != null &&
+                        scanStatus.Kind == ScanStatusKind.Complete)
                     {
                         var ilDirectory = Path.Combine(reportDirectory, "IL");
                         var ilDumpPath = Path.Combine(ilDirectory, $"{modName}_{timestamp}.il.txt");
@@ -305,31 +355,43 @@ namespace MLVScan.MelonLoader
                             LoggerInstance.Warning("Failed to dump IL for this mod (see logs for details).");
                         }
                     }
+                    else if (_configManager?.Config?.DumpFullIlReports == true &&
+                             scanStatus.Kind == ScanStatusKind.RequiresReview)
+                    {
+                        LoggerInstance.Warning("Skipped full IL dump because this file was not fully analyzed by the loader.");
+                    }
 
-                    var promptGenerator = _serviceFactory.CreatePromptGenerator();
+                    var promptGenerator = scanStatus.Kind == ScanStatusKind.Complete
+                        ? _serviceFactory.CreatePromptGenerator()
+                        : null;
 
                     using (var writer = new StreamWriter(reportPath))
                     {
                         if (isDeveloperMode && _developerReportGenerator != null)
                         {
-                            // Developer-friendly report
-                            var devReport = _developerReportGenerator.GenerateFileReport(modName, fileHash, actualFindings, threatVerdict);
+                            var devReport = _developerReportGenerator.GenerateFileReport(modName, fileHash, actualFindings, threatVerdict, scanStatus);
                             writer.Write(devReport);
                         }
                         else
                         {
-                            // Standard security report
-                            writer.WriteLine($"MLVScan Security Report");
+                            writer.WriteLine("MLVScan Security Report");
                             writer.WriteLine(PlatformConstants.GetFullVersionInfo());
                             writer.WriteLine($"Generated: {DateTime.Now}");
                             writer.WriteLine($"Mod File: {modName}");
+                            writer.WriteLine($"Outcome: {outcomeLabel}");
+                            if (!string.IsNullOrWhiteSpace(outcomeSummary))
+                            {
+                                writer.WriteLine($"Outcome Summary: {outcomeSummary}");
+                            }
+                            writer.WriteLine($"Action Taken: {(wasBlocked ? "Blocked" : "Manual review required (not blocked by current config)")}");
                             writer.WriteLine($"SHA256 Hash: {fileHash}");
-                            writer.WriteLine($"Original Path: {modInfo.OriginalPath}");
-                            writer.WriteLine($"Disabled Path: {modInfo.DisabledPath}");
+                            writer.WriteLine($"Original Path: {originalPath}");
+                            writer.WriteLine($"{(wasBlocked ? "Disabled Path" : "Current Path")}: {accessiblePath}");
                             writer.WriteLine($"Path Used For Analysis: {accessiblePath}");
-                            writer.WriteLine($"Total Suspicious Patterns: {actualFindings.Count}");
+                            writer.WriteLine($"Total Retained Findings: {actualFindings.Count}");
                             writer.WriteLine();
                             ThreatVerdictTextFormatter.WriteThreatVerdictSection(writer, threatVerdict);
+                            ThreatVerdictTextFormatter.WriteScanStatusSection(writer, scanStatus);
                             writer.WriteLine("\nSeverity Breakdown:");
                             foreach (var severityCount in severityCounts)
                             {
@@ -407,15 +469,22 @@ namespace MLVScan.MelonLoader
                                 }
                             }
 
-                            WriteSecurityNoticeToReport(writer);
+                            WriteSecurityNoticeToReport(writer, threatVerdict, scanStatus, wasBlocked);
                         }
                     }
 
-                    // Generate LLM analysis prompt
-                    var promptSaved = promptGenerator.SavePromptToFile(
-                        accessiblePath,
-                        actualFindings,
-                        promptDirectory);
+                    var promptSaved = false;
+                    if (promptGenerator != null)
+                    {
+                        promptSaved = promptGenerator.SavePromptToFile(
+                            accessiblePath,
+                            actualFindings,
+                            promptDirectory);
+                    }
+                    else if (scanStatus.Kind == ScanStatusKind.RequiresReview)
+                    {
+                        LoggerInstance.Warning("Skipped LLM prompt generation because this file was not fully analyzed by the loader.");
+                    }
 
                     if (promptSaved)
                     {
@@ -428,7 +497,9 @@ namespace MLVScan.MelonLoader
                         LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
                     }
 
-                    if (_configManager?.Config?.EnableReportUpload == true && _reportUploadService != null)
+                    if (_configManager?.Config?.EnableReportUpload == true &&
+                        _reportUploadService != null &&
+                        threatVerdict.Kind != ThreatVerdictKind.None)
                     {
                         try
                         {
@@ -455,7 +526,12 @@ namespace MLVScan.MelonLoader
             LoggerInstance.Warning("====== END OF SCAN REPORT ======");
         }
 
-        private void QueueConsentPromptIfNeeded(string accessiblePath, string modName, List<ScanFinding> findings)
+        private void QueueConsentPromptIfNeeded(
+            string accessiblePath,
+            string modName,
+            List<ScanFinding> findings,
+            ThreatVerdictInfo threatVerdict,
+            bool wasBlocked)
         {
             if (_configManager == null || _showUploadConsentPopup)
             {
@@ -471,10 +547,13 @@ namespace MLVScan.MelonLoader
             _showUploadConsentPopup = true;
             _pendingUploadPath = accessiblePath;
             _pendingUploadModName = modName;
+            _pendingUploadVerdictKind = threatVerdict?.Kind.ToString() ?? string.Empty;
+            _pendingUploadWasBlocked = wasBlocked;
             _pendingUploadFindings = findings;
 
             config.ReportUploadConsentPending = true;
             config.PendingReportUploadPath = accessiblePath ?? string.Empty;
+            config.PendingReportUploadVerdictKind = _pendingUploadVerdictKind;
             _configManager.SaveConfig(config);
 
             LoggerInstance.Warning("MLVScan is waiting for your upload consent decision in the in-game popup.");
@@ -493,6 +572,7 @@ namespace MLVScan.MelonLoader
             config.ReportUploadConsentAsked = true;
             config.ReportUploadConsentPending = false;
             config.PendingReportUploadPath = string.Empty;
+            config.PendingReportUploadVerdictKind = string.Empty;
             config.EnableReportUpload = approved;
             _configManager.SaveConfig(config);
 
@@ -501,6 +581,8 @@ namespace MLVScan.MelonLoader
                 LoggerInstance.Msg("MLVScan report upload declined. You will not be prompted again.");
                 _pendingUploadPath = string.Empty;
                 _pendingUploadModName = string.Empty;
+                _pendingUploadVerdictKind = string.Empty;
+                _pendingUploadWasBlocked = true;
                 _pendingUploadFindings = null;
                 return;
             }
@@ -528,6 +610,8 @@ namespace MLVScan.MelonLoader
             {
                 _pendingUploadPath = string.Empty;
                 _pendingUploadModName = string.Empty;
+                _pendingUploadVerdictKind = string.Empty;
+                _pendingUploadWasBlocked = true;
                 _pendingUploadFindings = null;
             }
         }
@@ -569,63 +653,132 @@ namespace MLVScan.MelonLoader
             };
         }
 
-        private void DisplaySecurityNotice(string modName, ThreatVerdictInfo threatVerdict)
+        private void DisplaySecurityNotice(
+            string modName,
+            ThreatVerdictInfo threatVerdict,
+            ScanStatusInfo scanStatus,
+            bool wasBlocked)
         {
             LoggerInstance.Warning("IMPORTANT SECURITY NOTICE");
-            LoggerInstance.Msg($"MLVScan has detected and disabled {modName} before it was loaded.");
-            if (threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
-                threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily)
+            LoggerInstance.Msg(wasBlocked
+                ? $"MLVScan detected and disabled {modName} before it was loaded."
+                : $"MLVScan flagged {modName} for review but did not block it under the current configuration.");
+            if (IsKnownThreatVerdict(threatVerdict))
             {
-                LoggerInstance.Msg("This block was reinforced by a match to previously analyzed malware.");
+                LoggerInstance.Msg("This mod is likely malware because it matched previously analyzed malware intelligence.");
                 LoggerInstance.Msg("If this is your first time running the game with this mod, your PC is likely safe.");
                 LoggerInstance.Msg("However, if you've previously run the game with this mod, your system MAY be infected.");
+                LoggerInstance.Warning("Recommended security steps:");
+                LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
+                LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
+                LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it's actually malicious");
+                LoggerInstance.Msg("2. Run a full system scan with a trusted antivirus like Malwarebytes");
+                LoggerInstance.Msg("   Malwarebytes is recommended as a free and effective antivirus solution");
+                LoggerInstance.Msg("3. Use Microsoft Safety Scanner for a secondary scan");
+                LoggerInstance.Msg("4. Change important passwords if antivirus shows a threat");
+                LoggerInstance.Warning("Resources for malware removal:");
+                LoggerInstance.Msg("- Malwarebytes: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
+                LoggerInstance.Msg("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
+            }
+            else if (threatVerdict?.Kind == ThreatVerdictKind.Suspicious)
+            {
+                LoggerInstance.Msg("This mod was flagged because it triggered suspicious correlated behavior.");
+                LoggerInstance.Msg("It may still be a false positive, so review the saved report before assuming infection.");
+                LoggerInstance.Warning("Recommended review steps:");
+                LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
+                LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
+                LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it is actually malicious");
+                LoggerInstance.Msg("2. Review the saved report for the exact behavior that triggered the block");
+                LoggerInstance.Msg("3. Only run a full antivirus scan if you have already executed this mod or still do not trust it");
+                LoggerInstance.Msg("4. Whitelist the SHA256 only if you have independently verified the mod is safe");
+            }
+            else if (scanStatus?.Kind == ScanStatusKind.RequiresReview)
+            {
+                LoggerInstance.Msg("This mod could not be fully analyzed by the loader because it exceeded the current in-memory scan limit.");
+                LoggerInstance.Msg("MLVScan still calculated its SHA-256 hash and checked exact known-malicious sample matches.");
+                LoggerInstance.Warning("Recommended review steps:");
+                LoggerInstance.Msg("1. Review the saved report before assuming the mod is safe");
+                LoggerInstance.Msg("2. Validate the mod with trusted community sources or the original author");
+                LoggerInstance.Msg("3. Enable BlockIncompleteScans if you want oversized or incomplete scans blocked automatically");
+                LoggerInstance.Msg("4. Whitelist the SHA256 only after independent verification");
             }
             else
             {
-                LoggerInstance.Msg("This mod was blocked as a precaution based on suspicious behavior patterns.");
-                LoggerInstance.Msg("Keep in mind that no detection system is perfect, and this mod may still be falsely flagged.");
+                LoggerInstance.Msg("Review the saved report before deciding whether to whitelist this mod.");
             }
-            LoggerInstance.Warning("Recommended security steps:");
-            LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
-            LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
-            LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it's actually malicious");
-            LoggerInstance.Msg("2. Run a full system scan with a trusted antivirus like Malwarebytes");
-            LoggerInstance.Msg("   Malwarebytes is recommended as a free and effective antivirus solution");
-            LoggerInstance.Msg("3. Use Microsoft Safety Scanner for a secondary scan");
-            LoggerInstance.Msg("4. Change important passwords if antivirus shows a threat");
-            LoggerInstance.Warning("Resources for malware removal:");
-            LoggerInstance.Msg("- Malwarebytes: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
-            LoggerInstance.Msg("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
         }
 
-        private static void WriteSecurityNoticeToReport(StreamWriter writer)
+        private static void WriteSecurityNoticeToReport(
+            StreamWriter writer,
+            ThreatVerdictInfo threatVerdict,
+            ScanStatusInfo scanStatus,
+            bool wasBlocked)
         {
             writer.WriteLine("\n\n============== SECURITY NOTICE ==============\n");
             writer.WriteLine("IMPORTANT: READ THIS SECURITY INFORMATION\n");
-            writer.WriteLine("MLVScan has detected and disabled this mod before it was loaded.");
-            writer.WriteLine("This mod contains code patterns commonly associated with malware.\n");
-            writer.WriteLine("YOUR SYSTEM SECURITY STATUS:");
-            writer.WriteLine("- If this is your FIRST TIME starting the game with this mod installed:");
-            writer.WriteLine("  Your PC is likely SAFE as MLVScan prevented the mod from loading.");
-            writer.WriteLine("\n- If you have PREVIOUSLY PLAYED the game with this mod loaded:");
-            writer.WriteLine("  Your system MAY BE INFECTED with malware. Take action immediately.\n");
-            writer.WriteLine("RECOMMENDED SECURITY STEPS:");
-            writer.WriteLine("1. Check with the modding community first - no detection system is perfect");
-            writer.WriteLine("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
-            writer.WriteLine("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it's actually malicious");
-            writer.WriteLine("\n2. Run a full system scan with a reputable antivirus program");
-            writer.WriteLine("   Free option: Malwarebytes (https://www.malwarebytes.com/)");
-            writer.WriteLine("   Malwarebytes is recommended as a free and effective antivirus solution");
-            writer.WriteLine("\n3. Run Microsoft Safety Scanner as a secondary check");
-            writer.WriteLine("   Download: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
-            writer.WriteLine("\n4. Update all your software from official sources");
-            writer.WriteLine("\n5. Change passwords for important accounts (from a clean device if possible)");
-            writer.WriteLine("\n6. Monitor your accounts for any suspicious activity");
-            writer.WriteLine("\nDETAILED MALWARE REMOVAL GUIDES:");
-            writer.WriteLine("- Malwarebytes Guide: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
-            writer.WriteLine("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
-            writer.WriteLine("- XWorm (Common Modding Malware) Removal Guide: https://www.pcrisk.com/removal-guides/27436-xworm-rat");
+            writer.WriteLine(wasBlocked
+                ? "MLVScan detected and disabled this mod before it was loaded."
+                : "MLVScan flagged this mod for review but did not block it under the current configuration.");
+            if (IsKnownThreatVerdict(threatVerdict))
+            {
+                writer.WriteLine("This mod is likely malware because it matched previously analyzed malware intelligence.\n");
+                writer.WriteLine("YOUR SYSTEM SECURITY STATUS:");
+                writer.WriteLine("- If this is your FIRST TIME starting the game with this mod installed:");
+                writer.WriteLine("  Your PC is likely SAFE as MLVScan prevented the mod from loading.");
+                writer.WriteLine("\n- If you have PREVIOUSLY PLAYED the game with this mod loaded:");
+                writer.WriteLine("  Your system MAY BE INFECTED with malware. Take action immediately.\n");
+                writer.WriteLine("RECOMMENDED SECURITY STEPS:");
+                writer.WriteLine("1. Check with the modding community first - no detection system is perfect");
+                writer.WriteLine("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
+                writer.WriteLine("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it is actually malicious");
+                writer.WriteLine("\n2. Run a full system scan with a reputable antivirus program");
+                writer.WriteLine("   Free option: Malwarebytes (https://www.malwarebytes.com/)");
+                writer.WriteLine("   Malwarebytes is recommended as a free and effective antivirus solution");
+                writer.WriteLine("\n3. Run Microsoft Safety Scanner as a secondary check");
+                writer.WriteLine("   Download: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
+                writer.WriteLine("\n4. Update all your software from official sources");
+                writer.WriteLine("\n5. Change passwords for important accounts (from a clean device if possible)");
+                writer.WriteLine("\n6. Monitor your accounts for any suspicious activity");
+                writer.WriteLine("\nDETAILED MALWARE REMOVAL GUIDES:");
+                writer.WriteLine("- Malwarebytes Guide: https://www.malwarebytes.com/cybersecurity/basics/how-to-remove-virus-from-computer");
+                writer.WriteLine("- Microsoft Safety Scanner: https://learn.microsoft.com/en-us/defender-endpoint/safety-scanner-download");
+                writer.WriteLine("- XWorm (Common Modding Malware) Removal Guide: https://www.pcrisk.com/removal-guides/27436-xworm-rat");
+            }
+            else if (threatVerdict?.Kind == ThreatVerdictKind.Suspicious)
+            {
+                writer.WriteLine("This mod was flagged because it triggered suspicious correlated behavior.\n");
+                writer.WriteLine("IMPORTANT:");
+                writer.WriteLine("- This may still be a false positive.");
+                writer.WriteLine("- Review the report details and verify the mod with trusted community sources before assuming infection.\n");
+                writer.WriteLine("RECOMMENDED REVIEW STEPS:");
+                writer.WriteLine("1. Check with the modding community first - no detection system is perfect");
+                writer.WriteLine("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
+                writer.WriteLine("   Ask about this mod in the #MLVScan or #report-mods channels to confirm if it is actually malicious");
+                writer.WriteLine("\n2. Review the detailed findings and call/data-flow evidence in this report");
+                writer.WriteLine("\n3. Only run a full antivirus scan if you already executed the mod or still do not trust it");
+                writer.WriteLine("\n4. Whitelist the SHA256 only after independent verification");
+            }
+            else if (scanStatus?.Kind == ScanStatusKind.RequiresReview)
+            {
+                writer.WriteLine("This mod could not be fully analyzed by the loader because it exceeded the current in-memory scan limit.\n");
+                writer.WriteLine("IMPORTANT:");
+                writer.WriteLine("- MLVScan still calculated the SHA-256 hash and checked exact known-malicious sample matches.");
+                writer.WriteLine("- No retained malicious verdict was produced, but the file was not fully analyzed.");
+                writer.WriteLine("- Review the report details and verify the mod with trusted community sources before assuming it is safe.\n");
+                writer.WriteLine("RECOMMENDED REVIEW STEPS:");
+                writer.WriteLine("1. Review the report details and confirm whether this mod is expected to be unusually large");
+                writer.WriteLine("\n2. Validate the mod with the original author or trusted community sources");
+                writer.WriteLine("\n3. Enable BlockIncompleteScans if you want oversized or incomplete scans blocked automatically");
+                writer.WriteLine("\n4. Whitelist the SHA256 only after independent verification");
+            }
             writer.WriteLine("\n=============================================");
         }
+
+        private static bool IsKnownThreatVerdict(ThreatVerdictInfo threatVerdict)
+        {
+            return threatVerdict?.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                   threatVerdict?.Kind == ThreatVerdictKind.KnownMalwareFamily;
+        }
+
     }
 }

@@ -40,7 +40,7 @@ namespace MLVScan.Services
             sb.AppendLine("## Mod Information");
             sb.AppendLine($"- **Filename**: {modName}");
             sb.AppendLine($"- **Scan Date**: {DateTime.Now}");
-            sb.AppendLine($"- **Total Suspicious Patterns**: {findings.Count}");
+            sb.AppendLine($"- **Total Findings**: {findings.Count}");
             sb.AppendLine();
 
             // Severity breakdown

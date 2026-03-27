@@ -7,13 +7,48 @@ using MLVScan.Models;
 namespace MLVScan.Services
 {
     /// <summary>
-    /// Shared formatting helpers for threat verdict console output and report sections.
+    /// Shared formatting helpers for scan outcome console output and report sections.
     /// </summary>
     public static class ThreatVerdictTextFormatter
     {
         public static string GetVerdictLabel(ThreatVerdictInfo threatVerdict)
         {
             return (threatVerdict?.Title ?? string.Empty).Trim();
+        }
+
+        public static string GetScanStatusLabel(ScanStatusInfo scanStatus)
+        {
+            return (scanStatus?.Title ?? string.Empty).Trim();
+        }
+
+        public static string GetOutcomeLabel(ScannedPluginResult scanResult)
+        {
+            if (ScanResultFacts.HasThreatVerdict(scanResult))
+            {
+                return GetVerdictLabel(scanResult.ThreatVerdict);
+            }
+
+            if (ScanResultFacts.RequiresManualReview(scanResult))
+            {
+                return GetScanStatusLabel(scanResult.ScanStatus);
+            }
+
+            return string.Empty;
+        }
+
+        public static string GetOutcomeSummary(ScannedPluginResult scanResult)
+        {
+            if (ScanResultFacts.HasThreatVerdict(scanResult))
+            {
+                return scanResult?.ThreatVerdict?.Summary ?? string.Empty;
+            }
+
+            if (ScanResultFacts.RequiresManualReview(scanResult))
+            {
+                return scanResult?.ScanStatus?.Summary ?? string.Empty;
+            }
+
+            return string.Empty;
         }
 
         public static string GetPrimaryFamilyLabel(ThreatVerdictInfo threatVerdict)
@@ -109,6 +144,19 @@ namespace MLVScan.Services
                 }
             }
 
+            writer.WriteLine();
+        }
+
+        public static void WriteScanStatusSection(TextWriter writer, ScanStatusInfo scanStatus)
+        {
+            if (writer == null || scanStatus == null || scanStatus.Kind == ScanStatusKind.Complete)
+            {
+                return;
+            }
+
+            writer.WriteLine("Scan Status:");
+            writer.WriteLine($"- Status: {scanStatus.Title}");
+            writer.WriteLine($"- Summary: {scanStatus.Summary}");
             writer.WriteLine();
         }
     }

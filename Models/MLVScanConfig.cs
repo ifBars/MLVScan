@@ -26,7 +26,28 @@ public class MLVScanConfig
     public bool EnableAutoDisable { get; set; } = true;
 
     /// <summary>
-    /// Minimum severity level to trigger disabling.
+    /// Enable/disable persistent local scan result reuse for unchanged files.
+    /// </summary>
+    public bool EnableScanCache { get; set; } = true;
+
+    /// <summary>
+    /// Whether to block mods that match a known threat family or exact malicious sample.
+    /// </summary>
+    public bool BlockKnownThreats { get; set; } = true;
+
+    /// <summary>
+    /// Whether to block suspicious unknown behavior that may still be a false positive.
+    /// </summary>
+    public bool BlockSuspicious { get; set; } = true;
+
+    /// <summary>
+    /// Whether to block files that could not be fully analyzed and require manual review.
+    /// </summary>
+    public bool BlockIncompleteScans { get; set; } = false;
+
+    /// <summary>
+    /// Legacy severity threshold from the rule-first blocking model.
+    /// Retained for one compatibility window but no longer used for blocking decisions.
     /// </summary>
     public Severity MinSeverityForDisable { get; set; } = Severity.Medium;
 
@@ -36,7 +57,8 @@ public class MLVScanConfig
     public string[] ScanDirectories { get; set; } = ["Mods", "Plugins"];
 
     /// <summary>
-    /// How many suspicious findings before disabling a mod.
+    /// Legacy suspicious threshold from the rule-first blocking model.
+    /// Retained for one compatibility window but no longer used for blocking decisions.
     /// </summary>
     public int SuspiciousThreshold { get; set; } = 1;
 
@@ -69,6 +91,12 @@ public class MLVScanConfig
     /// Path to the first suspicious mod awaiting consent for upload.
     /// </summary>
     public string PendingReportUploadPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Threat verdict kind for the pending upload item.
+    /// Used to show verdict-specific consent messaging.
+    /// </summary>
+    public string PendingReportUploadVerdictKind { get; set; } = string.Empty;
 
     /// <summary>
     /// API base URL for report uploads.
