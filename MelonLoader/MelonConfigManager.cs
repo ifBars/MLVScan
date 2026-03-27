@@ -1,8 +1,11 @@
 using System;
+using System.IO;
 using System.Linq;
 using MelonLoader;
+using MelonLoader.Utils;
 using MLVScan.Abstractions;
 using MLVScan.Models;
+using MLVScan.Services.Configuration;
 
 namespace MLVScan.MelonLoader
 {
@@ -20,9 +23,7 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<bool> _blockKnownThreats;
         private readonly MelonPreferences_Entry<bool> _blockSuspicious;
         private readonly MelonPreferences_Entry<bool> _blockIncompleteScans;
-        private readonly MelonPreferences_Entry<string> _minSeverityForDisable;
         private readonly MelonPreferences_Entry<string[]> _scanDirectories;
-        private readonly MelonPreferences_Entry<int> _suspiciousThreshold;
         private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
         private readonly MelonPreferences_Entry<bool> _developerMode;
@@ -66,14 +67,8 @@ namespace MLVScan.MelonLoader
                 _blockIncompleteScans = _category.CreateEntry("BlockIncompleteScans", false,
                     description: "Whether to block mods that could not be fully analyzed and require manual review");
 
-                _minSeverityForDisable = _category.CreateEntry("MinSeverityForDisable", "Medium",
-                    description: "Legacy setting from the old severity-based blocking model (no longer used for blocking)");
-
                 _scanDirectories = _category.CreateEntry("ScanDirectories", new[] { "Mods", "Plugins" },
                     description: "Directories to scan for mods");
-
-                _suspiciousThreshold = _category.CreateEntry("SuspiciousThreshold", 1,
-                    description: "Legacy setting from the old threshold-based blocking model (no longer used for blocking)");
 
                 _whitelistedHashes = _category.CreateEntry("WhitelistedHashes", Array.Empty<string>(),
                     description: "List of mod SHA256 hashes to skip when scanning");
@@ -129,9 +124,7 @@ namespace MLVScan.MelonLoader
                 _blockKnownThreats.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _blockSuspicious.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _blockIncompleteScans.OnEntryValueChanged.Subscribe(OnConfigChanged);
-                _minSeverityForDisable.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _scanDirectories.OnEntryValueChanged.Subscribe(OnConfigChanged);
-                _suspiciousThreshold.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _developerMode.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -150,6 +143,7 @@ namespace MLVScan.MelonLoader
                 _excludedTargetRoots.OnEntryValueChanged.Subscribe(OnConfigChanged);
 
                 UpdateConfigFromPreferences();
+                CleanupLegacyPreferenceEntries();
 
                 _logger.Msg("Configuration loaded successfully");
             }
@@ -185,9 +179,7 @@ namespace MLVScan.MelonLoader
                 BlockKnownThreats = _blockKnownThreats.Value,
                 BlockSuspicious = _blockSuspicious.Value,
                 BlockIncompleteScans = _blockIncompleteScans.Value,
-                MinSeverityForDisable = ParseSeverity(_minSeverityForDisable.Value),
                 ScanDirectories = _scanDirectories.Value,
-                SuspiciousThreshold = _suspiciousThreshold.Value,
                 WhitelistedHashes = _whitelistedHashes.Value,
                 DumpFullIlReports = _dumpFullIlReports.Value,
                 Scan = new ScanConfig
@@ -221,9 +213,7 @@ namespace MLVScan.MelonLoader
                 _blockKnownThreats.Value = newConfig.BlockKnownThreats;
                 _blockSuspicious.Value = newConfig.BlockSuspicious;
                 _blockIncompleteScans.Value = newConfig.BlockIncompleteScans;
-                _minSeverityForDisable.Value = FormatSeverity(newConfig.MinSeverityForDisable);
                 _scanDirectories.Value = newConfig.ScanDirectories;
-                _suspiciousThreshold.Value = newConfig.SuspiciousThreshold;
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
                 _developerMode.Value = newConfig.Scan?.DeveloperMode ?? false;
@@ -241,7 +231,7 @@ namespace MLVScan.MelonLoader
                 _additionalTargetRoots.Value = newConfig.AdditionalTargetRoots ?? Array.Empty<string>();
                 _excludedTargetRoots.Value = newConfig.ExcludedTargetRoots ?? Array.Empty<string>();
 
-                MelonPreferences.Save();
+                PersistPreferences();
 
                 _logger.Msg("Configuration saved successfully");
             }
@@ -269,7 +259,7 @@ namespace MLVScan.MelonLoader
                 .ToArray();
 
             _whitelistedHashes.Value = normalizedHashes;
-            MelonPreferences.Save();
+            PersistPreferences();
 
             UpdateConfigFromPreferences();
             _logger.Msg($"Updated whitelist with {normalizedHashes.Length} hash(es)");
@@ -304,37 +294,32 @@ namespace MLVScan.MelonLoader
                 return;
 
             _uploadedReportHashes.Value = updatedHashes;
-            MelonPreferences.Save();
+            PersistPreferences();
 
             UpdateConfigFromPreferences();
             _logger.Msg($"Recorded uploaded report hash: {hash}");
         }
 
-        private static Severity ParseSeverity(string severity)
+        private void PersistPreferences()
         {
-            if (string.IsNullOrWhiteSpace(severity))
-                return Severity.Medium;
-
-            return severity.ToLower() switch
-            {
-                "critical" => Severity.Critical,
-                "high" => Severity.High,
-                "medium" => Severity.Medium,
-                "low" => Severity.Low,
-                _ => Severity.Medium
-            };
+            MelonPreferences.Save();
+            CleanupLegacyPreferenceEntries();
         }
 
-        private static string FormatSeverity(Severity severity)
+        private void CleanupLegacyPreferenceEntries()
         {
-            return severity switch
+            try
             {
-                Severity.Critical => "Critical",
-                Severity.High => "High",
-                Severity.Medium => "Medium",
-                Severity.Low => "Low",
-                _ => "Medium"
-            };
+                var configPath = Path.Combine(MelonEnvironment.UserDataDirectory, "MelonPreferences.cfg");
+                if (LegacyConfigCleanup.TryRemoveObsoleteIniEntries(configPath, "MLVScan", out var removedKeys))
+                {
+                    _logger.Msg($"Removed legacy config keys from MelonPreferences.cfg: {string.Join(", ", removedKeys)}");
+                }
+            }
+            catch
+            {
+                // Legacy config cleanup is best-effort and should never block startup or saving.
+            }
         }
 
         private static string[] NormalizeHashes(System.Collections.Generic.IEnumerable<string> hashes)

@@ -17,7 +17,7 @@ namespace MLVScan.MelonLoader
 {
     /// <summary>
     /// MelonLoader plugin entry point for MLVScan.
-    /// Sets up services, initializes the default whitelist, and orchestrates scanning, disabling, and reporting.
+    /// Sets up services and orchestrates scanning, disabling, and reporting.
     /// </summary>
     public class MelonLoaderPlugin : MelonPlugin
     {
@@ -37,16 +37,6 @@ namespace MLVScan.MelonLoader
         private bool _pendingUploadWasBlocked = true;
         private List<ScanFinding> _pendingUploadFindings;
 
-        private static readonly string[] DefaultWhitelistedHashes =
-        [
-            // CustomTV
-            "3918e1454e05de4dd3ace100d8f4d53936c9b93694dbff5bcc0293d689cb0ab7",
-            "8e6dd1943c80e2d1472a9dc2c6722226d961027a7ec20aab9ad8f1184702d138",
-            // UnityExplorer
-            "d47eb6eabd3b6e3b742c7d9693651bc3a61a90dcbe838f9a4276953089ee4951",
-            "cfe43c0d285867a5701d96de1edd25cb02725fe2629b88386351dc07b11a08b5"
-        ];
-
         public override void OnEarlyInitializeMelon()
         {
             try
@@ -56,8 +46,6 @@ namespace MLVScan.MelonLoader
                 _serviceFactory = new MelonLoaderServiceFactory(LoggerInstance);
                 _configManager = _serviceFactory.CreateConfigManager();
                 _environment = _serviceFactory.CreateEnvironment();
-
-                InitializeDefaultWhitelist();
 
                 _pluginScanner = _serviceFactory.CreatePluginScanner();
                 _pluginDisabler = _serviceFactory.CreatePluginDisabler();
@@ -124,36 +112,6 @@ namespace MLVScan.MelonLoader
             if (GUI.Button(new Rect(x + 40f + (width - 60f) / 2f, y + height - 60f, (width - 60f) / 2f, 36f), "No thanks"))
             {
                 HandleUploadConsentDecision(false);
-            }
-        }
-
-        private void InitializeDefaultWhitelist()
-        {
-            if (_configManager == null)
-                return;
-
-            var currentWhitelist = (_configManager.GetWhitelistedHashes() ?? Array.Empty<string>())
-                .Select(hash => hash?.Trim())
-                .Where(hash => !string.IsNullOrWhiteSpace(hash))
-                .Select(hash => hash.ToLowerInvariant())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            var mergedWhitelist = currentWhitelist
-                .Concat(DefaultWhitelistedHashes)
-                .Select(hash => hash?.Trim())
-                .Where(hash => !string.IsNullOrWhiteSpace(hash))
-                .Select(hash => hash.ToLowerInvariant())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            if (!mergedWhitelist.SequenceEqual(currentWhitelist, StringComparer.OrdinalIgnoreCase))
-            {
-                var addedCount = mergedWhitelist.Length - currentWhitelist.Length;
-                LoggerInstance.Msg(currentWhitelist.Length == 0
-                    ? "Initializing default whitelist"
-                    : $"Adding {addedCount} new default whitelist hash(es)");
-                _configManager.SetWhitelistedHashes(mergedWhitelist);
             }
         }
 

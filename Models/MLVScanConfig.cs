@@ -46,21 +46,9 @@ public class MLVScanConfig
     public bool BlockIncompleteScans { get; set; } = false;
 
     /// <summary>
-    /// Legacy severity threshold from the rule-first blocking model.
-    /// Retained for one compatibility window but no longer used for blocking decisions.
-    /// </summary>
-    public Severity MinSeverityForDisable { get; set; } = Severity.Medium;
-
-    /// <summary>
     /// Where to scan for mods.
     /// </summary>
     public string[] ScanDirectories { get; set; } = ["Mods", "Plugins"];
-
-    /// <summary>
-    /// Legacy suspicious threshold from the rule-first blocking model.
-    /// Retained for one compatibility window but no longer used for blocking decisions.
-    /// </summary>
-    public int SuspiciousThreshold { get; set; } = 1;
 
     /// <summary>
     /// Mods to whitelist (will be skipped during scanning).

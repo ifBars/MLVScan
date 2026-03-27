@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using MLVScan.Services;
+using MLVScan.Services.Configuration;
 
 namespace MLVScan.BepInEx
 {
@@ -21,7 +22,6 @@ namespace MLVScan.BepInEx
         private const string DefaultReportUploadApiBaseUrl = "https://api.mlvscan.com";
 
         private readonly ManualLogSource _logger;
-        private readonly string[] _defaultWhitelistedHashes;
         private readonly string _configPath;
         private MLVScanConfig _config;
         private string _reportUploadApiBaseUrl = DefaultReportUploadApiBaseUrl;
@@ -34,10 +34,9 @@ namespace MLVScan.BepInEx
             Converters = { new JsonStringEnumConverter() }
         };
 
-        public BepInExConfigManager(ManualLogSource logger, string[] defaultWhitelistedHashes = null)
+        public BepInExConfigManager(ManualLogSource logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _defaultWhitelistedHashes = defaultWhitelistedHashes ?? Array.Empty<string>();
 
             // Config stored alongside other BepInEx configs
             _configPath = Path.Combine(Paths.ConfigPath, "MLVScan.json");
@@ -53,10 +52,19 @@ namespace MLVScan.BepInEx
                 if (File.Exists(_configPath))
                 {
                     var json = File.ReadAllText(_configPath);
+                    var removedLegacyKeys = Array.Empty<string>();
                     var node = JsonNode.Parse(json);
-                    if (node is JsonObject obj && obj.TryGetPropertyValue("ReportUploadApiBaseUrl", out var urlNode))
+                    if (node is JsonObject obj)
                     {
-                        _reportUploadApiBaseUrl = urlNode?.GetValue<string>()?.Trim() ?? DefaultReportUploadApiBaseUrl;
+                        if (obj.TryGetPropertyValue("ReportUploadApiBaseUrl", out var urlNode))
+                        {
+                            _reportUploadApiBaseUrl = urlNode?.GetValue<string>()?.Trim() ?? DefaultReportUploadApiBaseUrl;
+                        }
+
+                        if (LegacyConfigCleanup.RemoveObsoleteJsonKeys(obj, out removedLegacyKeys))
+                        {
+                            json = obj.ToJsonString(JsonOptions);
+                        }
                     }
 
                     var loaded = JsonSerializer.Deserialize<MLVScanConfig>(json, JsonOptions);
@@ -64,16 +72,13 @@ namespace MLVScan.BepInEx
                     if (loaded != null)
                     {
                         _config = loaded;
-                        var normalizedWhitelist = NormalizeHashes(_config.WhitelistedHashes);
-                        var mergedWhitelist = MergeWithDefaultWhitelistedHashes(normalizedWhitelist);
-
-                        _config.WhitelistedHashes = mergedWhitelist;
+                        _config.WhitelistedHashes = NormalizeHashes(_config.WhitelistedHashes);
                         _config.UploadedReportHashes = NormalizeHashes(_config.UploadedReportHashes);
 
-                        if (!mergedWhitelist.SequenceEqual(normalizedWhitelist, StringComparer.OrdinalIgnoreCase))
+                        if (removedLegacyKeys.Length > 0)
                         {
                             SaveConfig(_config);
-                            _logger.LogInfo($"Added {mergedWhitelist.Length - normalizedWhitelist.Length} new default whitelist hash(es)");
+                            _logger.LogInfo($"Removed legacy config keys: {string.Join(", ", removedLegacyKeys)}");
                         }
 
                         _logger.LogInfo("Configuration loaded from MLVScan.json");
@@ -104,10 +109,8 @@ namespace MLVScan.BepInEx
                 BlockKnownThreats = true,
                 BlockSuspicious = true,
                 BlockIncompleteScans = false,
-                MinSeverityForDisable = Severity.Medium,
                 ScanDirectories = new[] { "plugins" },
-                SuspiciousThreshold = 1,
-                WhitelistedHashes = MergeWithDefaultWhitelistedHashes(Array.Empty<string>()),
+                WhitelistedHashes = Array.Empty<string>(),
                 DumpFullIlReports = false,
                 Scan = new ScanConfig
                 {
@@ -219,11 +222,6 @@ namespace MLVScan.BepInEx
                 .Select(h => h.ToLowerInvariant())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-        }
-
-        private string[] MergeWithDefaultWhitelistedHashes(System.Collections.Generic.IEnumerable<string> hashes)
-        {
-            return NormalizeHashes((hashes ?? Array.Empty<string>()).Concat(_defaultWhitelistedHashes ?? Array.Empty<string>()));
         }
     }
 }

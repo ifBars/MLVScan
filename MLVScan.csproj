@@ -13,7 +13,7 @@
     <EnableMlvScanProfiling>false</EnableMlvScanProfiling>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
-    <Version>1.6.6</Version>
+    <Version>2.0.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
@@ -120,6 +120,7 @@
     <Compile Include="Services\IlDumpService.cs" />
     <Compile Include="Services\PromptGeneratorService.cs" />
     <Compile Include="Services\HashUtility.cs" />
+    <Compile Include="Services\Configuration\LegacyConfigCleanup.cs" />
     <Compile Include="Services\ReportUploadService.cs" />
     <Compile Include="Services\RedactionHelper.cs" />
     <Compile Include="Services\ThreatVerdictBuilder.cs" />
@@ -227,6 +228,7 @@
                       Condition="'$(BepInExCorePath)' == ''" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" PrivateAssets="all"
                       Condition="'$(BepInExCorePath)' == ''" />
+    <PackageReference Include="System.Text.Json" Version="6.0.11" />
     <!-- Or use local reference if BepInExCorePath is set -->
     <Reference Include="BepInEx" Private="false" Condition="'$(BepInExCorePath)' != ''">
       <HintPath>$(BepInExCorePath)\BepInEx.dll</HintPath>
@@ -244,6 +246,7 @@
     <PackageReference Include="BepInEx.Unity.Mono" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.Mono.Preloader" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="System.Text.Json" Version="6.0.11" />
     <PackageReference Include="UnityEngine" Version="5.6.1" />
     <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
@@ -258,6 +261,7 @@
     <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
+    <PackageReference Include="System.Text.Json" Version="6.0.11" />
     <!-- IL2CPP games expose Unity types from module assemblies, not the legacy monolithic UnityEngine.dll. -->
     <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
@@ -287,7 +291,6 @@
 
     <PackageReference Include="ILRepack" Version="2.0.44" GeneratePathProperty="true" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
-    <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
 
   <!-- ============================================ -->

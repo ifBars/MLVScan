@@ -19,23 +19,6 @@ namespace MLVScan.BepInEx6.IL2CPP
         private ManualLogSource _logger;
 
         /// <summary>
-        /// Default whitelist for known-safe BepInEx ecosystem plugins.
-        /// </summary>
-        private static readonly string[] DefaultWhitelistedHashes =
-        [
-            // BepInEx ecosystem - known safe plugins
-            "8c0735f521d0fa785bf81b2e627a93042362b736ebc2c4c7ac425276b49fa692",
-            "9f86b196ffc845bdbc85192054e2876388ce1294b5a880459c93cbed7de2ae9d",
-            "bc67dab59532d0daca129e574c87d43b24a0b63ccb7312ccd25e0d7c4887784c",
-            "f1f3ff967bdb8f63a4bfd878255890f6393af37d3cc357babb6b504d9473ee06",
-            "d034d0e941deb47ea6b5ee8ca288bdb1d0bb25475dfba02cb61f6eadf0fa448e",
-            "e28b71abefdb5c2e90ea2d9e3c79bdff95f8173d08022732f62f35d2c328895d",
-            "bd5ec0343880b528ef190afe91778d172a239a625929dc176492eddc5c66cc31",
-            "503f851721ffacc7839e42d7c6c8a7c39fa2cea6e70a480b8bad822064d65aa0",
-            "184386c0f5f5bae6b63c96b73e312d3f39eba0d0ca81de3e3bd574ef389d1e29"
-        ];
-
-        /// <summary>
         /// Called when the patcher is initialized.
         /// This is the main entry point for BepInEx 6.x patchers.
         /// </summary>
@@ -55,7 +38,7 @@ namespace MLVScan.BepInEx6.IL2CPP
                 var telemetry = new LoaderScanTelemetryHub();
 
                 // Load or create configuration
-                var configManager = new BepInExConfigManager(_logger, DefaultWhitelistedHashes);
+                var configManager = new BepInExConfigManager(_logger);
                 var config = configManager.LoadConfig();
 
                 // Create adapters
