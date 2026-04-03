@@ -33,6 +33,9 @@
     <!-- Path to deploy built DLL after build (optional) -->
     <!-- <MelonPluginsPath>C:\Games\Schedule I\Plugins</MelonPluginsPath> -->
 
+    <!-- Semicolon-separated release package directories to update after build (optional) -->
+    <!-- <MelonLoaderReleaseCopyDirectories>C:\Releases\MLVScan Nexus\packages\MLVScan-MelonLoader\MelonLoader\Plugins;C:\Releases\MLVScan S1 Nexus\MelonLoader\Plugins;C:\Releases\MLVScan TS\Plugins</MelonLoaderReleaseCopyDirectories> -->
+
 
     <!-- ============================================ -->
     <!-- BepInEx Build Configuration                 -->
@@ -43,5 +46,10 @@
 
     <!-- Path to deploy built DLL as patcher (optional) -->
     <!-- <BepInExPatchersPath>C:\Games\Schedule I\BepInEx\patchers</BepInExPatchersPath> -->
+
+    <!-- Semicolon-separated release package directories to update after build (optional) -->
+    <!-- <BepInEx5ReleaseCopyDirectories>C:\Releases\MLVScan Nexus\packages\MLVScan-BepInEx5\BepInEx5\patchers</BepInEx5ReleaseCopyDirectories> -->
+    <!-- <BepInEx6MonoReleaseCopyDirectories>C:\Releases\MLVScan Nexus\packages\MLVScan-BepInEx6Mono\BepInEx6Mono\patchers</BepInEx6MonoReleaseCopyDirectories> -->
+    <!-- <BepInEx6IL2CPPReleaseCopyDirectories>C:\Releases\MLVScan Nexus\packages\MLVScan-BepInEx6IL2CPP\BepInEx6IL2CPP\patchers</BepInEx6IL2CPPReleaseCopyDirectories> -->
   </PropertyGroup>
 </Project>

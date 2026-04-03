@@ -374,4 +374,29 @@
     <Message Text="Copied MLVScan.BepInEx5.dll to $(BepInExPatchersPath)" Importance="high" />
   </Target>
 
+  <!-- ============================================ -->
+  <!-- Post-Build Copy (Release Package Targets)   -->
+  <!-- ============================================ -->
+  <Target Name="PostBuildReleasePackages" AfterTargets="MergeAssemblies">
+    <ItemGroup>
+      <_ReleaseCopyTarget Include="$(MelonLoaderReleaseCopyDirectories)"
+                          Condition="'$(Configuration)'=='MelonLoader' and '$(MelonLoaderReleaseCopyDirectories)' != ''" />
+      <_ReleaseCopyTarget Include="$(BepInEx5ReleaseCopyDirectories)"
+                          Condition="'$(Configuration)'=='BepInEx5' and '$(BepInEx5ReleaseCopyDirectories)' != ''" />
+      <_ReleaseCopyTarget Include="$(BepInEx6MonoReleaseCopyDirectories)"
+                          Condition="'$(Configuration)'=='BepInEx6Mono' and '$(BepInEx6MonoReleaseCopyDirectories)' != ''" />
+      <_ReleaseCopyTarget Include="$(BepInEx6IL2CPPReleaseCopyDirectories)"
+                          Condition="'$(Configuration)'=='BepInEx6IL2CPP' and '$(BepInEx6IL2CPPReleaseCopyDirectories)' != ''" />
+    </ItemGroup>
+
+    <MakeDir Directories="@(_ReleaseCopyTarget)" Condition="'@(_ReleaseCopyTarget)' != ''" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="%(_ReleaseCopyTarget.Identity)"
+          SkipUnchangedFiles="false"
+          Condition="'@(_ReleaseCopyTarget)' != ''" />
+    <Message Text="Copied $(TargetFileName) to release package directories: @(_ReleaseCopyTarget, ', ')"
+             Importance="high"
+             Condition="'@(_ReleaseCopyTarget)' != ''" />
+  </Target>
+
 </Project>
