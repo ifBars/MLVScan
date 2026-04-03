@@ -132,11 +132,11 @@ namespace MLVScan.Services
             private static readonly IReadOnlyDictionary<string, ThreatFamilyPresentation> Families =
                 new Dictionary<string, ThreatFamilyPresentation>(StringComparer.Ordinal)
                 {
-                    ["family-resource-shell32-tempcmd-v1"] = new ThreatFamilyPresentation
+                    ["family-resource-shell32-tempcmd-v2"] = new ThreatFamilyPresentation
                     {
-                        DisplayName = "Embedded resource ShellExecute temp CMD dropper",
-                        Summary = "Writes an embedded payload into a temporary .cmd file and runs it hidden through ShellExecuteEx.",
-                        ReferenceUrl = "https://mlvscan.com/advisories/families/resource-shell32-tempcmd-v1"
+                        DisplayName = "Embedded resource temp CMD dropper",
+                        Summary = "Writes an embedded payload into a temporary .cmd file and runs it through ShellExecuteEx or Process.Start.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/resource-shell32-tempcmd-v2"
                     },
                     ["family-powershell-iwr-dlbat-v1"] = new ThreatFamilyPresentation
                     {
