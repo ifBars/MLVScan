@@ -144,11 +144,11 @@ namespace MLVScan.Services
                         Summary = "Uses hidden PowerShell to download a TEMP batch file, run it, then clean it up.",
                         ReferenceUrl = "https://mlvscan.com/advisories/families/powershell-iwr-dlbat-v1"
                     },
-                    ["family-webclient-stage-exec-v1"] = new ThreatFamilyPresentation
+                    ["family-webdownload-stage-exec-v2"] = new ThreatFamilyPresentation
                     {
-                        DisplayName = "WebClient staged payload executor",
-                        Summary = "Downloads a payload into TEMP and immediately executes it via a hidden process chain.",
-                        ReferenceUrl = "https://mlvscan.com/advisories/families/webclient-stage-exec-v1"
+                        DisplayName = "Web download staged payload executor",
+                        Summary = "Downloads a payload into TEMP and immediately executes it via a hidden process chain, regardless of whether the stager uses WebClient or HttpClient.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/webdownload-stage-exec-v2"
                     },
                     ["family-obfuscated-metadata-loader-v1"] = new ThreatFamilyPresentation
                     {

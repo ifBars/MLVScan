@@ -47,6 +47,6 @@ namespace MLVScan
         /// Gets the combined version info including core engine.
         /// </summary>
         public static string GetFullVersionInfo() =>
-            $"Engine: MLVScan.Core v{MLVScanVersions.CoreVersion}\nPlatform: {GetVersionString()}";
+            $"Engine: MLVScan.Core v{MLVScanVersions.CoreVersion} Platform: {GetVersionString()}";
     }
 }
