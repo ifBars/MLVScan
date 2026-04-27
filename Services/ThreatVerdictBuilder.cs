@@ -105,7 +105,7 @@ namespace MLVScan.Services
             {
                 FamilyId = match.FamilyId,
                 DisplayName = presentation.DisplayName,
-                Summary = presentation.Summary,
+                Summary = string.IsNullOrWhiteSpace(match.Summary) ? presentation.Summary : match.Summary,
                 MatchKind = match.MatchKind.ToString(),
                 TechnicalName = match.DisplayName,
                 ReferenceUrl = presentation.ReferenceUrl,
