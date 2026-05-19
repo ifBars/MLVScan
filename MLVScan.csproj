@@ -81,7 +81,7 @@
     <None Remove="nexuspost.bbcode" />
     <None Remove="renovate.json" />
     <None Remove="TS-Post.md" />
-    <None Remove="example.png" />
+    <None Remove="demo.png" />
     <None Remove="icon.png" />
     <None Remove="ENVIRONMENT_INTEGRATION_GUIDE.md" />
     <None Remove="bump-version.ps1" />

@@ -8,7 +8,7 @@
 
 Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 
-![MLVScan Example](example.png)
+![MLVScan Example](demo.png)
 
 ## ⚡ Quick Start
 
