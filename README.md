@@ -48,7 +48,7 @@ Current loader note: assemblies larger than **256 MB** are still SHA256 hashed a
 MLVScan can optionally send scan reports to the MLVScan API to help fix false positives. This is **off by default** and requires your explicit consent.
 
 - **MelonLoader:** Set `EnableReportUpload = true` in `MelonPreferences.cfg` under `[MLVScan]`
-- **BepInEx:** Set `"EnableReportUpload": true` in `BepInEx/config/MLVScan.json`
+- **BepInEx:** Set `EnableReportUpload = true` in `BepInEx/config/MLVScan.cfg`
 
 The first time a suspicious or known-malicious mod is detected, MLVScan shows a one-time message. Local reports are always generated regardless of upload settings.
 
@@ -71,13 +71,13 @@ Detailed documentation is available in the **[MLVScan Wiki](https://github.com/i
 
 **BepInEx 5.x:**
 - Runs as a preloader patcher (scans before chainloader)
-- Configuration stored in `BepInEx/config/MLVScan.json`
+- Configuration stored in `BepInEx/config/MLVScan.cfg`
 - Reports saved to `BepInEx/MLVScan/Reports/`
 - Install via `BepInEx/patchers` folder
 
 **BepInEx 6.x (Mono / Il2Cpp):**
 - Runs as a plugin (scans during plugin initialization)
-- Configuration stored in `BepInEx/config/MLVScan.json` (same as 5.x)
+- Configuration stored in `BepInEx/config/MLVScan.cfg` (same as 5.x)
 - Reports saved to `BepInEx/MLVScan/Reports/` (same as 5.x)
 - Uses `[BepInPlugin]` attribute-based packaging
 - Supports both Mono and Il2Cpp runtimes

@@ -82,7 +82,7 @@ namespace MLVScan.BepInEx5
                             config.PendingReportUploadVerdictKind = disabledPlugins[0].ThreatVerdict?.Kind.ToString() ?? string.Empty;
                             configManager.SaveConfig(config);
                             _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
-                            _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.json");
+                            _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.cfg");
                         }
                     }
 

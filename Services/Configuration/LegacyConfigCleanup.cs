@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-#if !MELONLOADER
-using System.Text.Json.Nodes;
-#endif
 
 namespace MLVScan.Services.Configuration;
 
@@ -19,28 +16,6 @@ public static class LegacyConfigCleanup
         "MinSeverityForDisable",
         "SuspiciousThreshold"
     ];
-
-#if !MELONLOADER
-    public static bool RemoveObsoleteJsonKeys(JsonObject jsonObject, out string[] removedKeys)
-    {
-        if (jsonObject == null)
-        {
-            throw new ArgumentNullException(nameof(jsonObject));
-        }
-
-        var removed = new List<string>();
-        foreach (var key in ObsoleteConfigKeys)
-        {
-            if (jsonObject.Remove(key))
-            {
-                removed.Add(key);
-            }
-        }
-
-        removedKeys = removed.ToArray();
-        return removedKeys.Length > 0;
-    }
-#endif
 
     public static bool TryRemoveObsoleteIniEntries(string filePath, string sectionName, out string[] removedKeys)
     {

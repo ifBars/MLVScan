@@ -4,7 +4,7 @@ namespace MLVScan.Abstractions
 {
     /// <summary>
     /// Abstraction for configuration management across different mod platforms.
-    /// MelonLoader uses MelonPreferences (INI-based), BepInEx uses JSON files.
+    /// MelonLoader uses MelonPreferences, BepInEx uses ConfigFile-backed cfg files.
     /// </summary>
     public interface IConfigManager
     {

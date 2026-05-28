@@ -162,7 +162,7 @@ namespace MLVScan.BepInEx
             }
             _logger.LogInfo("");
             _logger.LogInfo("To whitelist a false positive:");
-            _logger.LogInfo("  Add the SHA256 hash to BepInEx/config/MLVScan.json");
+            _logger.LogInfo("  Add the SHA256 hash to BepInEx/config/MLVScan.cfg");
             _logger.LogInfo("");
             _logger.LogInfo("Resources:");
             _logger.LogInfo("  Malwarebytes: https://www.malwarebytes.com/");
@@ -346,7 +346,7 @@ namespace MLVScan.BepInEx
                 }
                 sb.AppendLine();
                 sb.AppendLine("To whitelist (if false positive):");
-                sb.AppendLine($"  Add this hash to BepInEx/config/MLVScan.json:");
+                sb.AppendLine($"  Add this hash to BepInEx/config/MLVScan.cfg:");
                 sb.AppendLine($"  \"{fileHash}\"");
 
                 File.WriteAllText(reportPath, sb.ToString());
