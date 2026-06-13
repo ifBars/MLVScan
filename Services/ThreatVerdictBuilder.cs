@@ -150,11 +150,53 @@ namespace MLVScan.Services
                         Summary = "Downloads a payload into TEMP and immediately executes it via a hidden process chain, regardless of whether the stager uses WebClient or HttpClient.",
                         ReferenceUrl = "https://mlvscan.com/advisories/families/webdownload-stage-exec-v2"
                     },
+                    ["family-webdownload-stage-exec-v3"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Web download staged payload executor",
+                        Summary = "Downloads a payload to TEMP through WebClient, HttpClient, or a similar network API and then executes it via hidden or shell-assisted process launch.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/webdownload-stage-exec-v3"
+                    },
+                    ["family-embedded-resource-script-stager-v1"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Embedded resource script stager",
+                        Summary = "Stores a script payload in a referenced embedded resource, stages it at runtime, and uses hidden shell or PowerShell execution to retrieve or run a payload.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/embedded-resource-script-stager-v1"
+                    },
+                    ["family-remote-script-pipe-shell-v1"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Remote script piped to shell",
+                        Summary = "Launches a command shell that retrieves a remote script and pipes it directly into another shell interpreter.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/remote-script-pipe-shell-v1"
+                    },
+                    ["family-encoded-powershell-tempcmd-stager-v1"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Encoded PowerShell temp command stager",
+                        Summary = "Numeric-encoded strings reconstruct a hidden cmd.exe or PowerShell launcher that downloads a command script into TEMP and starts it hidden.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/encoded-powershell-tempcmd-stager-v1"
+                    },
+                    ["family-hex-remote-config-tempcmd-stager-v1"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Hex remote config temp CMD stager",
+                        Summary = "Hex and byte-array reconstructed strings hide remote command configuration, reflected WebClient retrieval, temporary command-file staging, and hidden cmd.exe execution.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/hex-remote-config-tempcmd-stager-v1"
+                    },
+                    ["family-dynamic-assembly-reflection-loader-v1"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Dynamic assembly reflection loader",
+                        Summary = "Opaque assembly bytes are loaded at runtime and invoked through reflection, separating a visible mod wrapper from the executable payload.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/dynamic-assembly-reflection-loader-v1"
+                    },
                     ["family-obfuscated-metadata-loader-v1"] = new ThreatFamilyPresentation
                     {
                         DisplayName = "Obfuscated metadata-backed loader",
                         Summary = "Decodes hidden launcher content from numeric strings and assembly metadata at runtime.",
                         ReferenceUrl = "https://mlvscan.com/advisories/families/obfuscated-metadata-loader-v1"
+                    },
+                    ["family-obfuscated-metadata-loader-v2"] = new ThreatFamilyPresentation
+                    {
+                        DisplayName = "Obfuscated metadata-backed loader",
+                        Summary = "Decodes hidden launcher content from numeric strings, metadata, or manifest resources and uses reflection to reach the payload.",
+                        ReferenceUrl = "https://mlvscan.com/advisories/families/obfuscated-metadata-loader-v2"
                     }
                 };
 
