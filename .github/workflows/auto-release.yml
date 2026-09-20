@@ -13,6 +13,22 @@ on:
         description: 'Version to release (leave empty to use version from .csproj)'
         required: false
         type: string
+      publish_nexus:
+        description: 'Upload release packages to both Nexus Mods listings'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+  NEXUS_SCHEDULE1_MOD_ID: ${{ vars.NEXUS_SCHEDULE1_MOD_ID }}
+  NEXUS_SCHEDULE1_FILE_GROUP_ID: ${{ vars.NEXUS_SCHEDULE1_FILE_GROUP_ID }}
+  NEXUS_TOOLS_MOD_ID: ${{ vars.NEXUS_TOOLS_MOD_ID }}
+  NEXUS_TOOLS_MELON_FILE_GROUP_ID: ${{ vars.NEXUS_TOOLS_MELON_FILE_GROUP_ID }}
+  NEXUS_TOOLS_BEPINEX5_FILE_GROUP_ID: ${{ vars.NEXUS_TOOLS_BEPINEX5_FILE_GROUP_ID }}
+  NEXUS_TOOLS_BEPINEX6_MONO_FILE_GROUP_ID: ${{ vars.NEXUS_TOOLS_BEPINEX6_MONO_FILE_GROUP_ID }}
+  NEXUS_TOOLS_BEPINEX6_IL2CPP_FILE_GROUP_ID: ${{ vars.NEXUS_TOOLS_BEPINEX6_IL2CPP_FILE_GROUP_ID }}
+  NEXUS_RELEASE_DESCRIPTION: Security-focused static scanner that protects modded Unity games from malicious assemblies before they execute.
 
 jobs:
   check-version:
@@ -138,6 +154,32 @@ jobs:
         cp bin/BepInEx6IL2CPP/**/MLVScan.BepInEx6.IL2CPP.dll release/
         
         ls -la release/
+
+    - name: Prepare Nexus packages
+      run: |
+        mkdir -p packages/schedule1/Plugins
+        mkdir -p packages/tools-melon/Plugins
+        mkdir -p packages/tools-bepinex5/BepInEx/patchers
+        mkdir -p packages/tools-bepinex6-mono/BepInEx/patchers
+        mkdir -p packages/tools-bepinex6-il2cpp/BepInEx/patchers
+
+        cp release/MLVScan.MelonLoader.dll packages/schedule1/Plugins/
+        cp release/MLVScan.MelonLoader.dll packages/tools-melon/Plugins/
+        cp release/MLVScan.BepInEx5.dll packages/tools-bepinex5/BepInEx/patchers/
+        cp release/MLVScan.BepInEx6.Mono.dll packages/tools-bepinex6-mono/BepInEx/patchers/
+        cp release/MLVScan.BepInEx6.IL2CPP.dll packages/tools-bepinex6-il2cpp/BepInEx/patchers/
+
+        (cd packages/schedule1 && zip -r ../MLVScan-Schedule1-v${{ needs.check-version.outputs.new-version }}.zip .)
+        (cd packages/tools-melon && zip -r ../MLVScan-MelonLoader-v${{ needs.check-version.outputs.new-version }}.zip .)
+        (cd packages/tools-bepinex5 && zip -r ../MLVScan-BepInEx5-v${{ needs.check-version.outputs.new-version }}.zip .)
+        (cd packages/tools-bepinex6-mono && zip -r ../MLVScan-BepInEx6-Mono-v${{ needs.check-version.outputs.new-version }}.zip .)
+        (cd packages/tools-bepinex6-il2cpp && zip -r ../MLVScan-BepInEx6-IL2CPP-v${{ needs.check-version.outputs.new-version }}.zip .)
+
+        unzip -l packages/MLVScan-Schedule1-v${{ needs.check-version.outputs.new-version }}.zip
+        unzip -l packages/MLVScan-MelonLoader-v${{ needs.check-version.outputs.new-version }}.zip
+        unzip -l packages/MLVScan-BepInEx5-v${{ needs.check-version.outputs.new-version }}.zip
+        unzip -l packages/MLVScan-BepInEx6-Mono-v${{ needs.check-version.outputs.new-version }}.zip
+        unzip -l packages/MLVScan-BepInEx6-IL2CPP-v${{ needs.check-version.outputs.new-version }}.zip
         
     - name: Generate Release Notes
       id: release_notes
@@ -182,6 +224,97 @@ jobs:
           release/MLVScan.BepInEx5.dll
           release/MLVScan.BepInEx6.Mono.dll
           release/MLVScan.BepInEx6.IL2CPP.dll
+
+    - name: Upload Schedule I package to Nexus Mods
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && env.NEXUSMODS_API_KEY != '' && env.NEXUS_SCHEDULE1_MOD_ID != '' && env.NEXUS_SCHEDULE1_FILE_GROUP_ID != '' }}
+      uses: Nexus-Mods/upload-action@v1.0.0-beta.10
+      with:
+        api_key: ${{ env.NEXUSMODS_API_KEY }}
+        file_id: ${{ env.NEXUS_SCHEDULE1_FILE_GROUP_ID }}
+        mod_id: ${{ env.NEXUS_SCHEDULE1_MOD_ID }}
+        filename: packages/MLVScan-Schedule1-v${{ needs.check-version.outputs.new-version }}.zip
+        version: ${{ needs.check-version.outputs.new-version }}
+        display_name: MLVScan ${{ needs.check-version.outputs.new-version }}
+        description: ${{ env.NEXUS_RELEASE_DESCRIPTION }}
+        category: main
+        archive_existing_version: true
+        update_mod_version: true
+        primary_mod_manager_download: true
+        allow_mod_manager_download: true
+        show_requirements_pop_up: false
+
+    - name: Upload generic MelonLoader package to Nexus Mods
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && env.NEXUSMODS_API_KEY != '' && env.NEXUS_TOOLS_MOD_ID != '' && env.NEXUS_TOOLS_MELON_FILE_GROUP_ID != '' }}
+      uses: Nexus-Mods/upload-action@v1.0.0-beta.10
+      with:
+        api_key: ${{ env.NEXUSMODS_API_KEY }}
+        file_id: ${{ env.NEXUS_TOOLS_MELON_FILE_GROUP_ID }}
+        mod_id: ${{ env.NEXUS_TOOLS_MOD_ID }}
+        filename: packages/MLVScan-MelonLoader-v${{ needs.check-version.outputs.new-version }}.zip
+        version: ${{ needs.check-version.outputs.new-version }}
+        display_name: MLVScan MelonLoader
+        description: ${{ env.NEXUS_RELEASE_DESCRIPTION }}
+        category: main
+        archive_existing_version: true
+        update_mod_version: true
+        primary_mod_manager_download: true
+        allow_mod_manager_download: true
+        show_requirements_pop_up: false
+
+    - name: Upload generic BepInEx 5 package to Nexus Mods
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && env.NEXUSMODS_API_KEY != '' && env.NEXUS_TOOLS_MOD_ID != '' && env.NEXUS_TOOLS_BEPINEX5_FILE_GROUP_ID != '' }}
+      uses: Nexus-Mods/upload-action@v1.0.0-beta.10
+      with:
+        api_key: ${{ env.NEXUSMODS_API_KEY }}
+        file_id: ${{ env.NEXUS_TOOLS_BEPINEX5_FILE_GROUP_ID }}
+        mod_id: ${{ env.NEXUS_TOOLS_MOD_ID }}
+        filename: packages/MLVScan-BepInEx5-v${{ needs.check-version.outputs.new-version }}.zip
+        version: ${{ needs.check-version.outputs.new-version }}
+        display_name: MLVScan BepInEx5
+        description: ${{ env.NEXUS_RELEASE_DESCRIPTION }}
+        category: main
+        archive_existing_version: true
+        update_mod_version: true
+        allow_mod_manager_download: true
+        show_requirements_pop_up: false
+
+    - name: Upload generic BepInEx 6 Mono package to Nexus Mods
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && env.NEXUSMODS_API_KEY != '' && env.NEXUS_TOOLS_MOD_ID != '' && env.NEXUS_TOOLS_BEPINEX6_MONO_FILE_GROUP_ID != '' }}
+      uses: Nexus-Mods/upload-action@v1.0.0-beta.10
+      with:
+        api_key: ${{ env.NEXUSMODS_API_KEY }}
+        file_id: ${{ env.NEXUS_TOOLS_BEPINEX6_MONO_FILE_GROUP_ID }}
+        mod_id: ${{ env.NEXUS_TOOLS_MOD_ID }}
+        filename: packages/MLVScan-BepInEx6-Mono-v${{ needs.check-version.outputs.new-version }}.zip
+        version: ${{ needs.check-version.outputs.new-version }}
+        display_name: MLVScan BepInEx6 Mono
+        description: ${{ env.NEXUS_RELEASE_DESCRIPTION }}
+        category: main
+        archive_existing_version: true
+        update_mod_version: true
+        allow_mod_manager_download: true
+        show_requirements_pop_up: false
+
+    - name: Upload generic BepInEx 6 IL2CPP package to Nexus Mods
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && env.NEXUSMODS_API_KEY != '' && env.NEXUS_TOOLS_MOD_ID != '' && env.NEXUS_TOOLS_BEPINEX6_IL2CPP_FILE_GROUP_ID != '' }}
+      uses: Nexus-Mods/upload-action@v1.0.0-beta.10
+      with:
+        api_key: ${{ env.NEXUSMODS_API_KEY }}
+        file_id: ${{ env.NEXUS_TOOLS_BEPINEX6_IL2CPP_FILE_GROUP_ID }}
+        mod_id: ${{ env.NEXUS_TOOLS_MOD_ID }}
+        filename: packages/MLVScan-BepInEx6-IL2CPP-v${{ needs.check-version.outputs.new-version }}.zip
+        version: ${{ needs.check-version.outputs.new-version }}
+        display_name: MLVScan BepInEx6 Il2Cpp
+        description: ${{ env.NEXUS_RELEASE_DESCRIPTION }}
+        category: main
+        archive_existing_version: true
+        update_mod_version: true
+        allow_mod_manager_download: true
+        show_requirements_pop_up: false
+
+    - name: Skip Nexus Mods uploads
+      if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_nexus) && (env.NEXUSMODS_API_KEY == '' || env.NEXUS_SCHEDULE1_FILE_GROUP_ID == '' || env.NEXUS_TOOLS_MELON_FILE_GROUP_ID == '' || env.NEXUS_TOOLS_BEPINEX5_FILE_GROUP_ID == '' || env.NEXUS_TOOLS_BEPINEX6_MONO_FILE_GROUP_ID == '' || env.NEXUS_TOOLS_BEPINEX6_IL2CPP_FILE_GROUP_ID == '') }}
+      run: echo "::notice::Skipping one or more Nexus Mods uploads because the API key or a file-group variable is not configured."
         
     - name: Summary
       run: |
