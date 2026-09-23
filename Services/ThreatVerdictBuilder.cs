@@ -34,7 +34,7 @@ namespace MLVScan.Services
         private ThreatVerdictInfo BuildVerdict(List<ScanFinding> findings, string fileHash)
         {
             var matches = _classifier.Classify(findings, fileHash).ToList();
-            var disposition = _dispositionClassifier.Classify(findings, matches);
+            var disposition = _dispositionClassifier.Classify(findings, matches, null, fileHash);
             var families = matches.Select(MapFamily).ToList();
             var primaryFamily = families
                 .OrderByDescending(f => f.ExactHashMatch)
