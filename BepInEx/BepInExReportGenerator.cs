@@ -87,7 +87,7 @@ namespace MLVScan.BepInEx
             {
                 _logger.LogInfo(wasBlocked
                     ? "Action: blocked by current incomplete-scan policy."
-                    : "Action: manual review required; not blocked by current config.");
+                    : "Action: manual review required; not blocked by current blocking policy.");
             }
 
             var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
@@ -199,7 +199,7 @@ namespace MLVScan.BepInEx
                 {
                     sb.AppendLine($"Outcome Summary: {outcomeSummary}");
                 }
-                sb.AppendLine($"Action Taken: {(wasBlocked ? "Blocked" : "Manual review required (not blocked by current config)")}");
+                sb.AppendLine($"Action Taken: {(wasBlocked ? "Blocked" : "Manual review required (not blocked by current blocking policy)")}");
                 sb.AppendLine($"SHA256: {fileHash}");
                 sb.AppendLine($"Original Path: {originalPath}");
                 sb.AppendLine($"{(wasBlocked ? "Blocked Path" : "Current Path")}: {currentPath}");

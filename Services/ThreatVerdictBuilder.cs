@@ -35,6 +35,11 @@ namespace MLVScan.Services
         {
             var matches = _classifier.Classify(findings, fileHash).ToList();
             var disposition = _dispositionClassifier.Classify(findings, matches, null, fileHash);
+            return MapVerdict(disposition, matches);
+        }
+
+        private static ThreatVerdictInfo MapVerdict(ThreatDispositionResult disposition, List<ThreatFamilyMatch> matches)
+        {
             var families = matches.Select(MapFamily).ToList();
             var primaryFamily = families
                 .OrderByDescending(f => f.ExactHashMatch)
@@ -77,7 +82,10 @@ namespace MLVScan.Services
                 {
                     Kind = ThreatVerdictKind.Suspicious,
                     Title = "Suspicious mod",
-                    Summary = "This mod triggered correlated suspicious behavior and was blocked as a precaution. It may still be a false positive and should be reviewed before assuming infection.",
+                    Summary = disposition.BlockingRecommended
+                        ? "This mod triggered correlated suspicious behavior. Blocking is recommended as a precaution; it may still be a false positive and should be reviewed before assuming infection."
+                        : "This mod triggered suspicious behavior for review, but Core does not recommend blocking it.",
+                    BlockingRecommended = disposition.BlockingRecommended,
                     Confidence = 0d,
                     ShouldBypassThreshold = false,
                     PrimaryFamily = primaryFamily,
@@ -88,6 +96,7 @@ namespace MLVScan.Services
             return new ThreatVerdictInfo
             {
                 Kind = ThreatVerdictKind.None,
+                BlockingRecommended = false,
                 Title = "No threat verdict",
                 Summary = "No suspicious behavior patterns were retained for this mod.",
                 Confidence = 0d,

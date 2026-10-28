@@ -145,7 +145,7 @@ namespace MLVScan.MelonLoader
 
                     if (reviewOnlyCount > 0)
                     {
-                        LoggerInstance.Warning($"{reviewOnlyCount} mod(s) require manual review but were not blocked by the current configuration");
+                        LoggerInstance.Warning($"{reviewOnlyCount} mod(s) require manual review but were not blocked by the current blocking policy");
                     }
 
                     GenerateDetailedReports(disabledMods, attentionResults);
@@ -232,7 +232,7 @@ namespace MLVScan.MelonLoader
                 {
                     LoggerInstance.Msg(wasBlocked
                         ? "Action: blocked by current incomplete-scan policy."
-                        : "Action: manual review required; not blocked by current config.");
+                        : "Action: manual review required; not blocked by current blocking policy.");
                 }
 
                 var familyName = ThreatVerdictTextFormatter.GetPrimaryFamilyLabel(threatVerdict);
@@ -341,7 +341,7 @@ namespace MLVScan.MelonLoader
                             {
                                 writer.WriteLine($"Outcome Summary: {outcomeSummary}");
                             }
-                            writer.WriteLine($"Action Taken: {(wasBlocked ? "Blocked" : "Manual review required (not blocked by current config)")}");
+                            writer.WriteLine($"Action Taken: {(wasBlocked ? "Blocked" : "Manual review required (not blocked by current blocking policy)")}");
                             writer.WriteLine($"SHA256 Hash: {fileHash}");
                             writer.WriteLine($"Original Path: {originalPath}");
                             writer.WriteLine($"{(wasBlocked ? "Disabled Path" : "Current Path")}: {accessiblePath}");
@@ -646,7 +646,7 @@ namespace MLVScan.MelonLoader
                 LoggerInstance.Msg("1. Check with the modding community first - no detection is perfect");
                 LoggerInstance.Msg("   Join the modding Discord at: https://discord.gg/UD4K4chKak");
                 LoggerInstance.Msg("   Ask about this mod in the MLVScan thread of #mod-releases to confirm if it is actually malicious");
-                LoggerInstance.Msg("2. Review the saved report for the exact behavior that triggered the block");
+                LoggerInstance.Msg("2. Review the saved report for the exact behavior that triggered the finding");
                 LoggerInstance.Msg("3. Only run a full antivirus scan if you have already executed this mod or still do not trust it");
                 LoggerInstance.Msg("4. Whitelist the SHA256 only if you have independently verified the mod is safe");
             }

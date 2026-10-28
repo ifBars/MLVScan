@@ -99,7 +99,7 @@ namespace MLVScan.Services
                 if (!ShouldDisable(scanResult))
                 {
                     Logger.Info(
-                        $"Plugin {Path.GetFileName(pluginPath)} requires attention ({GetOutcomeTitle(scanResult)}) but blocking for this outcome is disabled in configuration");
+                        $"Plugin {Path.GetFileName(pluginPath)} requires attention ({GetOutcomeTitle(scanResult)}) but does not meet the configured blocking policy or blocking recommendation");
                     continue;
                 }
 
@@ -128,7 +128,9 @@ namespace MLVScan.Services
             {
                 ThreatVerdictKind.KnownMaliciousSample => Config.BlockKnownThreats,
                 ThreatVerdictKind.KnownMalwareFamily => Config.BlockKnownThreats,
-                ThreatVerdictKind.Suspicious => Config.BlockSuspicious,
+                ThreatVerdictKind.Suspicious =>
+                    (Config.BlockSuspicious && verdict.BlockingRecommended) ||
+                    ShouldDisable(scanResult?.ScanStatus ?? new ScanStatusInfo()),
                 _ => ShouldDisable(scanResult?.ScanStatus ?? new ScanStatusInfo())
             };
         }

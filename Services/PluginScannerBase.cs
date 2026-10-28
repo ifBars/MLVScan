@@ -362,7 +362,7 @@ namespace MLVScan.Services
                 return false;
             }
 
-            if (!ScanResultFacts.HasThreatVerdict(entry.Result) &&
+            if (!ScanResultFacts.HasBlockingThreatVerdict(entry.Result) &&
                 !cacheStore.CanTrustCleanEntries)
             {
                 _telemetry.IncrementCounter("Cache.HashRejected");

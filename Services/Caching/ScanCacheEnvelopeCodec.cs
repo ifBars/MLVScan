@@ -10,7 +10,7 @@ namespace MLVScan.Services.Caching
     internal static class ScanCacheEnvelopeCodec
     {
         private const int EnvelopeMagic = 0x4D4C5643;
-        private const int EnvelopeVersion = 2;
+        private const int EnvelopeVersion = 3;
 
         public static byte[] SerializePayload(ScanCacheEntryPayload payload)
         {
@@ -268,6 +268,7 @@ namespace MLVScan.Services.Caching
             WriteString(writer, verdict.Summary);
             writer.Write(verdict.Confidence);
             writer.Write(verdict.ShouldBypassThreshold);
+            writer.Write(verdict.BlockingRecommended);
             WriteThreatFamily(writer, verdict.PrimaryFamily);
             WriteThreatFamilies(writer, verdict.Families);
         }
@@ -286,6 +287,7 @@ namespace MLVScan.Services.Caching
                 Summary = ReadString(reader),
                 Confidence = reader.ReadDouble(),
                 ShouldBypassThreshold = reader.ReadBoolean(),
+                BlockingRecommended = reader.ReadBoolean(),
                 PrimaryFamily = ReadThreatFamily(reader),
                 Families = ReadThreatFamilies(reader)
             };

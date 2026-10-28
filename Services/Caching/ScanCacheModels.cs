@@ -41,7 +41,7 @@ namespace MLVScan.Services.Caching
                 return false;
             }
 
-            if (!ScanResultFacts.HasThreatVerdict(Result) &&
+            if (!ScanResultFacts.HasBlockingThreatVerdict(Result) &&
                 !canTrustCleanEntries)
             {
                 return false;
@@ -86,6 +86,7 @@ namespace MLVScan.Services.Caching
                     Summary = Result.ThreatVerdict.Summary,
                     Confidence = Result.ThreatVerdict.Confidence,
                     ShouldBypassThreshold = Result.ThreatVerdict.ShouldBypassThreshold,
+                    BlockingRecommended = Result.ThreatVerdict.BlockingRecommended,
                     PrimaryFamily = CloneFamily(Result.ThreatVerdict.PrimaryFamily),
                     Families = Result.ThreatVerdict.Families?
                         .Select(CloneFamily)
@@ -139,7 +140,7 @@ namespace MLVScan.Services.Caching
 
     internal sealed class ScanCacheEnvelope
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = 3;
 
         public string Signature { get; set; } = string.Empty;
 

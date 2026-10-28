@@ -37,9 +37,11 @@ Supports **MelonLoader**, **BepInEx 5.x**, and **BepInEx 6.x** (Mono & Il2Cpp).
 MLVScan now separates **threat verdicts** from **scan completeness**:
 
 - `BlockKnownThreats = true` blocks exact malicious sample matches and known malware-family matches.
-- `BlockSuspicious = true` blocks unknown correlated suspicious behavior that may still be a false positive.
+- `BlockSuspicious = true` blocks suspicious verdicts when Core recommends blocking. Explicit advisory verdicts remain visible for review without disabling the mod; existing suspicious verdicts still recommend blocking by default.
 - `BlockIncompleteScans = false` leaves incomplete scans as **manual review required** by default instead of blocking them automatically.
 - `WhitelistedHashes` is now strictly user-managed. `2.0.0` no longer seeds any default safe hashes into loader configs.
+
+An advisory verdict does not override `BlockIncompleteScans`: an incomplete scan can still be blocked under that independent policy. Advisory results require the same trusted-cache conditions as clean results. The cache format has changed, so older cache entries are rescanned.
 
 Current loader note: assemblies larger than **256 MB** are still SHA256 hashed and checked for exact known-malicious sample matches, but full IL analysis is skipped to avoid loading the entire file into memory during startup. Those files are reported as manual-review items unless you explicitly enable `BlockIncompleteScans`.
 

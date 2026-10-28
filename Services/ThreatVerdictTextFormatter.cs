@@ -99,6 +99,10 @@ namespace MLVScan.Services
             writer.WriteLine("Threat Verdict:");
             writer.WriteLine($"- Verdict: {threatVerdict.Title}");
             writer.WriteLine($"- Summary: {threatVerdict.Summary}");
+            if (threatVerdict.Kind == ThreatVerdictKind.Suspicious)
+            {
+                writer.WriteLine($"- Blocking Recommended: {(threatVerdict.BlockingRecommended ? "Yes" : "No")}");
+            }
 
             var familyName = GetPrimaryFamilyLabel(threatVerdict);
             if (!string.IsNullOrWhiteSpace(familyName))

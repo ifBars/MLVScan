@@ -29,6 +29,11 @@ namespace MLVScan.Models
         public string Summary { get; set; } = string.Empty;
         public double Confidence { get; set; }
         public bool ShouldBypassThreshold { get; set; }
+        /// <summary>
+        /// Core's blocking recommendation. Defaults to true so legacy or manually created
+        /// suspicious verdicts retain their existing blocking policy unless explicitly advisory.
+        /// </summary>
+        public bool BlockingRecommended { get; set; } = true;
         public ThreatFamilyReference PrimaryFamily { get; set; }
         public List<ThreatFamilyReference> Families { get; set; } = new List<ThreatFamilyReference>();
     }
@@ -60,6 +65,15 @@ namespace MLVScan.Models
         public static bool HasThreatVerdict(ScannedPluginResult result)
         {
             return (result?.ThreatVerdict?.Kind ?? ThreatVerdictKind.None) != ThreatVerdictKind.None;
+        }
+
+        public static bool HasBlockingThreatVerdict(ScannedPluginResult result)
+        {
+            var verdict = result?.ThreatVerdict;
+            return verdict != null &&
+                   (verdict.Kind == ThreatVerdictKind.KnownMaliciousSample ||
+                    verdict.Kind == ThreatVerdictKind.KnownMalwareFamily ||
+                    (verdict.Kind == ThreatVerdictKind.Suspicious && verdict.BlockingRecommended));
         }
 
         public static bool RequiresManualReview(ScannedPluginResult result)
