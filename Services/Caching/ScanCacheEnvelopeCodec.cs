@@ -10,7 +10,7 @@ namespace MLVScan.Services.Caching
     internal static class ScanCacheEnvelopeCodec
     {
         private const int EnvelopeMagic = 0x4D4C5643;
-        private const int EnvelopeVersion = 3;
+        private const int EnvelopeVersion = 4;
 
         public static byte[] SerializePayload(ScanCacheEntryPayload payload)
         {
@@ -269,6 +269,8 @@ namespace MLVScan.Services.Caching
             writer.Write(verdict.Confidence);
             writer.Write(verdict.ShouldBypassThreshold);
             writer.Write(verdict.BlockingRecommended);
+            writer.Write(verdict.RelatedFindingIndices?.Count ?? -1);
+            if (verdict.RelatedFindingIndices != null) foreach (var index in verdict.RelatedFindingIndices) writer.Write(index);
             WriteThreatFamily(writer, verdict.PrimaryFamily);
             WriteThreatFamilies(writer, verdict.Families);
         }
@@ -288,9 +290,20 @@ namespace MLVScan.Services.Caching
                 Confidence = reader.ReadDouble(),
                 ShouldBypassThreshold = reader.ReadBoolean(),
                 BlockingRecommended = reader.ReadBoolean(),
+                RelatedFindingIndices = ReadFindingIndices(reader),
                 PrimaryFamily = ReadThreatFamily(reader),
                 Families = ReadThreatFamilies(reader)
             };
+        }
+
+        private static List<int> ReadFindingIndices(BinaryReader reader)
+        {
+            var count = reader.ReadInt32();
+            if (count == -1) return null;
+            if (count < 0 || count > 100000) throw new InvalidDataException("Invalid finding index count");
+            var indices = new List<int>(count);
+            for (var i = 0; i < count; i++) indices.Add(reader.ReadInt32());
+            return indices;
         }
 
         private static void WriteScanStatus(BinaryWriter writer, ScanStatusInfo scanStatus)

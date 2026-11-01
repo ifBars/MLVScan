@@ -10,6 +10,11 @@ namespace MLVScan.Models
     {
         /// <summary>Mod loader: MelonLoader, BepInEx5, BepInEx6Mono, BepInEx6IL2CPP</summary>
         public string LoaderType { get; set; }
+        public string CoreVersion { get; set; } = MLVScanVersions.CoreVersion;
+        public string OriginalVerdict { get; set; }
+        public string OriginalScanStatus { get; set; }
+        public string OriginalResultJson { get; set; }
+        public List<ScanFinding> OriginalFindings { get; set; }
 
         /// <summary>Loader version</summary>
         public string LoaderVersion { get; set; }

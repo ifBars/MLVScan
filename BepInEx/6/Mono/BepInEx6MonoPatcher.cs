@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.IO;
 using BepInEx;
@@ -6,6 +7,7 @@ using BepInEx.Preloader.Core.Patching;
 using MLVScan.BepInEx;
 using MLVScan.BepInEx.Adapters;
 using MLVScan.Services.Diagnostics;
+using MLVScan.Services;
 
 namespace MLVScan.BepInEx6.Mono
 {
@@ -70,17 +72,20 @@ namespace MLVScan.BepInEx6.Mono
                         var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
                         var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
-                        if (disabledPlugins.Count > 0)
+                        var pendingResult = scanResults.Values.FirstOrDefault(r => SharingConsentPolicy.IsReviewCandidate(r.ThreatVerdict, r.ScanStatus));
+                    if (pendingResult != null)
                         {
                             // Queue first-run GUI consent for runtime plugin.
-                            if (!config.ReportUploadConsentAsked)
+                            if (SharingConsentPolicy.NeedsDecision(config))
                             {
-                                var firstDisabled = disabledPlugins[0];
+
                                 config.ReportUploadConsentPending = true;
-                                config.PendingReportUploadPath =
-                                    File.Exists(firstDisabled.DisabledPath) ? firstDisabled.DisabledPath : firstDisabled.OriginalPath;
-                                config.PendingReportUploadVerdictKind = firstDisabled.ThreatVerdict?.Kind.ToString() ?? string.Empty;
-                                configManager.SaveConfig(config);
+                            config.PendingReportUploadPath = pendingResult.FilePath;
+                            var disabled = disabledPlugins.FirstOrDefault(d => d.OriginalPath == pendingResult.FilePath);
+                            if (disabled != null && File.Exists(disabled.DisabledPath)) config.PendingReportUploadPath = disabled.DisabledPath;
+                            config.PendingReportUploadVerdictKind = pendingResult.ThreatVerdict?.Kind.ToString() ?? string.Empty;
+                            config.PendingReportUploadScanStatusKind = pendingResult.ScanStatus?.Kind.ToString() ?? string.Empty;
+                            configManager.SaveConfig(config);
                                 _logger.LogInfo("MLVScan will show an in-game upload consent popup.");
                             }
                         }

@@ -27,6 +27,12 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<string[]> _whitelistedHashes;
         private readonly MelonPreferences_Entry<bool> _dumpFullIlReports;
         private readonly MelonPreferences_Entry<bool> _developerMode;
+        private readonly MelonPreferences_Entry<bool> _enableAnonymousTelemetry;
+        private readonly MelonPreferences_Entry<string> _postHogProjectToken;
+        private readonly MelonPreferences_Entry<string> _postHogRegion;
+        private readonly MelonPreferences_Entry<string> _telemetryEnvironment;
+        private readonly MelonPreferences_Entry<int> _sharingConsentVersion;
+        private readonly MelonPreferences_Entry<string> _sharingConsentTimestamp;
         private readonly MelonPreferences_Entry<bool> _enableReportUpload;
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentAsked;
         private readonly MelonPreferences_Entry<bool> _reportUploadConsentPending;
@@ -34,6 +40,8 @@ namespace MLVScan.MelonLoader
         private readonly MelonPreferences_Entry<string> _pendingReportUploadVerdictKind;
         private readonly MelonPreferences_Entry<string> _reportUploadApiBaseUrl;
         private readonly MelonPreferences_Entry<string[]> _uploadedReportHashes;
+        private readonly MelonPreferences_Entry<string[]> _uploadedReviewReceipts;
+        private readonly MelonPreferences_Entry<string> _pendingReviewStatus;
         private readonly MelonPreferences_Entry<bool> _includeMods;
         private readonly MelonPreferences_Entry<bool> _includePlugins;
         private readonly MelonPreferences_Entry<bool> _includeUserLibs;
@@ -79,6 +87,12 @@ namespace MLVScan.MelonLoader
                 _developerMode = _category.CreateEntry("DeveloperMode", false,
                     description: "Developer mode: Shows remediation guidance to help mod developers fix false positives");
 
+                _enableAnonymousTelemetry = _category.CreateEntry("EnableAnonymousTelemetry", false, description: "Send aggregate scan and detection counts to PostHog. Optional sample uploads have a separate setting. No filenames, hashes, evidence text, or persistent ID. PostHog receives the network connection.");
+                _postHogProjectToken = _category.CreateEntry("PostHogProjectToken", new MLVScanConfig().PostHogProjectToken, description: "PostHog public project token (phc_). Never use a personal API key.");
+                _postHogRegion = _category.CreateEntry("PostHogRegion", "us", description: "PostHog ingestion region: us or eu.");
+                _telemetryEnvironment = _category.CreateEntry("TelemetryEnvironment", new MLVScanConfig().TelemetryEnvironment, description: "Analytics environment: development, staging, or production.");
+                _sharingConsentVersion = _category.CreateEntry("SharingConsentVersion", 0, description: "Version of the combined sharing choice last answered.");
+                _sharingConsentTimestamp = _category.CreateEntry("SharingConsentTimestamp", string.Empty, description: "UTC timestamp of the sharing choice.");
                 _enableReportUpload = _category.CreateEntry("EnableReportUpload", false,
                     description: "When enabled (and consent given), send reports to MLVScan API for false positive analysis");
 
@@ -97,6 +111,8 @@ namespace MLVScan.MelonLoader
                 _reportUploadApiBaseUrl = _category.CreateEntry("ReportUploadApiBaseUrl", "https://api.mlvscan.com",
                     description: "API base URL for report uploads");
 
+                _uploadedReviewReceipts = _category.CreateEntry("UploadedReviewReceipts", Array.Empty<string>(), description: "Local hash-to-private-review receipt mappings (internal)");
+                _pendingReviewStatus = _category.CreateEntry("PendingReportUploadScanStatusKind", string.Empty, description: "Pending review completeness status (internal)");
                 _uploadedReportHashes = _category.CreateEntry("UploadedReportHashes", Array.Empty<string>(),
                     description: "List of assembly SHA256 hashes already uploaded to the MLVScan API (internal)");
 
@@ -128,6 +144,12 @@ namespace MLVScan.MelonLoader
                 _whitelistedHashes.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _dumpFullIlReports.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _developerMode.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _enableAnonymousTelemetry.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _postHogProjectToken.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _postHogRegion.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _telemetryEnvironment.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _sharingConsentVersion.OnEntryValueChanged.Subscribe(OnConfigChanged);
+                _sharingConsentTimestamp.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _enableReportUpload.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadConsentAsked.OnEntryValueChanged.Subscribe(OnConfigChanged);
                 _reportUploadConsentPending.OnEntryValueChanged.Subscribe(OnConfigChanged);
@@ -186,6 +208,12 @@ namespace MLVScan.MelonLoader
                 {
                     DeveloperMode = _developerMode.Value
                 },
+                EnableAnonymousTelemetry = _enableAnonymousTelemetry.Value,
+                PostHogProjectToken = _postHogProjectToken.Value,
+                PostHogRegion = _postHogRegion.Value,
+                TelemetryEnvironment = _telemetryEnvironment.Value,
+                SharingConsentVersion = _sharingConsentVersion.Value,
+                SharingConsentTimestamp = _sharingConsentTimestamp.Value,
                 EnableReportUpload = _enableReportUpload.Value,
                 ReportUploadConsentAsked = _reportUploadConsentAsked.Value,
                 ReportUploadConsentPending = _reportUploadConsentPending.Value,
@@ -193,6 +221,8 @@ namespace MLVScan.MelonLoader
                 PendingReportUploadVerdictKind = _pendingReportUploadVerdictKind.Value,
                 ReportUploadApiBaseUrl = _reportUploadApiBaseUrl.Value,
                 UploadedReportHashes = NormalizeHashes(_uploadedReportHashes.Value),
+                UploadedReviewReceipts = _uploadedReviewReceipts.Value,
+                PendingReportUploadScanStatusKind = _pendingReviewStatus.Value,
                 IncludeMods = _includeMods.Value,
                 IncludePlugins = _includePlugins.Value,
                 IncludeUserLibs = _includeUserLibs.Value,
@@ -217,6 +247,12 @@ namespace MLVScan.MelonLoader
                 _whitelistedHashes.Value = newConfig.WhitelistedHashes;
                 _dumpFullIlReports.Value = newConfig.DumpFullIlReports;
                 _developerMode.Value = newConfig.Scan?.DeveloperMode ?? false;
+                _enableAnonymousTelemetry.Value = newConfig.EnableAnonymousTelemetry;
+                _postHogProjectToken.Value = newConfig.PostHogProjectToken;
+                _postHogRegion.Value = newConfig.PostHogRegion;
+                _telemetryEnvironment.Value = newConfig.TelemetryEnvironment;
+                _sharingConsentVersion.Value = newConfig.SharingConsentVersion;
+                _sharingConsentTimestamp.Value = newConfig.SharingConsentTimestamp;
                 _enableReportUpload.Value = newConfig.EnableReportUpload;
                 _reportUploadConsentAsked.Value = newConfig.ReportUploadConsentAsked;
                 _reportUploadConsentPending.Value = newConfig.ReportUploadConsentPending;
@@ -224,6 +260,8 @@ namespace MLVScan.MelonLoader
                 _pendingReportUploadVerdictKind.Value = newConfig.PendingReportUploadVerdictKind ?? string.Empty;
                 _reportUploadApiBaseUrl.Value = newConfig.ReportUploadApiBaseUrl;
                 _uploadedReportHashes.Value = NormalizeHashes(newConfig.UploadedReportHashes);
+                _uploadedReviewReceipts.Value = newConfig.UploadedReviewReceipts ?? Array.Empty<string>();
+                _pendingReviewStatus.Value = newConfig.PendingReportUploadScanStatusKind ?? string.Empty;
                 _includeMods.Value = newConfig.IncludeMods;
                 _includePlugins.Value = newConfig.IncludePlugins;
                 _includeUserLibs.Value = newConfig.IncludeUserLibs;

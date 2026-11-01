@@ -96,6 +96,29 @@ public class MLVScanConfig
     /// </summary>
     public string[] UploadedReportHashes { get; set; } = [];
 
+    /// <summary>Local hash-to-private-receipt mappings; never sent in analytics.</summary>
+    public string[] UploadedReviewReceipts { get; set; } = [];
+    /// <summary>Original completeness status retained until the sharing choice.</summary>
+    public string PendingReportUploadScanStatusKind { get; set; } = string.Empty;
+
+    /// <summary>Send aggregate scan counts to PostHog. Separate opt-in from sample uploads. No filenames, hashes, evidence text, or persistent ID. PostHog receives the network connection.</summary>
+    public bool EnableAnonymousTelemetry { get; set; } = false;
+
+    /// <summary>PostHog public project token (phc_). Never use a personal API key.</summary>
+    public string PostHogProjectToken { get; set; } = "phc_pXZ6emkeSKUCBCAy8fP7SpcYF2Qmxu72yDJqg7zNDeuK";
+
+    /// <summary>PostHog ingestion region: us or eu.</summary>
+    public string PostHogRegion { get; set; } = "us";
+
+    /// <summary>Analytics environment: development, staging, or production.</summary>
+    public string TelemetryEnvironment { get; set; } = "production";
+
+    /// <summary>Version of the combined analytics/file-sharing choice last answered.</summary>
+    public int SharingConsentVersion { get; set; } = 0;
+
+    /// <summary>UTC timestamp of the combined consent decision.</summary>
+    public string SharingConsentTimestamp { get; set; } = string.Empty;
+
     // Scan scope settings
 
     /// <summary>

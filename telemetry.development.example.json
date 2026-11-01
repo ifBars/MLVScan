@@ -1,0 +1,8 @@
+{
+  "EnableAnonymousTelemetry": true,
+  "PostHogProjectToken": "<public phc_ project token>",
+  "PostHogRegion": "us",
+  "TelemetryEnvironment": "development",
+  "EnableReportUpload": false,
+  "SharingConsentVersion": 3
+}

@@ -36,6 +36,7 @@ namespace MLVScan.Models
         public bool BlockingRecommended { get; set; } = true;
         public ThreatFamilyReference PrimaryFamily { get; set; }
         public List<ThreatFamilyReference> Families { get; set; } = new List<ThreatFamilyReference>();
+        public List<int> RelatedFindingIndices { get; set; }
     }
 
     /// <summary>

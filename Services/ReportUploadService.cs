@@ -10,33 +10,56 @@ using System.Threading;
 using System.Threading.Tasks;
 using MLVScan.Abstractions;
 using MLVScan.Models;
+using MLVScan.Services.Diagnostics;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 
 namespace MLVScan.Services
 {
     /// <summary>
     /// Non-blocking service to upload scan reports and assemblies to the MLVScan API.
-    /// Uses POST /files for small files (≤32MB) and GET /files/upload_url + PUT for large files.
+    /// Uses only POST /files/private-review for files up to 64 MiB; larger files remain local.
     /// Never blocks startup; failures are logged and local behavior continues.
     /// </summary>
     public class ReportUploadService
     {
-        private const int SmallFileLimitBytes = 32 * 1024 * 1024; // 32 MB
-        private const int DefaultTimeoutSeconds = 30;
+        private const int SmallFileLimitBytes = 64 * 1024 * 1024; // private review limit
+        private const int DefaultTimeoutSeconds = 120;
         private const int MaxRetries = 2;
         private static readonly object InFlightUploadsLock = new object();
         private static readonly HashSet<string> InFlightUploads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private readonly IConfigManager _configManager;
+        private readonly Func<HttpClient> _createHttpClient;
+        private static readonly object ReceiptLock = new object();
         private readonly Action<string> _logInfo;
         private readonly Action<string> _logWarn;
         private readonly Action<string> _logError;
 
-        public ReportUploadService(IConfigManager configManager, Action<string> logInfo, Action<string> logWarn, Action<string> logError)
+        public ReportUploadService(IConfigManager configManager, Action<string> logInfo, Action<string> logWarn, Action<string> logError, Func<HttpClient> createHttpClient = null)
         {
+            _createHttpClient = createHttpClient ?? CreateDefaultHttpClient;
             _configManager = configManager;
             _logInfo = logInfo ?? (_ => { });
             _logWarn = logWarn ?? (_ => { });
             _logError = logError ?? (_ => { });
+        }
+
+        /// <summary>Reads an optional upload within its transport budget, independently of local scanning.</summary>
+        public static byte[] ReadPrivateSampleBytes(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length > SmallFileLimitBytes)
+                throw new IOException("Private review skipped: file exceeds 64 MiB. Local scanning is not size limited.");
+            var bytes = new byte[checked((int)stream.Length)];
+            var offset = 0;
+            while (offset < bytes.Length)
+            {
+                var count = stream.Read(bytes, offset, bytes.Length - offset);
+                if (count == 0) throw new EndOfStreamException("Sample changed while preparing private review.");
+                offset += count;
+            }
+            return bytes;
         }
 
         /// <summary>
@@ -45,6 +68,7 @@ namespace MLVScan.Services
         /// </summary>
         public void UploadReportNonBlocking(byte[] assemblyBytes, string filename, SubmissionMetadata metadata, string apiBaseUrl)
         {
+            if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
                 _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
@@ -63,6 +87,7 @@ namespace MLVScan.Services
             {
                 try
                 {
+                    if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
                     await UploadReportAsync(assemblyBytes, filename, metadata, baseUrl);
                 }
                 catch (Exception ex)
@@ -77,12 +102,18 @@ namespace MLVScan.Services
         /// </summary>
         public async Task UploadReportAsync(byte[] assemblyBytes, string filename, SubmissionMetadata metadata, string apiBaseUrl)
         {
+            if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
                 _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
                 return;
             }
 
+            if (assemblyBytes.Length > SmallFileLimitBytes)
+            {
+                _logWarn("Private review skipped: file exceeds 64 MiB. It remains local.");
+                return;
+            }
             var assemblyHash = HashUtility.CalculateBytesHash(assemblyBytes);
             if (HashUtility.IsValidHash(assemblyHash))
             {
@@ -104,33 +135,45 @@ namespace MLVScan.Services
                 }
             }
 
-            var baseUrl = apiBaseUrl.TrimEnd('/');
-            var useDirectUpload = assemblyBytes.Length <= SmallFileLimitBytes;
-
-            _logInfo($"ReportUploadService: Uploading {filename} ({assemblyBytes.Length} bytes) via {(useDirectUpload ? "POST /files" : "presigned upload")}");
-
             try
             {
+                if (string.IsNullOrWhiteSpace(apiBaseUrl)) return;
+                var baseUrl = apiBaseUrl.TrimEnd('/');
+                _logInfo("ReportUploadService: Submitting a file for private review.");
+                if (metadata?.OriginalFindings != null)
+                {
+                    // Map the findings from the original scan; never execute the sample or run a new scan here.
+                    var original = ScanResultMapper.ToDto(metadata.OriginalFindings, RedactionHelper.RedactFilename(filename), assemblyBytes);
+                    foreach (var finding in original.Findings) finding.Location = RedactionHelper.RedactLocation(finding.Location);
+                    // A loader analysis limit must not become a clean report when mapping retained findings.
+                    if (metadata.OriginalScanStatus == nameof(ScanStatusKind.RequiresReview) && original.AnalysisCompleteness.IsComplete)
+                    {
+                        original.AnalysisCompleteness.IsComplete = false;
+                        original.AnalysisCompleteness.Status = "Incomplete";
+                        original.AnalysisCompleteness.ReviewRecommended = true;
+                        if (original.Disposition.Classification == "Clean")
+                        {
+                            original.Disposition.Classification = "ManualReviewRequired";
+                            original.Disposition.Headline = "Manual review required";
+                            original.Disposition.Summary = "The loader reported incomplete analysis.";
+                        }
+                    }
+                    metadata.OriginalVerdict ??= original.Disposition?.Classification;
+                    metadata.OriginalScanStatus ??= original.AnalysisCompleteness.Status;
+                    using var reportStream = new MemoryStream();
+                    new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(MLVScan.Models.Dto.ScanResultDto)).WriteObject(reportStream, original);
+                    var json = Encoding.UTF8.GetString(reportStream.ToArray());
+                    // Retain the bounded summary when a full report would exceed the private endpoint's cap.
+                    if (Encoding.UTF8.GetByteCount(json) <= 180000) metadata.OriginalResultJson = json;
+                }
+                string receipt = null;
                 for (var attempt = 0; attempt <= MaxRetries; attempt++)
                 {
                     try
                     {
-                        if (useDirectUpload)
-                        {
-                            await UploadViaPostFilesAsync(assemblyBytes, filename, metadata, baseUrl);
-                        }
-                        else
-                        {
-                            await UploadViaPresignedUrlAsync(assemblyBytes, filename, metadata, baseUrl);
-                        }
-
-                        if (HashUtility.IsValidHash(assemblyHash))
-                        {
-                            _configManager?.MarkReportHashUploaded(assemblyHash);
-                        }
-
-                        _logInfo($"ReportUploadService: Successfully uploaded {filename}");
-                        return;
+                        if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
+                        receipt = await UploadViaPostFilesAsync(assemblyBytes, filename, metadata, baseUrl);
+                        break;
                     }
                     catch (Exception ex)
                     {
@@ -142,6 +185,32 @@ namespace MLVScan.Services
                         await Task.Delay(1000 * (attempt + 1));
                     }
                 }
+                // The server accepted the sample. Local persistence or analytics failure must never retry it.
+                try
+                {
+                    lock (ReceiptLock)
+                    {
+                        if (HashUtility.IsValidHash(assemblyHash)) _configManager?.MarkReportHashUploaded(assemblyHash);
+                        if (receipt != null && _configManager?.Config != null)
+                        {
+                            var config = _configManager.Config;
+                            config.UploadedReviewReceipts = (config.UploadedReviewReceipts ?? Array.Empty<string>())
+                                .Append(assemblyHash + ":" + receipt).Distinct(StringComparer.Ordinal).ToArray();
+                            _configManager.SaveConfig(config);
+                        }
+                    }
+                }
+                catch (Exception) { _logWarn("Private upload accepted, but its local receipt could not be saved."); }
+                if (receipt == null) { _logWarn("Private upload accepted, but no valid receipt was returned; telemetry correlation unavailable."); return; }
+                _logInfo("Private review submitted. Reference: " + receipt);
+                try
+                {
+                    using var analyticsClient = _createHttpClient();
+                    await PostHogScanTelemetry.SendReviewReceiptAsync(analyticsClient, _configManager?.Config,
+                        receipt, metadata?.OriginalVerdict, metadata?.OriginalScanStatus).ConfigureAwait(false);
+                }
+                catch (Exception) { /* Best effort: never retry an accepted upload for telemetry. */ }
+
             }
             finally
             {
@@ -155,9 +224,9 @@ namespace MLVScan.Services
             }
         }
 
-        private async Task UploadViaPostFilesAsync(byte[] assemblyBytes, string filename, SubmissionMetadata metadata, string baseUrl)
+        private async Task<string> UploadViaPostFilesAsync(byte[] assemblyBytes, string filename, SubmissionMetadata metadata, string baseUrl)
         {
-            using var client = CreateHttpClient();
+            using var client = _createHttpClient();
             using var content = new MultipartFormDataContent();
 
             // Explicitly set Content-Disposition on each part so Cloudflare's FormData parser
@@ -185,68 +254,35 @@ namespace MLVScan.Services
                 content.Add(metaContent);
             }
 
-            var url = $"{baseUrl}/files";
-            var response = await client.PostAsync(url, content);
+            var url = $"{baseUrl}/files/private-review";
+            using var response = await client.PostAsync(url, content);
 
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                throw new IOException($"POST /files returned {(int)response.StatusCode}: {body}");
+                throw new IOException($"Private review returned {(int)response.StatusCode}: {body}");
             }
+            try
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                if (bytes.Length > 8192) return null;
+                using var stream = new MemoryStream(bytes);
+                var receipt = (PrivateReviewReceipt)new DataContractJsonSerializer(typeof(PrivateReviewReceipt)).ReadObject(stream);
+                return receipt.Visibility == "private" && PostHogScanTelemetry.IsValidReviewId(receipt.ReviewId)
+                    ? Guid.Parse(receipt.ReviewId).ToString("D") : null;
+            }
+            catch (Exception) { return null; }
+
         }
 
-        private async Task UploadViaPresignedUrlAsync(byte[] assemblyBytes, string filename, SubmissionMetadata metadata, string baseUrl)
+        [DataContract]
+        private sealed class PrivateReviewReceipt
         {
-            using var client = CreateHttpClient();
-
-            var metadataJson = SerializeMetadata(metadata);
-            var metadataBase64Url = string.IsNullOrEmpty(metadataJson)
-                ? null
-                : Convert.ToBase64String(Encoding.UTF8.GetBytes(metadataJson))
-                    .Replace('+', '-')
-                    .Replace('/', '_')
-                    .TrimEnd('=');
-
-            var query = new List<string>
-            {
-                $"filename={Uri.EscapeDataString(filename)}",
-                "contentType=application/octet-stream"
-            };
-            if (!string.IsNullOrEmpty(metadataBase64Url))
-            {
-                query.Add($"metadata={Uri.EscapeDataString(metadataBase64Url)}");
-            }
-
-            var getUrl = $"{baseUrl}/files/upload_url?{string.Join("&", query)}";
-            var getResponse = await client.GetAsync(getUrl);
-
-            if (!getResponse.IsSuccessStatusCode)
-            {
-                var body = await getResponse.Content.ReadAsStringAsync();
-                throw new IOException($"GET /files/upload_url returned {(int)getResponse.StatusCode}: {body}");
-            }
-
-            var json = await getResponse.Content.ReadAsStringAsync();
-            var (uploadUrl, _) = ParseUploadUrlResponse(json);
-            if (string.IsNullOrEmpty(uploadUrl))
-            {
-                throw new IOException("Failed to parse upload URL from response");
-            }
-
-            using var putClient = CreateHttpClient();
-            using var putContent = new ByteArrayContent(assemblyBytes);
-            putContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-
-            var putResponse = await putClient.PutAsync(uploadUrl, putContent);
-
-            if (!putResponse.IsSuccessStatusCode)
-            {
-                var body = await putResponse.Content.ReadAsStringAsync();
-                throw new IOException($"PUT to presigned URL returned {(int)putResponse.StatusCode}: {body}");
-            }
+            [DataMember(Name = "reviewId")] public string ReviewId { get; set; }
+            [DataMember(Name = "visibility")] public string Visibility { get; set; }
         }
 
-        private static HttpClient CreateHttpClient()
+        private static HttpClient CreateDefaultHttpClient()
         {
             // Enable TLS 1.2 on older runtimes (Unity/Mono); otherwise "TLS Support not available" occurs.
             try
@@ -260,7 +296,7 @@ namespace MLVScan.Services
                 // Ignore if ServicePointManager is unavailable (e.g. some mobile runtimes)
             }
 
-            return new HttpClient
+            return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
             {
                 Timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds),
             };
@@ -275,6 +311,11 @@ namespace MLVScan.Services
             sb.Append('{');
 
             var parts = new List<string>();
+            parts.Add($"\"coreVersion\":\"{EscapeJson(metadata.CoreVersion)}\"");
+            if (metadata.OriginalVerdict != null) parts.Add($"\"originalVerdict\":\"{EscapeJson(metadata.OriginalVerdict)}\"");
+            if (metadata.OriginalScanStatus != null) parts.Add($"\"originalScanStatus\":\"{EscapeJson(metadata.OriginalScanStatus)}\"");
+            if (metadata.OriginalResultJson != null) parts.Add($"\"originalResultJson\":\"{EscapeJson(metadata.OriginalResultJson)}\"");
+
             if (!string.IsNullOrEmpty(metadata.LoaderType))
                 parts.Add($"\"loaderType\":\"{EscapeJson(metadata.LoaderType)}\"");
             if (!string.IsNullOrEmpty(metadata.LoaderVersion))
@@ -294,12 +335,13 @@ namespace MLVScan.Services
 
             if (metadata.FindingSummary != null && metadata.FindingSummary.Count > 0)
             {
-                var items = metadata.FindingSummary.Select(f => "{" +
-                    (string.IsNullOrEmpty(f.RuleId) ? "" : $"\"ruleId\":\"{EscapeJson(f.RuleId)}\",") +
-                    (string.IsNullOrEmpty(f.Description) ? "" : $"\"description\":\"{EscapeJson(f.Description)}\",") +
-                    (string.IsNullOrEmpty(f.Severity) ? "" : $"\"severity\":\"{EscapeJson(f.Severity)}\",") +
-                    (string.IsNullOrEmpty(f.Location) ? "" : $"\"location\":\"{EscapeJson(f.Location)}\"") +
-                    "}").ToArray();
+                var items = metadata.FindingSummary.Take(64).Select(f => "{" + string.Join(",", new[]
+                {
+                    "\"ruleId\":\"" + EscapeJson(f.RuleId) + "\"",
+                    "\"description\":\"" + EscapeJson(f.Description) + "\"",
+                    "\"severity\":\"" + EscapeJson(f.Severity) + "\"",
+                    "\"location\":\"" + EscapeJson(f.Location) + "\""
+                }) + "}").ToArray();
                 parts.Add($"\"findingSummary\":[{string.Join(",", items)}]");
             }
 
@@ -312,57 +354,15 @@ namespace MLVScan.Services
         {
             if (string.IsNullOrEmpty(s))
                 return string.Empty;
-            return s
-                .Replace("\\", "\\\\")
-                .Replace("\"", "\\\"")
-                .Replace("\r", "\\r")
-                .Replace("\n", "\\n")
-                .Replace("\t", "\\t");
-        }
-
-        private static (string uploadUrl, string submissionId) ParseUploadUrlResponse(string json)
-        {
-            try
+            var escaped = new StringBuilder();
+            foreach (var character in s)
             {
-                var uploadUrl = ExtractJsonString(json, "upload_url");
-                var submissionId = ExtractJsonString(json, "submission_id");
-                if (string.IsNullOrEmpty(uploadUrl) && json.Contains("\"data\""))
-                {
-                    var dataStart = json.IndexOf("\"data\"", StringComparison.Ordinal);
-                    var dataObj = json.Substring(dataStart);
-                    uploadUrl = ExtractJsonString(dataObj, "upload_url");
-                    submissionId = ExtractJsonString(dataObj, "submission_id");
-                }
-                return (uploadUrl, submissionId);
+                if (character == '\\') escaped.Append("\\\\");
+                else if (character == '"') escaped.Append("\\\"");
+                else if (character < 32) escaped.Append("\\u").Append(((int)character).ToString("x4"));
+                else escaped.Append(character);
             }
-            catch
-            {
-                return (null, null);
-            }
-        }
-
-        private static string ExtractJsonString(string json, string key)
-        {
-            var pattern = $"\"{key}\"";
-            var idx = json.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0)
-                return null;
-            idx = json.IndexOf(':', idx);
-            if (idx < 0)
-                return null;
-            idx = json.IndexOf('"', idx);
-            if (idx < 0)
-                return null;
-            var start = idx + 1;
-            var end = start;
-            while (end < json.Length && json[end] != '"')
-            {
-                if (json[end] == '\\')
-                    end++;
-                end++;
-            }
-            var raw = json.Substring(start, end - start);
-            return raw.Replace("\\\"", "\"").Replace("\\\\", "\\");
+            return escaped.ToString();
         }
     }
 }

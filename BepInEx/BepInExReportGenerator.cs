@@ -352,9 +352,9 @@ namespace MLVScan.BepInEx
                 File.WriteAllText(reportPath, sb.ToString());
                 _logger.LogInfo($"Report saved: {reportPath}");
 
-                if (_config.EnableReportUpload &&
+                if (SharingConsentPolicy.CanUploadFiles(_config) &&
                     !string.IsNullOrWhiteSpace(_reportUploadApiBaseUrl) &&
-                    resolvedVerdict.Kind != ThreatVerdictKind.None)
+                    SharingConsentPolicy.IsReviewCandidate(resolvedVerdict, resolvedScanStatus))
                 {
                     try
                     {
@@ -363,8 +363,10 @@ namespace MLVScan.BepInEx
                             : (scanResult?.FilePath ?? string.Empty);
                         if (File.Exists(accessiblePath))
                         {
-                            var assemblyBytes = File.ReadAllBytes(accessiblePath);
+                            var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath);
                             var metadata = BuildSubmissionMetadata(pluginName, findings);
+                            metadata.OriginalVerdict = scanResult?.ThreatVerdict?.Kind.ToString();
+                            metadata.OriginalScanStatus = scanResult?.ScanStatus?.Kind.ToString();
                             _reportUploadService.UploadReportNonBlocking(assemblyBytes, pluginName, metadata, _reportUploadApiBaseUrl);
                         }
                     }
@@ -380,7 +382,7 @@ namespace MLVScan.BepInEx
             }
         }
 
-        private static SubmissionMetadata BuildSubmissionMetadata(string pluginName, List<ScanFinding> findings)
+        private SubmissionMetadata BuildSubmissionMetadata(string pluginName, List<ScanFinding> findings)
         {
             var summary = findings
                 .Take(20)
@@ -400,8 +402,9 @@ namespace MLVScan.BepInEx
                 PluginVersion = PlatformConstants.PlatformVersion,
                 ModName = RedactionHelper.RedactFilename(pluginName),
                 FindingSummary = summary,
-                ConsentVersion = "1",
-                ConsentTimestamp = DateTime.UtcNow.ToString("o")
+                OriginalFindings = findings,
+                ConsentVersion = SharingConsentPolicy.CurrentVersion.ToString(),
+                ConsentTimestamp = _config.SharingConsentTimestamp
             };
         }
 

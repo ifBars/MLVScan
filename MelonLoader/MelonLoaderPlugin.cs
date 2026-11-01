@@ -30,10 +30,11 @@ namespace MLVScan.MelonLoader
         private DeveloperReportGenerator _developerReportGenerator;
         private ReportUploadService _reportUploadService;
         private bool _initialized = false;
-        private bool _showUploadConsentPopup;
+        private SharingConsentView _sharingConsentView;
         private string _pendingUploadPath = string.Empty;
         private string _pendingUploadModName = string.Empty;
         private string _pendingUploadVerdictKind = string.Empty;
+        private string _pendingUploadScanStatus = string.Empty;
         private bool _pendingUploadWasBlocked = true;
         private List<ScanFinding> _pendingUploadFindings;
 
@@ -53,6 +54,9 @@ namespace MLVScan.MelonLoader
                 _developerReportGenerator = _serviceFactory.CreateDeveloperReportGenerator();
                 _reportUploadService = _serviceFactory.CreateReportUploadService();
 
+                if (SharingConsentPolicy.NeedsDecision(_configManager.Config))
+                    _sharingConsentView = new SharingConsentView(
+                        SharingConsentPolicy.InitialFileChoice(_configManager.Config), HandleUploadConsentDecision);
                 _initialized = true;
 
                 ScanAndDisableMods(true);
@@ -83,37 +87,9 @@ namespace MLVScan.MelonLoader
             }
         }
 
-        public override void OnGUI()
-        {
-            if (!_showUploadConsentPopup)
-            {
-                return;
-            }
+        public override void OnGUI() => _sharingConsentView?.Draw();
 
-            var width = Math.Min(620f, Screen.width - 40f);
-            var height = 280f;
-            var x = (Screen.width - width) / 2f;
-            var y = (Screen.height - height) / 2f;
-
-            GUI.Box(new Rect(0f, 0f, Screen.width, Screen.height), string.Empty);
-
-            GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
-            GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
-                ConsentMessageHelper.GetUploadConsentMessage(_pendingUploadModName, _pendingUploadVerdictKind, _pendingUploadWasBlocked) + "\n\n" +
-                "Would you like to upload this file to the MLVScan API for human review?\n\n" +
-                "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
-                "No: do not upload and do not show this prompt again.");
-
-            if (GUI.Button(new Rect(x + 20f, y + height - 60f, (width - 60f) / 2f, 36f), "Yes, upload"))
-            {
-                HandleUploadConsentDecision(true);
-            }
-
-            if (GUI.Button(new Rect(x + 40f + (width - 60f) / 2f, y + height - 60f, (width - 60f) / 2f, 36f), "No thanks"))
-            {
-                HandleUploadConsentDecision(false);
-            }
-        }
+        public override void OnDeinitializeMelon() => _sharingConsentView?.Dispose();
 
         public Dictionary<string, ScannedPluginResult> ScanAndDisableMods(bool force = false)
         {
@@ -212,9 +188,9 @@ namespace MLVScan.MelonLoader
                     continue;
                 }
 
-                if (threatVerdict.Kind != ThreatVerdictKind.None)
+                if (SharingConsentPolicy.IsReviewCandidate(threatVerdict, scanStatus))
                 {
-                    QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings, threatVerdict, wasBlocked);
+                    QueueConsentPromptIfNeeded(accessiblePath, modName, actualFindings, threatVerdict, scanStatus, wasBlocked);
                 }
 
                 LoggerInstance.Warning($"Total retained findings: {actualFindings.Count}");
@@ -455,17 +431,19 @@ namespace MLVScan.MelonLoader
                         LoggerInstance.Msg($"Detailed report saved to: {reportPath}");
                     }
 
-                    if (_configManager?.Config?.EnableReportUpload == true &&
+                    if (SharingConsentPolicy.CanUploadFiles(_configManager?.Config) &&
                         _reportUploadService != null &&
-                        threatVerdict.Kind != ThreatVerdictKind.None)
+                        SharingConsentPolicy.IsReviewCandidate(threatVerdict, scanStatus))
                     {
                         try
                         {
                             var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
                             if (!string.IsNullOrWhiteSpace(apiBaseUrl) && File.Exists(accessiblePath))
                             {
-                                var assemblyBytes = File.ReadAllBytes(accessiblePath);
+                                var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath);
                                 var metadata = BuildSubmissionMetadata(modName, actualFindings);
+                                metadata.OriginalVerdict = threatVerdict.Kind.ToString();
+                                metadata.OriginalScanStatus = scanStatus.Kind.ToString();
                                 _reportUploadService.UploadReportNonBlocking(assemblyBytes, modName, metadata, apiBaseUrl);
                             }
                         }
@@ -489,54 +467,50 @@ namespace MLVScan.MelonLoader
             string modName,
             List<ScanFinding> findings,
             ThreatVerdictInfo threatVerdict,
+            ScanStatusInfo scanStatus,
             bool wasBlocked)
         {
-            if (_configManager == null || _showUploadConsentPopup)
+            if (_configManager == null || !string.IsNullOrWhiteSpace(_pendingUploadPath))
             {
                 return;
             }
 
             var config = _configManager.Config;
-            if (config.ReportUploadConsentAsked)
+            if (!SharingConsentPolicy.NeedsDecision(config))
             {
                 return;
             }
 
-            _showUploadConsentPopup = true;
             _pendingUploadPath = accessiblePath;
             _pendingUploadModName = modName;
             _pendingUploadVerdictKind = threatVerdict?.Kind.ToString() ?? string.Empty;
+            _pendingUploadScanStatus = scanStatus?.Kind.ToString() ?? string.Empty;
             _pendingUploadWasBlocked = wasBlocked;
             _pendingUploadFindings = findings;
 
             config.ReportUploadConsentPending = true;
             config.PendingReportUploadPath = accessiblePath ?? string.Empty;
             config.PendingReportUploadVerdictKind = _pendingUploadVerdictKind;
+            config.PendingReportUploadScanStatusKind = _pendingUploadScanStatus;
             _configManager.SaveConfig(config);
 
             LoggerInstance.Warning("MLVScan is waiting for your upload consent decision in the in-game popup.");
         }
 
-        private void HandleUploadConsentDecision(bool approved)
+        private void HandleUploadConsentDecision(bool approved, bool shareFiles)
         {
-            _showUploadConsentPopup = false;
-
             if (_configManager == null)
             {
                 return;
             }
 
             var config = _configManager.Config;
-            config.ReportUploadConsentAsked = true;
-            config.ReportUploadConsentPending = false;
-            config.PendingReportUploadPath = string.Empty;
-            config.PendingReportUploadVerdictKind = string.Empty;
-            config.EnableReportUpload = approved;
+            SharingConsentPolicy.ApplyDecision(config, approved, shareFiles, DateTimeOffset.UtcNow);
             _configManager.SaveConfig(config);
 
-            if (!approved)
+            if (!SharingConsentPolicy.CanUploadFiles(config))
             {
-                LoggerInstance.Msg("MLVScan report upload declined. You will not be prompted again.");
+                LoggerInstance.Msg("MLVScan sharing preferences saved. File uploads are off.");
                 _pendingUploadPath = string.Empty;
                 _pendingUploadModName = string.Empty;
                 _pendingUploadVerdictKind = string.Empty;
@@ -545,7 +519,7 @@ namespace MLVScan.MelonLoader
                 return;
             }
 
-            LoggerInstance.Msg("MLVScan report upload enabled. Uploading the flagged mod now.");
+            LoggerInstance.Msg("MLVScan sharing preferences saved. File uploads are enabled.");
 
             try
             {
@@ -554,8 +528,10 @@ namespace MLVScan.MelonLoader
                     var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
                     if (!string.IsNullOrWhiteSpace(apiBaseUrl))
                     {
-                        var assemblyBytes = File.ReadAllBytes(_pendingUploadPath);
+                        var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath);
                         var metadata = BuildSubmissionMetadata(_pendingUploadModName, _pendingUploadFindings ?? new List<ScanFinding>());
+                        metadata.OriginalVerdict = _pendingUploadVerdictKind;
+                        metadata.OriginalScanStatus = _pendingUploadScanStatus;
                         _reportUploadService.UploadReportNonBlocking(assemblyBytes, _pendingUploadModName, metadata, apiBaseUrl);
                     }
                 }
@@ -574,7 +550,7 @@ namespace MLVScan.MelonLoader
             }
         }
 
-        private static SubmissionMetadata BuildSubmissionMetadata(string modName, List<ScanFinding> findings)
+        private SubmissionMetadata BuildSubmissionMetadata(string modName, List<ScanFinding> findings)
         {
             var summary = findings
                 .Take(20)
@@ -594,8 +570,9 @@ namespace MLVScan.MelonLoader
                 PluginVersion = PlatformConstants.PlatformVersion,
                 ModName = RedactionHelper.RedactFilename(modName),
                 FindingSummary = summary,
-                ConsentVersion = "1",
-                ConsentTimestamp = DateTime.UtcNow.ToString("o")
+                OriginalFindings = findings,
+                ConsentVersion = SharingConsentPolicy.CurrentVersion.ToString(),
+                ConsentTimestamp = _configManager.Config.SharingConsentTimestamp
             };
         }
 

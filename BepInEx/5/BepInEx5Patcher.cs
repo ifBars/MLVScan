@@ -1,5 +1,8 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using MLVScan.Services;
 using BepInEx;
 using BepInEx.Logging;
 using Mono.Cecil;
@@ -41,6 +44,8 @@ namespace MLVScan.BepInEx5
                 _logger.LogInfo("MLVScan preloader patcher initializing...");
                 _logger.LogInfo($"Plugin directory: {Paths.PluginPath}");
 
+                EnsureRuntimeConsentPluginPresent();
+
                 // Create platform environment
                 var environment = new BepInExPlatformEnvironment();
                 var telemetry = new LoaderScanTelemetryHub();
@@ -73,16 +78,18 @@ namespace MLVScan.BepInEx5
                     var disabledPlugins = pluginDisabler.DisableSuspiciousPlugins(scanResults);
                     var reviewOnlyCount = scanResults.Count - disabledPlugins.Count;
 
-                    if (disabledPlugins.Count > 0)
+                    var pendingResult = scanResults.Values.FirstOrDefault(r => SharingConsentPolicy.IsReviewCandidate(r.ThreatVerdict, r.ScanStatus));
+                    if (pendingResult != null)
                     {
-                        // First-run consent fallback for BepInEx 5.
-                        if (!config.ReportUploadConsentAsked)
+                        if (SharingConsentPolicy.NeedsDecision(config))
                         {
-                            config.ReportUploadConsentAsked = true;
-                            config.PendingReportUploadVerdictKind = disabledPlugins[0].ThreatVerdict?.Kind.ToString() ?? string.Empty;
+                            config.ReportUploadConsentPending = true;
+                            config.PendingReportUploadPath = pendingResult.FilePath;
+                            var disabled = disabledPlugins.FirstOrDefault(d => d.OriginalPath == pendingResult.FilePath);
+                            if (disabled != null && File.Exists(disabled.DisabledPath)) config.PendingReportUploadPath = disabled.DisabledPath;
+                            config.PendingReportUploadVerdictKind = pendingResult.ThreatVerdict?.Kind.ToString() ?? string.Empty;
+                            config.PendingReportUploadScanStatusKind = pendingResult.ScanStatus?.Kind.ToString() ?? string.Empty;
                             configManager.SaveConfig(config);
-                            _logger.LogInfo("MLVScan can optionally send reports to the API to help fix false positives.");
-                            _logger.LogInfo("To enable: set EnableReportUpload = true in BepInEx/config/MLVScan.cfg");
                         }
                     }
 
@@ -114,6 +121,22 @@ namespace MLVScan.BepInEx5
             catch (Exception ex)
             {
                 _logger?.LogError($"MLVScan initialization failed: {ex}");
+            }
+        }
+
+        private static void EnsureRuntimeConsentPluginPresent()
+        {
+            try
+            {
+                var source = typeof(BepInEx5Patcher).Assembly.Location;
+                var destination = Path.Combine(Paths.PluginPath, Path.GetFileName(source));
+                if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)) return;
+                Directory.CreateDirectory(Paths.PluginPath);
+                File.Copy(source, destination, true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Could not stage MLVScan sharing UI: {ex.Message}");
             }
         }
 

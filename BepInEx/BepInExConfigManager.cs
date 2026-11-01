@@ -176,6 +176,12 @@ namespace MLVScan.BepInEx
                 ScanDirectories = BindList("Scope", nameof(MLVScanConfig.ScanDirectories), defaults.ScanDirectories, "Comma-separated BepInEx-relative directories to scan."),
                 WhitelistedHashes = NormalizeHashes(BindList("Allowlist", nameof(MLVScanConfig.WhitelistedHashes), defaults.WhitelistedHashes, "Comma-separated SHA256 hashes to skip.")),
                 DumpFullIlReports = GetEntryValue("Reports", nameof(MLVScanConfig.DumpFullIlReports), defaults.DumpFullIlReports, "Write full IL reports for scanned files."),
+                EnableAnonymousTelemetry = GetEntryValue("Telemetry", nameof(MLVScanConfig.EnableAnonymousTelemetry), defaults.EnableAnonymousTelemetry, "Send aggregate scan and detection counts to PostHog. Optional sample uploads have a separate setting. No filenames, hashes, evidence text, or persistent ID. PostHog receives the network connection."),
+                PostHogProjectToken = GetEntryValue("Telemetry", nameof(MLVScanConfig.PostHogProjectToken), defaults.PostHogProjectToken, "PostHog public project token (phc_). Never use a personal API key."),
+                PostHogRegion = GetEntryValue("Telemetry", nameof(MLVScanConfig.PostHogRegion), defaults.PostHogRegion, "PostHog ingestion region: us or eu."),
+                TelemetryEnvironment = GetEntryValue("Telemetry", nameof(MLVScanConfig.TelemetryEnvironment), defaults.TelemetryEnvironment, "Analytics environment: development, staging, or production."),
+                SharingConsentVersion = GetEntryValue("Telemetry", nameof(MLVScanConfig.SharingConsentVersion), defaults.SharingConsentVersion, "Version of the combined sharing choice last answered."),
+                SharingConsentTimestamp = GetEntryValue("Telemetry", nameof(MLVScanConfig.SharingConsentTimestamp), defaults.SharingConsentTimestamp, "UTC timestamp of the sharing choice."),
                 EnableReportUpload = GetEntryValue("Reports", nameof(MLVScanConfig.EnableReportUpload), defaults.EnableReportUpload, "Allow uploading reports to the configured MLVScan API."),
                 ReportUploadConsentAsked = GetEntryValue("Reports", nameof(MLVScanConfig.ReportUploadConsentAsked), defaults.ReportUploadConsentAsked, "Whether report-upload consent has already been handled."),
                 ReportUploadConsentPending = GetEntryValue("Reports", nameof(MLVScanConfig.ReportUploadConsentPending), defaults.ReportUploadConsentPending, "Whether report-upload consent is pending."),
@@ -183,6 +189,8 @@ namespace MLVScan.BepInEx
                 PendingReportUploadVerdictKind = GetEntryValue("Reports", nameof(MLVScanConfig.PendingReportUploadVerdictKind), defaults.PendingReportUploadVerdictKind, "Pending report-upload verdict kind."),
                 ReportUploadApiBaseUrl = GetEntryValue("Reports", nameof(MLVScanConfig.ReportUploadApiBaseUrl), defaults.ReportUploadApiBaseUrl, "MLVScan API base URL for report uploads."),
                 UploadedReportHashes = NormalizeHashes(BindList("Reports", nameof(MLVScanConfig.UploadedReportHashes), defaults.UploadedReportHashes, "Comma-separated SHA256 hashes already uploaded.")),
+                UploadedReviewReceipts = BindList("Reports", nameof(MLVScanConfig.UploadedReviewReceipts), defaults.UploadedReviewReceipts, "Local hash-to-private-review receipt mappings."),
+                PendingReportUploadScanStatusKind = GetEntryValue("Reports", nameof(MLVScanConfig.PendingReportUploadScanStatusKind), defaults.PendingReportUploadScanStatusKind, "Pending review completeness status."),
                 IncludeMods = GetEntryValue("Scope", nameof(MLVScanConfig.IncludeMods), defaults.IncludeMods, "Include game Mods folders in target scope."),
                 IncludePlugins = GetEntryValue("Scope", nameof(MLVScanConfig.IncludePlugins), defaults.IncludePlugins, "Include BepInEx plugins folders in target scope."),
                 IncludeUserLibs = GetEntryValue("Scope", nameof(MLVScanConfig.IncludeUserLibs), defaults.IncludeUserLibs, "Include user library folders in target scope."),
@@ -226,6 +234,12 @@ namespace MLVScan.BepInEx
             BindRaw("Scope", nameof(MLVScanConfig.ScanDirectories), config.ScanDirectories, "Comma-separated BepInEx-relative directories to scan.").Value = JoinList(config.ScanDirectories);
             BindRaw("Allowlist", nameof(MLVScanConfig.WhitelistedHashes), config.WhitelistedHashes, "Comma-separated SHA256 hashes to skip.").Value = JoinList(NormalizeHashes(config.WhitelistedHashes));
             BindEntry("Reports", nameof(MLVScanConfig.DumpFullIlReports), config.DumpFullIlReports, "Write full IL reports for scanned files.").Value = config.DumpFullIlReports;
+            BindEntry("Telemetry", nameof(MLVScanConfig.EnableAnonymousTelemetry), config.EnableAnonymousTelemetry, "Send aggregate scan and detection counts to PostHog. Optional sample uploads have a separate setting. No filenames, hashes, evidence text, or persistent ID. PostHog receives the network connection.").Value = config.EnableAnonymousTelemetry;
+            BindEntry("Telemetry", nameof(MLVScanConfig.PostHogProjectToken), config.PostHogProjectToken, "PostHog public project token (phc_). Never use a personal API key.").Value = config.PostHogProjectToken;
+            BindEntry("Telemetry", nameof(MLVScanConfig.PostHogRegion), config.PostHogRegion, "PostHog ingestion region: us or eu.").Value = config.PostHogRegion;
+            BindEntry("Telemetry", nameof(MLVScanConfig.TelemetryEnvironment), config.TelemetryEnvironment, "Analytics environment: development, staging, or production.").Value = config.TelemetryEnvironment;
+            BindEntry("Telemetry", nameof(MLVScanConfig.SharingConsentVersion), config.SharingConsentVersion, "Version of the combined sharing choice last answered.").Value = config.SharingConsentVersion;
+            BindEntry("Telemetry", nameof(MLVScanConfig.SharingConsentTimestamp), config.SharingConsentTimestamp, "UTC timestamp of the sharing choice.").Value = config.SharingConsentTimestamp;
             BindEntry("Reports", nameof(MLVScanConfig.EnableReportUpload), config.EnableReportUpload, "Allow uploading reports to the configured MLVScan API.").Value = config.EnableReportUpload;
             BindEntry("Reports", nameof(MLVScanConfig.ReportUploadConsentAsked), config.ReportUploadConsentAsked, "Whether report-upload consent has already been handled.").Value = config.ReportUploadConsentAsked;
             BindEntry("Reports", nameof(MLVScanConfig.ReportUploadConsentPending), config.ReportUploadConsentPending, "Whether report-upload consent is pending.").Value = config.ReportUploadConsentPending;
@@ -233,6 +247,8 @@ namespace MLVScan.BepInEx
             BindEntry("Reports", nameof(MLVScanConfig.PendingReportUploadVerdictKind), config.PendingReportUploadVerdictKind ?? string.Empty, "Pending report-upload verdict kind.").Value = config.PendingReportUploadVerdictKind ?? string.Empty;
             BindEntry("Reports", nameof(MLVScanConfig.ReportUploadApiBaseUrl), _reportUploadApiBaseUrl, "MLVScan API base URL for report uploads.").Value = _reportUploadApiBaseUrl;
             BindRaw("Reports", nameof(MLVScanConfig.UploadedReportHashes), config.UploadedReportHashes, "Comma-separated SHA256 hashes already uploaded.").Value = JoinList(NormalizeHashes(config.UploadedReportHashes));
+            BindRaw("Reports", nameof(MLVScanConfig.UploadedReviewReceipts), config.UploadedReviewReceipts, "Local hash-to-private-review receipt mappings.").Value = JoinList(config.UploadedReviewReceipts ?? Array.Empty<string>());
+            BindEntry("Reports", nameof(MLVScanConfig.PendingReportUploadScanStatusKind), config.PendingReportUploadScanStatusKind ?? string.Empty, "Pending review completeness status.").Value = config.PendingReportUploadScanStatusKind ?? string.Empty;
         }
 
         private T GetEntryValue<T>(string section, string key, T defaultValue, string description)

@@ -7,6 +7,7 @@ using System.Text;
 using MLVScan.Abstractions;
 using MLVScan.Models;
 using MLVScan.Models.Rules;
+using MLVScan.Models.Telemetry;
 using MLVScan.Services.Caching;
 using MLVScan.Services.Diagnostics;
 using MLVScan.Services.Resolution;
@@ -28,11 +29,13 @@ namespace MLVScan.Services
         protected readonly IPlatformEnvironment Environment;
         protected readonly AssemblyScanner AssemblyScanner;
         protected readonly ThreatVerdictBuilder ThreatVerdictBuilder;
-        private const long MaxAssemblyScanBytes = 256L * 1024 * 1024;
 
         private readonly IFileIdentityProvider _fileIdentityProvider;
         private readonly IResolverCatalogProvider _resolverCatalogProvider;
         private readonly LoaderScanTelemetryHub _telemetry;
+        private readonly PostHogScanTelemetry _productTelemetry = new PostHogScanTelemetry();
+        private List<ScanTelemetryOutcome> _productOutcomes;
+        private ScanDiagnosticSummary _productDiagnostics;
         private readonly TargetAssemblyScopeFilter _scopeFilter = new TargetAssemblyScopeFilter();
         private readonly string _scannerFingerprint;
         private readonly string _selfAssemblyHash;
@@ -103,7 +106,10 @@ namespace MLVScan.Services
             }
 
             _telemetry.BeginRun($"{Environment.PlatformName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}");
+            _productOutcomes = SharingConsentPolicy.CanSendAnalytics(ConfigManager.Config)
+                ? new List<ScanTelemetryOutcome>() : null;
 
+            _productDiagnostics = _productOutcomes == null ? null : PostHogScanTelemetry.CreateDiagnosticSummary();
             var rawRoots = GetScanDirectories().ToArray();
             foreach (var directory in rawRoots.Where(static directory => !Directory.Exists(directory)))
             {
@@ -133,6 +139,7 @@ namespace MLVScan.Services
 
             foreach (var pluginFile in candidateFiles)
             {
+                var observedCount = _productOutcomes?.Count ?? 0;
                 try
                 {
                     ScanSingleFile(
@@ -145,6 +152,8 @@ namespace MLVScan.Services
                 }
                 catch (Exception ex)
                 {
+                    if (_productOutcomes != null && _productOutcomes.Count == observedCount)
+                        _productOutcomes.Add(ScanTelemetryOutcome.Failed);
                     Logger.Error($"Error scanning {Path.GetFileName(pluginFile)}: {ex.Message}");
                 }
             }
@@ -157,6 +166,10 @@ namespace MLVScan.Services
 
             OnScanComplete(results);
             _telemetry.CompleteRun(effectiveRoots.Count, candidateFiles.Length, results.Count);
+            if (_productOutcomes != null)
+                _productTelemetry.CaptureNonBlocking(() => ConfigManager.Config, _productOutcomes, _productDiagnostics);
+            _productOutcomes = null;
+            _productDiagnostics = null;
 
             var dataDirectory = TryGetDataDirectory();
             if (!string.IsNullOrWhiteSpace(dataDirectory))
@@ -219,38 +232,12 @@ namespace MLVScan.Services
                 return;
             }
 
-            var isOversized = probe.Stream.CanSeek && probe.Stream.Length > MaxAssemblyScanBytes;
-            var bytesRead = 0L;
-            byte[] assemblyBytes = null;
-            string hash;
-
-            if (isOversized)
-            {
-                Logger.Warning(
-                    $"Manual review required for {fileName}: it exceeds the loader scan limit of {MaxAssemblyScanBytes / (1024 * 1024)} MB and cannot be fully analyzed in memory.");
-                _telemetry.IncrementCounter("Files.TooLarge");
-                bytesRead = probe.Stream.CanSeek ? probe.Stream.Length : 0L;
-                if (bytesRead > 0)
-                {
-                    _telemetry.IncrementCounter("Bytes.Read", bytesRead);
-                }
-
-                var hashStart = _telemetry.StartTimestamp();
-                hash = CalculateStreamHash(probe.Stream);
-                _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
-            }
-            else
-            {
-                var readStart = _telemetry.StartTimestamp();
-                assemblyBytes = ReadFileBytes(probe.Stream);
-                _telemetry.AddPhaseElapsed("File.ReadBytes", readStart);
-                bytesRead = assemblyBytes.Length;
-                _telemetry.IncrementCounter("Bytes.Read", bytesRead);
-
-                var hashStart = _telemetry.StartTimestamp();
-                hash = HashUtility.CalculateBytesHash(assemblyBytes);
-                _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
-            }
+            // Hash and analyze the same open file without buffering the entire input.
+            var bytesRead = probe.Stream.Length;
+            _telemetry.IncrementCounter("Bytes.Read", bytesRead);
+            var hashStart = _telemetry.StartTimestamp();
+            var hash = CalculateStreamHash(probe.Stream);
+            _telemetry.AddPhaseElapsed("Hash.CalculateSha256", hashStart);
 
             if (IsExactSelfCopy(hash))
             {
@@ -280,18 +267,9 @@ namespace MLVScan.Services
                 return;
             }
 
-            if (isOversized)
-            {
-                var oversizedResult = CreateOversizedAssemblyResult(filePath, hash, bytesRead);
-                UpsertCacheEntry(probe, hash, resolverFingerprint, oversizedResult);
-                RegisterResultIfNeeded(fileName, oversizedResult, results);
-                _telemetry.RecordFileSample(filePath, fileStart, "oversized:review-required", bytesRead, oversizedResult.Findings.Count);
-                return;
-            }
-
             var scanStart = _telemetry.StartTimestamp();
-            using var assemblyStream = new MemoryStream(assemblyBytes, writable: false);
-            var findings = AssemblyScanner.Scan(assemblyStream, filePath).ToList();
+            probe.Stream.Position = 0;
+            var findings = AssemblyScanner.Scan(probe.Stream, filePath).ToList();
             _telemetry.AddPhaseElapsed("Scan.Assembly", scanStart);
 
             var actualFindings = findings
@@ -331,7 +309,7 @@ namespace MLVScan.Services
             }
 
             _telemetry.IncrementCounter("Cache.PathHit");
-            RegisterResultIfNeeded(Path.GetFileName(filePath), entry.CloneResultForPath(filePath), results);
+            RegisterResultIfNeeded(Path.GetFileName(filePath), entry.CloneResultForPath(filePath), results, true);
             return true;
         }
 
@@ -372,14 +350,14 @@ namespace MLVScan.Services
             var clonedResult = entry.CloneResultForPath(filePath);
             UpsertCacheEntry(probe, hash, resolverFingerprint, clonedResult);
             _telemetry.IncrementCounter("Cache.HashHit");
-            RegisterResultIfNeeded(Path.GetFileName(filePath), clonedResult, results);
+            RegisterResultIfNeeded(Path.GetFileName(filePath), clonedResult, results, true);
             return true;
         }
 
         private void RegisterResultIfNeeded(
             string fileName,
             ScannedPluginResult scannedResult,
-            Dictionary<string, ScannedPluginResult> results)
+            Dictionary<string, ScannedPluginResult> results, bool cached = false)
         {
             if (scannedResult == null)
             {
@@ -391,6 +369,13 @@ namespace MLVScan.Services
                 return;
             }
 
+            // Capture all evaluated outcomes, including clean cache hits, before the attention-only filter.
+            try
+            {
+                _productOutcomes?.Add(PostHogScanTelemetry.GetOutcome(scannedResult));
+                _productDiagnostics?.Observe(PostHogScanTelemetry.ToDiagnosticResult(scannedResult), cached, PostHogScanTelemetry.GetOutcome(scannedResult));
+            }
+            catch (Exception) { /* Diagnostic projection must never change scan protection. */ }
             if (!ScanResultFacts.RequiresAttention(scannedResult))
             {
                 return;
@@ -454,44 +439,8 @@ namespace MLVScan.Services
             });
         }
 
-        private static ScannedPluginResult CreateOversizedAssemblyResult(string filePath, string fileHash, long fileSizeBytes)
-        {
-            var limitMb = MaxAssemblyScanBytes / (1024 * 1024);
-            var sizeMb = fileSizeBytes > 0
-                ? Math.Ceiling(fileSizeBytes / (1024d * 1024d))
-                : 0d;
-            var findings = new List<ScanFinding>
-            {
-                new ScanFinding(
-                    "Loader scan preflight",
-                    $"Assembly exceeds the loader scan limit ({sizeMb:0.#} MB > {limitMb} MB). SHA-256 and exact known-malicious sample checks still ran, but full IL analysis was skipped and the file requires manual review.",
-                    Severity.Medium)
-                {
-                    RuleId = "OversizedAssembly"
-                }
-            };
-
-            return new ScannedPluginResult
-            {
-                FilePath = filePath ?? string.Empty,
-                FileHash = fileHash ?? string.Empty,
-                Findings = findings,
-                ThreatVerdict = new ThreatVerdictInfo
-                {
-                    Kind = ThreatVerdictKind.None,
-                    Title = "No threat verdict",
-                    Summary = "No retained malicious verdict was produced before the loader hit a scan-completeness limit.",
-                    Confidence = 0d,
-                    ShouldBypassThreshold = false
-                },
-                ScanStatus = new ScanStatusInfo
-                {
-                    Kind = ScanStatusKind.RequiresReview,
-                    Title = "Manual review required",
-                    Summary = $"This file exceeds the loader scan size limit ({limitMb} MB). MLVScan calculated its SHA-256 hash and checked exact known-malicious sample matches, but full IL analysis was skipped to avoid loading the entire assembly into memory."
-                }
-            };
-        }
+        /// <summary>Legacy finding ID retained for diagnostics from older cached reports.</summary>
+        public const string OversizedAssemblyRuleId = "OversizedAssembly";
 
         private string BuildResolverCatalog(IReadOnlyCollection<string> effectiveRoots)
         {
@@ -567,14 +516,6 @@ namespace MLVScan.Services
             }
         }
 
-        private static byte[] ReadFileBytes(FileStream stream)
-        {
-            stream.Position = 0;
-            using var memory = new MemoryStream(stream.CanSeek ? (int)stream.Length : 0);
-            stream.CopyTo(memory);
-            return memory.ToArray();
-        }
-
         private static string CalculateStreamHash(FileStream stream)
         {
             stream.Position = 0;
@@ -593,6 +534,7 @@ namespace MLVScan.Services
         {
             var parts = new List<string>
             {
+                "NativeStreamScanPolicy=2",
                 PlatformConstants.PlatformName,
                 PlatformConstants.PlatformVersion,
                 MLVScanVersions.CoreVersion,

@@ -13,7 +13,7 @@
     <EnableMlvScanProfiling>false</EnableMlvScanProfiling>
     <RootNamespace>MLVScan</RootNamespace>
     <IsPackable>false</IsPackable>
-    <Version>2.1.7</Version>
+    <Version>2.2.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
@@ -46,6 +46,11 @@
     <AssemblyName>MLVScan.MelonLoader</AssemblyName>
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='MelonLoader' and '$(UnityInteropPath)' != ''">
+    <TargetFramework>net6.0</TargetFramework>
+    <DefineConstants>$(DefineConstants);MLVSCAN_UNITY_IL2CPP</DefineConstants>
+    <GameManagedPath>$(UnityInteropPath)</GameManagedPath>
+  </PropertyGroup>
 
   <!-- ============================================ -->
   <!-- BepInEx 5.x Configuration                   -->
@@ -68,9 +73,11 @@
   <!-- ============================================ -->
   <PropertyGroup Condition="'$(Configuration)'=='BepInEx6IL2CPP'">
     <TargetFramework>net6.0</TargetFramework>
-    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_IL2CPP</DefineConstants>
+    <DefineConstants>$(DefineConstants);BEPINEX;BEPINEX6;BEPINEX6_IL2CPP;MLVSCAN_UNITY_IL2CPP</DefineConstants>
     <AssemblyName>MLVScan.BepInEx6.IL2CPP</AssemblyName>
   </PropertyGroup>
+
+
 
   <!-- ============================================ -->
   <!-- Excluded files from default compilation     -->
@@ -97,6 +104,9 @@
     <Compile Include="Abstractions\IPlatformEnvironment.cs" />
     <Compile Include="Models\MLVScanConfig.cs" />
     <Compile Include="Services\ConsentMessageHelper.cs" />
+    <Compile Include="Services\SharingConsentPolicy.cs" />
+    <Compile Include="Services\SharingConsentView.cs" />
+    <Compile Include="Services\RuntimeUnityGui.cs" />
     <Compile Include="Services\PluginScannerBase.cs" />
     <Compile Include="Services\Caching\AtomicFileStorage.cs" />
     <Compile Include="Services\Caching\CrossPlatformFileIdentityProvider.cs" />
@@ -109,6 +119,7 @@
     <Compile Include="Services\Caching\ScanCacheSigner.cs" />
     <Compile Include="Services\Caching\SecureScanCacheStore.cs" />
     <Compile Include="Services\Diagnostics\LoaderScanTelemetryHub.cs" />
+    <Compile Include="Services\Diagnostics\PostHogScanTelemetry.cs" />
     <Compile Include="Services\Resolution\AssemblyResolverCatalogBuilder.cs" />
     <Compile Include="Services\Resolution\CatalogingAssemblyResolverProviderBase.cs" />
     <Compile Include="Services\Resolution\IResolverCatalogProvider.cs" />
@@ -149,6 +160,7 @@
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx5'">
     <Compile Include="BepInEx\5\BepInEx5Patcher.cs" />
+    <Compile Include="BepInEx\BepInExConsentPlugin.cs" />
     <Compile Include="BepInEx\Adapters\BepInExScanLogger.cs" />
     <Compile Include="BepInEx\Adapters\BepInExAssemblyResolverProvider.cs" />
     <Compile Include="BepInEx\BepInExConfigManager.cs" />
@@ -195,8 +207,7 @@
     <!-- Use NuGet packages when local paths are not set -->
     <PackageReference Include="LavaGang.MelonLoader" Version="0.7.0" GeneratePathProperty="true" Condition="'$(MelonLoaderPath)' == ''" />
 
-    <PackageReference Include="UnityEngine.CoreModule" Version="*" Condition="'$(GameManagedPath)' == ''" />
-    <PackageReference Include="UnityEngine.IMGUIModule" Version="*" Condition="'$(GameManagedPath)' == ''" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.32" IncludeAssets="compile" Condition="'$(GameManagedPath)' == ''" />
 
     <!-- Use local references when paths are set -->
     <Reference Include="MelonLoader" Condition="'$(MelonLoaderPath)' != ''">
@@ -215,12 +226,25 @@
       <HintPath>$(GameManagedPath)\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule" Condition="'$(GameManagedPath)' != ''">
+      <HintPath>$(GameManagedPath)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib" Condition="'$(UnityInteropPath)' != ''">
+      <HintPath>$(UnityInteropPath)\Il2Cppmscorlib.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime" Condition="'$(UnityInteropPath)' != ''">
+      <HintPath>$(MelonLoaderPath)\Il2CppInterop.Runtime.dll</HintPath><Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- ============================================ -->
   <!-- BepInEx 5.x References                      -->
   <!-- ============================================ -->
   <ItemGroup Condition="'$(Configuration)'=='BepInEx5'">
+    <PackageReference Include="UnityEngine" Version="5.6.1" />
+    <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
+    <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
+    <PackageReference Include="UnityEngine.TextRenderingModule" Version="2020.3.0" />
     <!-- Use NuGet package for BepInEx 5.x (compilation only) -->
     <PackageReference Include="BepInEx.Core" Version="5.*" PrivateAssets="all" GeneratePathProperty="true"
                       Condition="'$(BepInExCorePath)' == ''" />
@@ -248,6 +272,7 @@
     <PackageReference Include="UnityEngine" Version="5.6.1" />
     <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
     <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
+    <PackageReference Include="UnityEngine.TextRenderingModule" Version="2020.3.0" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
   </ItemGroup>
@@ -259,19 +284,11 @@
     <PackageReference Include="BepInEx.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
     <PackageReference Include="BepInEx.Preloader.Core" Version="6.0.0-be.*" IncludeAssets="compile" GeneratePathProperty="true" />
-    <!-- IL2CPP games expose Unity types from module assemblies, not the legacy monolithic UnityEngine.dll. -->
-    <PackageReference Include="UnityEngine.CoreModule" Version="2020.3.0" />
-    <PackageReference Include="UnityEngine.IMGUIModule" Version="2020.3.0" />
+    <!-- The prompt binds the host Unity GUI at runtime; these public references are sufficient
+         for the BepInEx injected component. They are not bundled in the plugin. -->
+    <PackageReference Include="Il2CppInterop.ReferenceLibs" Version="1.0.0" IncludeAssets="compile" />
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>$(NuGetPackageRoot)unityengine.coremodule\2020.3.0\UnityEngine.CoreModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>$(NuGetPackageRoot)unityengine.imguimodule\2020.3.0\UnityEngine.IMGUIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
 
   <!-- ============================================ -->
@@ -279,8 +296,9 @@
   <!-- ============================================ -->
   <ItemGroup>
     <!-- Use NuGet package when UseLocalMLVScanCore is not true -->
-    <PackageReference Include="MLVScan.Core" Version="1.9.1" GeneratePathProperty="true"
+    <PackageReference Include="MLVScan.Core" Version="1.10.0" GeneratePathProperty="true"
                       Condition="'$(UseLocalMLVScanCore)' != 'true'" />
+
 
     <!-- Use local MLVScan.Core project when UseLocalMLVScanCore is true -->
     <ProjectReference Include="..\MLVScan.Core\MLVScan.Core.csproj"
@@ -296,12 +314,12 @@
   <Target Name="MergeAssemblies" AfterTargets="Build">
     <ItemGroup>
       <InputAssemblies Include="$(TargetPath)" />
-      <!-- NuGet: use package path; Local: use output (ProjectReference copies to output) -->
-      <InputAssemblies Include="$(PkgMLVScan_Core)\lib\netstandard2.1\MLVScan.Core.dll"
-                       Condition="'$(UseLocalMLVScanCore)' != 'true'" />
-      <InputAssemblies Include="$(OutputPath)MLVScan.Core.dll"
-                       Condition="'$(UseLocalMLVScanCore)' == 'true'" />
+      <!-- Use the resolved reference for both NuGet and local project builds. -->
+      <InputAssemblies Include="@(ReferencePath)" Condition="'%(ReferencePath.Filename)' == 'MLVScan.Core'" />
       <!-- Reference paths for ILRepack to resolve dependencies -->
+      <ILRepackLib Include="@(ReferencePath->'%(RootDir)%(Directory).')" />
+      <ILRepackLib Include="$(UnityInteropPath)" Condition="'$(UnityInteropPath)' != ''" />
+      <ILRepackLib Include="$(NuGetPackageRoot)unityengine\5.6.1\lib\netstandard2.0" Condition="'$(Configuration)' == 'BepInEx5'" />
       <ILRepackLib Include="$(PkgLavaGang_MelonLoader)\lib\net35" Condition="'$(Configuration)' == 'MelonLoader' and '$(PkgLavaGang_MelonLoader)' != ''" />
       <ILRepackLib Include="$(MelonLoaderPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(MelonLoaderPath)' != ''" />
       <ILRepackLib Include="$(GameManagedPath)" Condition="'$(Configuration)' == 'MelonLoader' and '$(GameManagedPath)' != ''" />

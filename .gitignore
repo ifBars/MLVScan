@@ -3,9 +3,14 @@
 /obj/
 /.idea/
 local.build.props
+telemetry.development.local.json
+telemetry.development.evidence.local.json
+telemetry.ingestion.local.json
 AGENTS.md
 LOCAL_DEV_GUIDE.md
 nexuspost.bbcode
 TS-Post.md
 ENVIRONMENT_INTEGRATION_GUIDE.md
 bump-version.ps1
+/.tools/
+telemetry.private-review.evidence.local.json

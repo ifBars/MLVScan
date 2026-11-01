@@ -16,10 +16,11 @@ namespace MLVScan.BepInEx
     {
         private BepInExConfigManager _configManager;
         private ReportUploadService _reportUploadService;
-        private bool _showConsentPopup;
+        private SharingConsentView _sharingConsentView;
         private string _pendingUploadPath = string.Empty;
         private string _pendingUploadName = string.Empty;
         private string _pendingUploadVerdictKind = string.Empty;
+        private string _pendingUploadScanStatus = string.Empty;
 
         private void Awake()
         {
@@ -34,14 +35,15 @@ namespace MLVScan.BepInEx
                     msg => Logger.LogWarning(msg),
                     msg => Logger.LogError(msg));
 
-                if (config.ReportUploadConsentPending && !config.ReportUploadConsentAsked)
+                if (SharingConsentPolicy.NeedsDecision(config))
                 {
                     _pendingUploadPath = config.PendingReportUploadPath ?? string.Empty;
                     _pendingUploadName = string.IsNullOrWhiteSpace(_pendingUploadPath)
                         ? "flagged mod"
                         : Path.GetFileName(_pendingUploadPath);
                     _pendingUploadVerdictKind = config.PendingReportUploadVerdictKind ?? string.Empty;
-                    _showConsentPopup = true;
+                    _pendingUploadScanStatus = config.PendingReportUploadScanStatusKind ?? string.Empty;
+                    _sharingConsentView = new SharingConsentView(SharingConsentPolicy.InitialFileChoice(config), HandleDecision);
                     Logger.LogInfo("MLVScan upload consent popup is ready.");
                 }
             }
@@ -51,61 +53,27 @@ namespace MLVScan.BepInEx
             }
         }
 
-        private void OnGUI()
+        private void OnGUI() => _sharingConsentView?.Draw();
+        private void OnDestroy() => _sharingConsentView?.Dispose();
+
+        private void HandleDecision(bool approved, bool shareFiles)
         {
-            if (!_showConsentPopup)
-            {
-                return;
-            }
-
-            var width = Math.Min(620f, Screen.width - 40f);
-            var height = 280f;
-            var x = (Screen.width - width) / 2f;
-            var y = (Screen.height - height) / 2f;
-
-            GUI.Box(new Rect(0f, 0f, Screen.width, Screen.height), string.Empty);
-            GUI.Box(new Rect(x, y, width, height), "MLVScan Upload Consent");
-            GUI.Label(new Rect(x + 20f, y + 40f, width - 40f, 140f),
-                ConsentMessageHelper.GetUploadConsentMessage(_pendingUploadName, _pendingUploadVerdictKind) + "\n\n" +
-                "Would you like to upload this file to the MLVScan API for human review?\n\n" +
-                "Yes: upload this mod now and enable automatic uploads for future detections.\n" +
-                "No: do not upload and do not show this prompt again.");
-
-            if (GUI.Button(new Rect(x + 20f, y + height - 60f, (width - 60f) / 2f, 36f), "Yes, upload"))
-            {
-                HandleDecision(true);
-            }
-
-            if (GUI.Button(new Rect(x + 40f + (width - 60f) / 2f, y + height - 60f, (width - 60f) / 2f, 36f), "No thanks"))
-            {
-                HandleDecision(false);
-            }
-        }
-
-        private void HandleDecision(bool approved)
-        {
-            _showConsentPopup = false;
-
             if (_configManager == null)
             {
                 return;
             }
 
             var config = _configManager.LoadConfig();
-            config.ReportUploadConsentAsked = true;
-            config.ReportUploadConsentPending = false;
-            config.PendingReportUploadPath = string.Empty;
-            config.PendingReportUploadVerdictKind = string.Empty;
-            config.EnableReportUpload = approved;
+            SharingConsentPolicy.ApplyDecision(config, approved, shareFiles, DateTimeOffset.UtcNow);
             _configManager.SaveConfig(config);
 
-            if (!approved)
+            if (!SharingConsentPolicy.CanUploadFiles(config))
             {
-                Logger.LogInfo("MLVScan report upload declined. You will not be prompted again.");
+                Logger.LogInfo("MLVScan sharing preferences saved. File uploads are off.");
                 return;
             }
 
-            TryUploadPendingFile();
+            if (!string.IsNullOrWhiteSpace(_pendingUploadPath)) TryUploadPendingFile();
         }
 
         private void TryUploadPendingFile()
@@ -129,7 +97,7 @@ namespace MLVScan.BepInEx
                     ? Path.GetFileName(_pendingUploadPath)
                     : _pendingUploadName;
 
-                var bytes = File.ReadAllBytes(_pendingUploadPath);
+                var bytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath);
                 var metadata = BuildSubmissionMetadata(modName);
                 _reportUploadService.UploadReportNonBlocking(bytes, modName, metadata, apiBaseUrl);
                 Logger.LogInfo("MLVScan report upload enabled and initial mod upload queued.");
@@ -140,7 +108,7 @@ namespace MLVScan.BepInEx
             }
         }
 
-        private static SubmissionMetadata BuildSubmissionMetadata(string modName)
+        private SubmissionMetadata BuildSubmissionMetadata(string modName)
         {
             return new SubmissionMetadata
             {
@@ -153,8 +121,10 @@ namespace MLVScan.BepInEx
                 PluginVersion = PlatformConstants.PlatformVersion,
                 ModName = RedactionHelper.RedactFilename(modName),
                 FindingSummary = new List<FindingSummaryItem>(),
-                ConsentVersion = "1",
-                ConsentTimestamp = DateTime.UtcNow.ToString("o")
+                OriginalVerdict = _pendingUploadVerdictKind,
+                OriginalScanStatus = _pendingUploadScanStatus,
+                ConsentVersion = SharingConsentPolicy.CurrentVersion.ToString(),
+                ConsentTimestamp = _configManager.Config.SharingConsentTimestamp
             };
         }
 

@@ -22,20 +22,42 @@ namespace MLVScan.Services
                 findings = new List<ScanFinding>();
             }
 
+            // Same completeness rule Core uses for results and disposition, so an incomplete scan can
+            // never be reported as a clean "no verdict" outcome.
+            var completeness = AnalysisCompletenessEvaluator.Evaluate(findings);
+
             return new ScannedPluginResult
             {
                 FilePath = filePath ?? string.Empty,
                 FileHash = fileHash ?? string.Empty,
                 Findings = findings,
-                ThreatVerdict = BuildVerdict(findings, fileHash)
+                ThreatVerdict = BuildVerdict(findings, fileHash, completeness),
+                ScanStatus = BuildScanStatus(completeness)
             };
         }
 
-        private ThreatVerdictInfo BuildVerdict(List<ScanFinding> findings, string fileHash)
+        private static ScanStatusInfo BuildScanStatus(AnalysisCompletenessResult completeness)
+        {
+            if (completeness.IsComplete)
+            {
+                return new ScanStatusInfo();
+            }
+
+            return new ScanStatusInfo
+            {
+                Kind = ScanStatusKind.RequiresReview,
+                Title = "Manual review required",
+                Summary = "MLVScan could not finish analyzing part of this file, so it cannot confirm the file is clean. Review it before trusting it."
+            };
+        }
+
+        private ThreatVerdictInfo BuildVerdict(List<ScanFinding> findings, string fileHash, AnalysisCompletenessResult completeness)
         {
             var matches = _classifier.Classify(findings, fileHash).ToList();
-            var disposition = _dispositionClassifier.Classify(findings, matches, null, fileHash);
-            return MapVerdict(disposition, matches);
+            var disposition = _dispositionClassifier.Classify(findings, matches, completeness, fileHash);
+            var verdict = MapVerdict(disposition, matches);
+            verdict.RelatedFindingIndices = disposition.RelatedFindings.Select(f => findings.IndexOf(f)).Where(i => i >= 0).ToList();
+            return verdict;
         }
 
         private static ThreatVerdictInfo MapVerdict(ThreatDispositionResult disposition, List<ThreatFamilyMatch> matches)

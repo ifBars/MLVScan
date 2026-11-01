@@ -87,6 +87,7 @@ namespace MLVScan.Services.Caching
                     Confidence = Result.ThreatVerdict.Confidence,
                     ShouldBypassThreshold = Result.ThreatVerdict.ShouldBypassThreshold,
                     BlockingRecommended = Result.ThreatVerdict.BlockingRecommended,
+                    RelatedFindingIndices = Result.ThreatVerdict.RelatedFindingIndices?.ToList(),
                     PrimaryFamily = CloneFamily(Result.ThreatVerdict.PrimaryFamily),
                     Families = Result.ThreatVerdict.Families?
                         .Select(CloneFamily)
