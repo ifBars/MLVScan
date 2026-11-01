@@ -31,7 +31,7 @@
   <!-- ============================================ -->
   <!-- Additional NuGet Sources for BepInEx        -->
   <!-- ============================================ -->
-  <PropertyGroup Condition="'$(Configuration)'=='BepInEx5' or '$(Configuration)'=='BepInEx6Mono' or '$(Configuration)'=='BepInEx6IL2CPP'">
+  <PropertyGroup Condition="'$(Configuration)'=='MelonLoader' or '$(Configuration)'=='BepInEx5' or '$(Configuration)'=='BepInEx6Mono' or '$(Configuration)'=='BepInEx6IL2CPP'">
     <RestoreAdditionalProjectSources>
       https://api.nuget.org/v3/index.json;
       https://nuget.bepinex.dev/v3/index.json
