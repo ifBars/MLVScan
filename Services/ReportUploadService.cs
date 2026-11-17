@@ -46,20 +46,53 @@ namespace MLVScan.Services
         }
 
         /// <summary>Reads an optional upload within its transport budget, independently of local scanning.</summary>
-        public static byte[] ReadPrivateSampleBytes(string path)
+        public static byte[] ReadPrivateSampleBytes(string path, Action<string> onSkipped = null)
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (stream.Length > SmallFileLimitBytes)
-                throw new IOException("Private review skipped: file exceeds 64 MiB. Local scanning is not size limited.");
-            var bytes = new byte[checked((int)stream.Length)];
-            var offset = 0;
-            while (offset < bytes.Length)
+            var sizeLimitExceeded = false;
+            try
             {
-                var count = stream.Read(bytes, offset, bytes.Length - offset);
-                if (count == 0) throw new EndOfStreamException("Sample changed while preparing private review.");
-                offset += count;
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (stream.Length > SmallFileLimitBytes)
+                {
+                    sizeLimitExceeded = true;
+                    try { onSkipped?.Invoke("size_limit"); } catch (Exception) { }
+                    throw new IOException("Private review skipped: file exceeds 64 MiB. Local scanning is not size limited.");
+                }
+                var bytes = new byte[checked((int)stream.Length)];
+                var offset = 0;
+                while (offset < bytes.Length)
+                {
+                    var count = stream.Read(bytes, offset, bytes.Length - offset);
+                    if (count == 0) throw new EndOfStreamException("Sample changed while preparing private review.");
+                    offset += count;
+                }
+                return bytes;
             }
-            return bytes;
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            {
+                if (!sizeLimitExceeded)
+                    try { onSkipped?.Invoke("read_error"); } catch (Exception) { }
+                throw;
+            }
+        }
+
+        private int _outcomePending;
+        public void RecordPreparationFailure(string reason) => RecordOutcome("skipped", reason, 0);
+
+        private void RecordOutcome(string outcome, string reason, int attempts)
+        {
+            if (!SharingConsentPolicy.CanSendAnalytics(_configManager?.Config) ||
+                Interlocked.CompareExchange(ref _outcomePending, 1, 0) != 0) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var client = _createHttpClient();
+                    await PostHogScanTelemetry.SendUploadOutcomeAsync(client, _configManager?.Config, outcome, reason, attempts).ConfigureAwait(false);
+                }
+                catch (Exception) { }
+                finally { Interlocked.Exchange(ref _outcomePending, 0); }
+            });
         }
 
         /// <summary>
@@ -71,12 +104,14 @@ namespace MLVScan.Services
             if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
+                RecordOutcome("skipped", "empty_file", 0);
                 _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(apiBaseUrl))
             {
+                RecordOutcome("skipped", "not_configured", 0);
                 _logWarn("ReportUploadService: API base URL not configured");
                 return;
             }
@@ -105,12 +140,14 @@ namespace MLVScan.Services
             if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
             if (assemblyBytes == null || assemblyBytes.Length == 0)
             {
+                RecordOutcome("skipped", "empty_file", 0);
                 _logWarn($"ReportUploadService: No assembly bytes to upload for {filename ?? "<unknown>"}");
                 return;
             }
 
             if (assemblyBytes.Length > SmallFileLimitBytes)
             {
+                RecordOutcome("skipped", "size_limit", 0);
                 _logWarn("Private review skipped: file exceeds 64 MiB. It remains local.");
                 return;
             }
@@ -119,6 +156,7 @@ namespace MLVScan.Services
             {
                 if (_configManager?.IsReportHashUploaded(assemblyHash) == true)
                 {
+                    RecordOutcome("skipped", "duplicate", 0);
                     _logInfo($"ReportUploadService: Skipping duplicate upload for {filename} ({assemblyHash})");
                     return;
                 }
@@ -127,6 +165,7 @@ namespace MLVScan.Services
                 {
                     if (InFlightUploads.Contains(assemblyHash))
                     {
+                        RecordOutcome("skipped", "in_flight", 0);
                         _logInfo($"ReportUploadService: Upload already queued for {filename} ({assemblyHash})");
                         return;
                     }
@@ -135,9 +174,12 @@ namespace MLVScan.Services
                 }
             }
 
+            var outcome = "failed";
+            var reason = "preparation_error";
+            var attempts = 0;
             try
             {
-                if (string.IsNullOrWhiteSpace(apiBaseUrl)) return;
+                if (string.IsNullOrWhiteSpace(apiBaseUrl)) { outcome = "skipped"; reason = "not_configured"; return; }
                 var baseUrl = apiBaseUrl.TrimEnd('/');
                 _logInfo("ReportUploadService: Submitting a file for private review.");
                 if (metadata?.OriginalFindings != null)
@@ -171,14 +213,19 @@ namespace MLVScan.Services
                 {
                     try
                     {
-                        if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) return;
+                        if (!SharingConsentPolicy.CanUploadFiles(_configManager?.Config)) { outcome = "skipped"; reason = "consent_revoked"; return; }
+                        attempts++;
                         receipt = await UploadViaPostFilesAsync(assemblyBytes, filename, metadata, baseUrl);
+                        outcome = "accepted";
+                        reason = receipt == null ? "invalid_receipt" : "none";
                         break;
                     }
                     catch (Exception ex)
                     {
+                        reason = ex is PrivateUploadException uploadError ? uploadError.Reason
+                            : ex is OperationCanceledException ? "timeout" : "network_error";
                         _logWarn($"ReportUploadService: Attempt {attempt + 1} failed: {ex.Message}");
-                        if (attempt == MaxRetries)
+                        if (attempt == MaxRetries || ex is PrivateUploadException permanent && !permanent.Retryable)
                         {
                             throw;
                         }
@@ -214,6 +261,7 @@ namespace MLVScan.Services
             }
             finally
             {
+                RecordOutcome(outcome, reason, attempts);
                 if (HashUtility.IsValidHash(assemblyHash))
                 {
                     lock (InFlightUploadsLock)
@@ -259,8 +307,7 @@ namespace MLVScan.Services
 
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync();
-                throw new IOException($"Private review returned {(int)response.StatusCode}: {body}");
+                throw new PrivateUploadException((int)response.StatusCode);
             }
             try
             {
@@ -280,6 +327,18 @@ namespace MLVScan.Services
         {
             [DataMember(Name = "reviewId")] public string ReviewId { get; set; }
             [DataMember(Name = "visibility")] public string Visibility { get; set; }
+        }
+
+        private sealed class PrivateUploadException : IOException
+        {
+            public string Reason { get; }
+            public bool Retryable { get; }
+            public PrivateUploadException(int status) : base($"Private review returned {status}.")
+            {
+                Reason = status == 404 ? "not_found" : status == 413 ? "size_limit" : status == 429 ? "rate_limited"
+                    : status >= 500 ? "server_error" : "rejected";
+                Retryable = status >= 500;
+            }
         }
 
         private static HttpClient CreateDefaultHttpClient()

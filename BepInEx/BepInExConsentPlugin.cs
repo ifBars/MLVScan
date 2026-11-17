@@ -97,7 +97,7 @@ namespace MLVScan.BepInEx
                     ? Path.GetFileName(_pendingUploadPath)
                     : _pendingUploadName;
 
-                var bytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath);
+                var bytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath, _reportUploadService.RecordPreparationFailure);
                 var metadata = BuildSubmissionMetadata(modName);
                 _reportUploadService.UploadReportNonBlocking(bytes, modName, metadata, apiBaseUrl);
                 Logger.LogInfo("MLVScan report upload enabled and initial mod upload queued.");

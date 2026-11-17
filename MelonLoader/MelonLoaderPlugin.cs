@@ -440,7 +440,7 @@ namespace MLVScan.MelonLoader
                             var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
                             if (!string.IsNullOrWhiteSpace(apiBaseUrl) && File.Exists(accessiblePath))
                             {
-                                var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath);
+                                var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath, _reportUploadService.RecordPreparationFailure);
                                 var metadata = BuildSubmissionMetadata(modName, actualFindings);
                                 metadata.OriginalVerdict = threatVerdict.Kind.ToString();
                                 metadata.OriginalScanStatus = scanStatus.Kind.ToString();
@@ -528,7 +528,7 @@ namespace MLVScan.MelonLoader
                     var apiBaseUrl = _configManager.GetReportUploadApiBaseUrl();
                     if (!string.IsNullOrWhiteSpace(apiBaseUrl))
                     {
-                        var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath);
+                        var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath, _reportUploadService.RecordPreparationFailure);
                         var metadata = BuildSubmissionMetadata(_pendingUploadModName, _pendingUploadFindings ?? new List<ScanFinding>());
                         metadata.OriginalVerdict = _pendingUploadVerdictKind;
                         metadata.OriginalScanStatus = _pendingUploadScanStatus;
