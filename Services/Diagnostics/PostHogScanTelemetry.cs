@@ -95,6 +95,9 @@ namespace MLVScan.Services.Diagnostics
                 properties["$ip"] = "0.0.0.0";
                 properties["consumer"] = "loader";
                 properties["environment"] = config.TelemetryEnvironment;
+                properties["review_candidate_count"] = new[] { "suspicious_count", "known_threat_count", "manual_review_required_count" }
+                    .Sum(key => properties.TryGetValue(key, out var count) ? (int)count : 0);
+                properties["file_sharing_enabled"] = SharingConsentPolicy.CanUploadFiles(config);
                 return await SendEnvelopeAsync(client, config, "mlvscan_scan_run_completed",
                     "scan-run:" + Guid.NewGuid().ToString("N"), properties, cancellationToken).ConfigureAwait(false);
             }
@@ -128,6 +131,26 @@ namespace MLVScan.Services.Diagnostics
 
         public static bool IsValidReviewId(string value) => value != null && value.Length == 36 &&
             Guid.TryParseExact(value, "D", out _) && value[14] == '4' && "89abAB".IndexOf(value[19]) >= 0;
+
+        /// <summary>One terminal outcome per upload operation; no sample identity or response text.</summary>
+        public static async Task<bool> SendUploadOutcomeAsync(HttpClient client, MLVScanConfig config,
+            string outcome, string reason, int attempts)
+        {
+            if (!IsConfigured(config) || !new[] { "accepted", "failed", "skipped" }.Contains(outcome) ||
+                !new[] { "none", "invalid_receipt", "size_limit", "empty_file", "duplicate", "in_flight", "not_configured",
+                    "consent_revoked", "read_error", "not_found", "rejected", "rate_limited", "server_error", "network_error", "timeout", "preparation_error" }.Contains(reason))
+                return false;
+            var properties = new Dictionary<string, object> {
+                ["telemetry_schema_version"] = 1, ["consumer"] = "loader", ["environment"] = config.TelemetryEnvironment,
+                ["core_version"] = MLVScanVersions.CoreVersion, ["plugin_version"] = PlatformConstants.PlatformVersion,
+                ["loader"] = PlatformConstants.PlatformName, ["upload_outcome"] = outcome, ["upload_reason"] = reason,
+                ["upload_operation_count"] = 1, ["upload_attempt_count"] = Math.Max(0, Math.Min(3, attempts)),
+                ["$process_person_profile"] = false, ["$geoip_disable"] = true, ["$ip"] = "0.0.0.0"
+            };
+            try { return await SendEnvelopeAsync(client, config, "mlvscan_private_review_upload_outcome",
+                "upload-outcome:" + Guid.NewGuid().ToString("N"), properties, default).ConfigureAwait(false); }
+            catch (Exception) { return false; }
+        }
 
         private static async Task<bool> SendEnvelopeAsync(HttpClient client, MLVScanConfig config,
             string eventName, string distinctId, Dictionary<string, object> properties, CancellationToken cancellationToken)
@@ -167,7 +190,7 @@ namespace MLVScan.Services.Diagnostics
                     ? result.Findings
                         .Where(f => AnalysisCompletenessEvaluator.IsIncompleteFinding(f) ||
                                     f.RuleId == PluginScannerBase.OversizedAssemblyRuleId)
-                        .Select(f => new AnalysisCompletenessReasonDto { ReasonId = "scanner-incomplete", RuleId = f.RuleId })
+                        .Select(f => new AnalysisCompletenessReasonDto { ReasonId = "scanner-incomplete", RuleId = f.RuleId, Summary = f.Description })
                         .ToList()
                     : new List<AnalysisCompletenessReasonDto>()
             },

@@ -139,7 +139,7 @@ namespace MLVScan.BepInEx
                         ? Path.GetFileName(_pendingUploadPath)
                         : _pendingUploadName;
 
-                    var bytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath);
+                    var bytes = ReportUploadService.ReadPrivateSampleBytes(_pendingUploadPath, _reportUploadService.RecordPreparationFailure);
                     var metadata = new SubmissionMetadata
                     {
                         LoaderType = "BepInEx6IL2CPP",

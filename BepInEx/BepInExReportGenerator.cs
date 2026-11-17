@@ -363,7 +363,7 @@ namespace MLVScan.BepInEx
                             : (scanResult?.FilePath ?? string.Empty);
                         if (File.Exists(accessiblePath))
                         {
-                            var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath);
+                            var assemblyBytes = ReportUploadService.ReadPrivateSampleBytes(accessiblePath, _reportUploadService.RecordPreparationFailure);
                             var metadata = BuildSubmissionMetadata(pluginName, findings);
                             metadata.OriginalVerdict = scanResult?.ThreatVerdict?.Kind.ToString();
                             metadata.OriginalScanStatus = scanResult?.ScanStatus?.Kind.ToString();
