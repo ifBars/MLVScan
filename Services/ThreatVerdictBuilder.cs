@@ -38,6 +38,16 @@ namespace MLVScan.Services
 
         private static ScanStatusInfo BuildScanStatus(AnalysisCompletenessResult completeness)
         {
+            if (completeness.Status.ToString() == "NotApplicable")
+            {
+                return new ScanStatusInfo
+                {
+                    Kind = ScanStatusKind.NotApplicable,
+                    Title = "Managed scan does not apply",
+                    Summary = completeness.Reasons.FirstOrDefault()?.Summary ?? "This file is outside managed scan coverage."
+                };
+            }
+
             if (completeness.IsComplete)
             {
                 return new ScanStatusInfo();

@@ -17,6 +17,7 @@ namespace MLVScan.Models
     public enum ScanStatusKind
     {
         Complete,
-        RequiresReview
+        RequiresReview,
+        NotApplicable
     }
 }

@@ -40,6 +40,8 @@ namespace MLVScan.Services.Diagnostics
                     => ScanTelemetryOutcome.Clean,
                 ThreatVerdictKind.None when result.ScanStatus?.Kind == ScanStatusKind.RequiresReview
                     => ScanTelemetryOutcome.ManualReviewRequired,
+                ThreatVerdictKind.None when result.ScanStatus?.Kind == ScanStatusKind.NotApplicable
+                    => Enum.TryParse<ScanTelemetryOutcome>("NotApplicable", out var outsideScope) ? outsideScope : ScanTelemetryOutcome.Unknown,
                 _ => ScanTelemetryOutcome.Unknown
             };
         }
@@ -185,6 +187,8 @@ namespace MLVScan.Services.Diagnostics
         {
             AnalysisCompleteness = new AnalysisCompletenessDto
             {
+                Status = result.ScanStatus?.Kind == ScanStatusKind.NotApplicable ? "NotApplicable" :
+                    result.ScanStatus?.Kind == ScanStatusKind.RequiresReview ? "Incomplete" : "Complete",
                 IsComplete = result.ScanStatus?.Kind == ScanStatusKind.Complete,
                 Reasons = result.ScanStatus?.Kind == ScanStatusKind.RequiresReview
                     ? result.Findings

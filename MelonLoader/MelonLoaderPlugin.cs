@@ -204,7 +204,7 @@ namespace MLVScan.MelonLoader
                     LoggerInstance.Msg(outcomeSummary);
                 }
 
-                if (scanStatus.Kind != ScanStatusKind.Complete)
+                if (scanStatus.Kind == ScanStatusKind.RequiresReview)
                 {
                     LoggerInstance.Msg(wasBlocked
                         ? "Action: blocked by current incomplete-scan policy."

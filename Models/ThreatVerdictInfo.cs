@@ -79,7 +79,7 @@ namespace MLVScan.Models
 
         public static bool RequiresManualReview(ScannedPluginResult result)
         {
-            return (result?.ScanStatus?.Kind ?? ScanStatusKind.Complete) != ScanStatusKind.Complete;
+            return (result?.ScanStatus?.Kind ?? ScanStatusKind.Complete) == ScanStatusKind.RequiresReview;
         }
 
         public static bool RequiresAttention(ScannedPluginResult result)
@@ -89,7 +89,7 @@ namespace MLVScan.Models
 
         public static bool IsClean(ScannedPluginResult result)
         {
-            return !RequiresAttention(result);
+            return !HasThreatVerdict(result) && result?.ScanStatus?.Kind == ScanStatusKind.Complete;
         }
     }
 }
