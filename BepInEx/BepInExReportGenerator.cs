@@ -83,7 +83,7 @@ namespace MLVScan.BepInEx
                 _logger.LogInfo(outcomeSummary);
             }
 
-            if (scanStatus.Kind != ScanStatusKind.Complete)
+            if (scanStatus.Kind == ScanStatusKind.RequiresReview)
             {
                 _logger.LogInfo(wasBlocked
                     ? "Action: blocked by current incomplete-scan policy."

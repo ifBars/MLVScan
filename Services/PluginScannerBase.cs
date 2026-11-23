@@ -376,6 +376,9 @@ namespace MLVScan.Services
                 _productDiagnostics?.Observe(PostHogScanTelemetry.ToDiagnosticResult(scannedResult), cached, PostHogScanTelemetry.GetOutcome(scannedResult));
             }
             catch (Exception) { /* Diagnostic projection must never change scan protection. */ }
+            if (scannedResult.ScanStatus.Kind == ScanStatusKind.NotApplicable && !ScanResultFacts.HasThreatVerdict(scannedResult))
+                Logger.Info($"{fileName}: {scannedResult.ScanStatus.Summary}");
+
             if (!ScanResultFacts.RequiresAttention(scannedResult))
             {
                 return;
